@@ -1,3 +1,9 @@
+# V2.5 – Arena Intelligence & Team Builder Pro (November 2026)
+
+NBA-Mehrfachspiele im wählbaren 3-/7-/14-Tage-Scoutingfenster, alle gemeldeten Gegner/Partien und Double-Game-Badges; Matchup Difficulty aus bestätigten Defensivdaten einschließlich optionalem, keylosem ESPN-Fallback; Team Battle mit Zielchance und Warnungen; mobile Kartenübernahme per Antippen mit Kopieren/Verschieben. Der NBA-16-Sterne-Builder, Fußball-Slots und die lokale Team-Speicherung bleiben erhalten. Keine erfundenen Termine oder Gegnerwerte und kein automatischer Mehrfachspiel-Scorebonus. Die Sorare- und Sterneadapter sind unverändert. Details: `UPDATE_V2_5_DE.md`.
+
+---
+
 # V2.4 – Obsidian Neon Builder (November 2026)
 
 Neuer Neon-Farbkontrast für die an vier Nutzer-Vorlagen orientierten NBA-/Fußball-Teampanels. V2.4 ergänzt pro Team persistierte Fixierungen, ein ausschließlich leere Slots ergänzendes Smart Auto-Fill, HTML-Drag-&-Drop mit vollständiger Slot-/Sterneprüfung, einen expliziten Quick Swap mit zulässigen Alternativen, den Arcade Goal Meter, historische Formbalken auf jeder Karte und das zusammengefasste Lineup Risk Radar. Datenadapter für Sorare-Scores und offiziellen NBA-Sterneabruf sowie V2.2-Arcade-Optimizer bleiben bytegenau unverändert; lokale V2.3-Teams werden migriert. Alle 24 automatischen Testgruppen bestanden. Weitere Hinweise in `UPDATE_V2_4_DE.md`.

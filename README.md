@@ -1,6 +1,14 @@
+# Markerras Sorare Helper V2.5 – Arena Intelligence
+
+**Aktuelle Version: V2.5**, aufgebaut auf der getesteten V2.4.1. NBA Double-Game-Scouting im 3-/7-/14-Tage-Fenster, neue Matchup Difficulty mit separatem ESPN-Defensiv-Fallback, Team Battle und mobil nutzbarer Spielertransfer (Kopieren oder Verschieben). Der Obsidian-Neon-Builder bleibt der zentrale Arbeitsbereich. Prognosewerte, Spielplan, Sterne und Sorare-Scoreabruf bleiben unabhängig.
+
+**Anleitung:** [`UPDATE_V2_5_DE.md`](UPDATE_V2_5_DE.md). Der Scoutingzeitraum ist **keine offiziell bestätigte Gameweek**, und mehrere NBA-Spiele führen nicht automatisch zu einer höheren Arcade-Prognose. Gegnerwerte sind nur grobe, datenbasierte oder manuelle Defensivstufen.
+
+---
+
 # Markerras Sorare Helper V2.4 – Obsidian Neon Builder
 
-**Aktuelle Version: V2.4.** Neuer farbkräftiger Team Builder auf Basis der vier Nutzer-Vorlagen. **Spieler pro Team fixieren**, **nur leere Slots mit Smart Auto-Fill ergänzen**, Drag & Drop zwischen Spielerpool und Teams, **Quick Swap**, **Arcade Goal Meter**, historische Formkurven auf den Karten und **Lineup Risk Radar**. Die offizielle NBA-Sterne-Synchronisierung und die bestehenden Sorare-Score-Abfragen sind unverändert. Die Spieler werden weiterhin in NBA oder Fußball getrennt dargestellt.
+**Version V2.4 (Vorgänger):** Neuer farbkräftiger Team Builder auf Basis der vier Nutzer-Vorlagen. **Spieler pro Team fixieren**, **nur leere Slots mit Smart Auto-Fill ergänzen**, Drag & Drop zwischen Spielerpool und Teams, **Quick Swap**, **Arcade Goal Meter**, historische Formkurven auf den Karten und **Lineup Risk Radar**. Die offizielle NBA-Sterne-Synchronisierung und die bestehenden Sorare-Score-Abfragen sind unverändert. Die Spieler werden weiterhin in NBA oder Fußball getrennt dargestellt.
 
 **Installation:** [`UPDATE_V2_4_DE.md`](UPDATE_V2_4_DE.md). Die V2.3-Team-Speicherungen bleiben erhalten. Prozentangaben zu Zielchance und Einsatzzeit sind Prognosemodellschätzungen, keine garantierten oder extern bestätigten Werte.
 
@@ -8,7 +16,7 @@
 
 # Markerras Sorare Helper V2.3 – Builder Workspace Redesign
 
-**Aktuelle Version:** V2.3 baut den manuellen Lineup Builder nach vier Nutzer-Screenshots neu: mehrere Teams links, umfangreicher Spielerpool rechts, kompakte NBA- und Fußball-Spielerkarten, Direktauswahl, Filter, Auto-Fill, Undo, lokaler Team-Speicher und Dark-Mode-Politur. V2.2 Arcade Intelligence bleibt über den zweiten Builder-Tab vorhanden. **Sorare-Datenabruf und offizieller NBA-Sterne-Sync bleiben unverändert.**
+**Version V2.3 (Vorgänger):** baut den manuellen Lineup Builder nach vier Nutzer-Screenshots neu: mehrere Teams links, umfangreicher Spielerpool rechts, kompakte NBA- und Fußball-Spielerkarten, Direktauswahl, Filter, Auto-Fill, Undo, lokaler Team-Speicher und Dark-Mode-Politur. V2.2 Arcade Intelligence bleibt über den zweiten Builder-Tab vorhanden. **Sorare-Datenabruf und offizieller NBA-Sterne-Sync bleiben unverändert.**
 
 **Update-Anleitung:** [`UPDATE_V2_3_DE.md`](UPDATE_V2_3_DE.md). Es werden keine Gameweek-Termine oder offiziellen Einsatzchancen erfunden; die angezeigten Prognosewerte sind Modellschätzungen.
 
@@ -16,7 +24,7 @@
 
 # Markerras Sorare Helper V2.2 – Arcade Lineup Intelligence
 
-**Aktuelle Version:** V2.2 integriert einen neuen Strategie-Vergleich mit bis zu vier verschiedenen, gültigen Aufstellungen (Safety First, Best Projection, High Ceiling, Arcade Target), Risikoindex, Floor/Ceiling, heuristischer Zielchance und einer direkten Vorschau im automatischen Builder. NBA nutzt weiterhin die offiziellen Sterne aus V2.1.1. Die bestehenden Sorare- und NBA-Sterne-Abfragen wurden **nicht verändert**. Anleitung: [`UPDATE_V2_2_DE.md`](UPDATE_V2_2_DE.md).
+**Version V2.2 (Vorgänger):** integriert einen neuen Strategie-Vergleich mit bis zu vier verschiedenen, gültigen Aufstellungen (Safety First, Best Projection, High Ceiling, Arcade Target), Risikoindex, Floor/Ceiling, heuristischer Zielchance und einer direkten Vorschau im automatischen Builder. NBA nutzt weiterhin die offiziellen Sterne aus V2.1.1. Die bestehenden Sorare- und NBA-Sterne-Abfragen wurden **nicht verändert**. Anleitung: [`UPDATE_V2_2_DE.md`](UPDATE_V2_2_DE.md).
 
 **Wichtig:** Die Zielchancen sind nicht kalibriert; ein hoher Prozentwert ist keine garantierte Gewinnwahrscheinlichkeit. Die Zielvariante ist die beste im erzeugten *begrenzten Kandidatenpool*, nicht mathematisch global optimal. Aktuelle NBA-Tier-Sterne können von bereits festgelegten Sternkosten der Gameweek abweichen. Der Helper übermittelt keine Lineups an Sorare.
 
@@ -24,7 +32,7 @@
 
 # Markerras Sorare Helper V2.1 – Obsidian Intelligence
 
-**Aktuelle Version:** Lineup Doctor, Hidden Gems Finder, Data Health & Sync Center. Die Datenanbindung aus V2.0 ist bytegenau unverändert. **Installation:** [`UPDATE_V2_1_DE.md`](UPDATE_V2_1_DE.md).
+**Version V2.1 (Vorgänger):** Lineup Doctor, Hidden Gems Finder, Data Health & Sync Center. Die Datenanbindung aus V2.0 ist bytegenau unverändert. **Installation:** [`UPDATE_V2_1_DE.md`](UPDATE_V2_1_DE.md).
 
 # Markerras Sorare Helper V1.9 – Obsidian Studio
 

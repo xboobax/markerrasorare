@@ -346,7 +346,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const updateCard = (id: string, patch: CardSettings) =>
     setCardStore(s => ({...s, [id]: {...(s[id] ?? {}), ...patch}}));
 
-  const opponentNames=useMemo(()=>[...new Set(basePlayers.map(p=>p.opponent).filter((n):n is string=>Boolean(n)))], [basePlayers]);
+  const opponentNames=useMemo(()=>[...new Set([...basePlayers.map(p=>p.opponent).filter((n):n is string=>Boolean(n)),...(sport==="nba"?nbaSchedule.fixtures.flatMap(f=>[f.home,f.away]):[])])], [basePlayers,nbaSchedule,sport]);
   const alignedAutoRatings=useMemo(()=>alignOpponentNames(automaticMatchups.ratings,opponentNames),[automaticMatchups,opponentNames]);
   const effectiveRatings=useMemo(()=>({...alignedAutoRatings,...opponentRatings}),[alignedAutoRatings,opponentRatings]);
   // Recalculate on the client when independently entered scouting data changes.
@@ -604,7 +604,8 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
               updateCard={updateCard} targetScore={validTarget ? totalTarget : null}
               onOpenProfile={setSelectedPlayerId}
               onSavePredictions={items => items.forEach(saveTracked)} requestedPlayer={manualRequest}
-              favorites={watchlist} onToggleFavorite={toggleFavorite}/> : <>
+              favorites={watchlist} onToggleFavorite={toggleFavorite}
+              nbaSchedule={nbaSchedule} matchupRatings={effectiveRatings} matchupSource={automaticMatchups.source}/> : <>
             <div className="mode-switch" role="group" aria-label="Spielerauswahl">
               <button type="button" className={!ownedOnly ? "active" : ""} onClick={() => {setOwnedOnly(false); setActiveResult(0);setIntelligencePickKey(null);}}>Alle Spieler · theoretisch</button>
               <button type="button" className={ownedOnly ? "active" : ""} onClick={() => {setOwnedOnly(true); setActiveResult(0);setIntelligencePickKey(null);}}>Nur meine Karten</button>

@@ -3,6 +3,7 @@ import { forecast, type Player, type Sport } from "@/lib/model";
 import ArcadeDashboard from "@/app/components/arcade-dashboard";
 import { FOOTBALL_LEAGUES, isFootballLeague } from "@/lib/leagues";
 import {getAutomaticMatchupData} from "@/lib/auto-matchups";
+import {getEspnNbaDefenseFallback} from "@/lib/nba-defense-fallback";
 import {getNbaGameweekSchedule} from "@/lib/nba-gameweek-feed";
 import {attachNbaFixtures} from "@/lib/nba-fixture-mapping";
 import type {ScheduleData} from "@/lib/gameweek-center";
@@ -67,6 +68,12 @@ export default async function Page({ searchParams }: Props) {
     getAutomaticMatchupData(sport),
     sport === "nba" ? getNbaGameweekSchedule() : Promise.resolve<ScheduleData>({fixtures:[],status:"not-configured",source:null}),
   ]);
+  // Matchup ratings are optional scouting data. If the authenticated provider
+  // has insufficient completed games, try an isolated keyless ESPN fallback.
+  // A failed fallback MUST NOT affect the successful Sorare data or NBA calendar.
+  const espnDefense=sport==="nba"&&automaticMatchups.coverage===0
+    ? await getEspnNbaDefenseFallback():null;
+  const resolvedMatchups=espnDefense&&espnDefense.coverage>0?espnDefense:automaticMatchups;
   // The NBA score queries do not include fixtures. Enrich only fixture metadata
   // after forecasting, without changing score predictions or Sorare queries.
   const playersWithGames=sport==="nba"?attachNbaFixtures(projected,nbaSchedule):projected;
@@ -79,7 +86,7 @@ export default async function Page({ searchParams }: Props) {
     players={playersWithGames}
     info={info}
     error={error}
-    automaticMatchups={automaticMatchups}
+    automaticMatchups={resolvedMatchups}
     nbaSchedule={nbaSchedule}
     fetchSummary={fetchSummary}
   />;
