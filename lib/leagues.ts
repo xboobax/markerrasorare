@@ -29,7 +29,15 @@ export function footballLeagueFromSorare(value: unknown): FootballLeague | null 
   if (/^(?:1 )?bundesliga$/.test(name)) return "Bundesliga";
   if (/^(?:la liga|laliga)(?: ea sports)?$/.test(name) || name === "primera division") return "LaLiga";
   if (/^ligue 1(?: uber eats| mcdonalds| mcdonald s)?$/.test(name)) return "Ligue 1";
-  if (/^(?:english )?premier league$/.test(name) || name === "epl") return "Premier League";
+  // Sorare currently labels Premier League players as "English League Players"
+  // (see sorare.com/football/players/erling-haland).
+  // Keep the public UI name "Premier League", and never match generic
+  // "English League" to avoid accidentally including Championship teams.
+  if (
+    /^(?:(?:the |english )?premier league)(?: england)?$/.test(name) ||
+    name === "epl" ||
+    name === "english league players"
+  ) return "Premier League";
   return null;
 }
 

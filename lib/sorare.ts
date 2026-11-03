@@ -19,7 +19,7 @@ export type Club = { slug: string; name: string; league: string };
 const validSlug = (c: Club) => /^[a-z0-9-]+$/.test(c.slug);
 
 export async function getFootballClubs(): Promise<Club[]> {
-  const d = await gql(`{ football { clubsReady { slug name domesticLeague { displayName } } } }`, 3600);
+  const d = await gql(`{ football { clubsReady { slug name domesticLeague { displayName } } } }`, 900);
   // Restrict the data source itself, not merely the visible league chips.
   // Only Bundesliga, LaLiga, Ligue 1 and Premier League clubs reach the app.
   const clubs: Club[] = [];

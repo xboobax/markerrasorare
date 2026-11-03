@@ -37,6 +37,9 @@ export default async function Page({ searchParams }: Props) {
     const response = await getPlayers(sport, scope);
     players = response.players;
     info = `${players.length} Sorare-Spieler geladen · ${scope.length - response.failed} von ${scope.length} Teams erfolgreich.`;
+    if (sport === "football" && scope.length === 0) {
+      info += " Keine Vereine für diese Liga erkannt. Bitte den Sorare-Ligaabruf prüfen.";
+    }
     if (response.failed) info += ` ${response.failed} Teams konnten derzeit nicht geladen werden; angezeigte Ergebnisse sind daher unvollständig.`;
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
