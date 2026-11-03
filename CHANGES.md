@@ -1,3 +1,12 @@
+## V2.6 – Injury & Availability Center
+
+- Auto refresh on visible app sessions: 30/10/5 minutes depending on verifiable tipoff timing, manual refresh, visibility/focus checks.
+- Server-only, cache-controlled NBA ESPN injury feed and best-effort soccer ESPN injury feeds. Optional server-side `API_FOOTBALL_KEY` for fixture-scoped injury and suspension data in the four supported leagues.
+- Player badges, source and timestamp, availability filter, lineup risk alerts, and source status diagnostics.
+- Confirmed OUT excluded from new Smart Auto-Fill, auto optimizer/Arcade Intelligence and Quick Swap; manually saved teams and locks never silently changed.
+- Strict matching by player full name and team, date guards for football fixture-specific injuries, `unknown` by default when sources unavailable.
+- Entire existing Sorare scores/official NBA stars and forecast data adapter unchanged.
+
 # V2.5 – Arena Intelligence & Team Builder Pro (November 2026)
 
 NBA-Mehrfachspiele im wählbaren 3-/7-/14-Tage-Scoutingfenster, alle gemeldeten Gegner/Partien und Double-Game-Badges; Matchup Difficulty aus bestätigten Defensivdaten einschließlich optionalem, keylosem ESPN-Fallback; Team Battle mit Zielchance und Warnungen; mobile Kartenübernahme per Antippen mit Kopieren/Verschieben. Der NBA-16-Sterne-Builder, Fußball-Slots und die lokale Team-Speicherung bleiben erhalten. Keine erfundenen Termine oder Gegnerwerte und kein automatischer Mehrfachspiel-Scorebonus. Die Sorare- und Sterneadapter sind unverändert. Details: `UPDATE_V2_5_DE.md`.

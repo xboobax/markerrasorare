@@ -12,6 +12,8 @@ import type {ScheduleData} from "@/lib/gameweek-center";
 import {canonicalNbaTeam} from "@/lib/nba-fixture-mapping";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Forecast, Sport } from "@/lib/model";
+import {availabilityForPlayers,isConfirmedOut} from "@/lib/availability";
+import {useAvailability} from "@/app/hooks/use-availability";
 import type { Strategy } from "@/lib/arcade";
 import { enrichForecast, matchupLabel, validDefenseRating, type OpponentRatings } from "@/lib/matchups";
 import { optimizeArcadeLineups, isValidNbaStars, type CardInput } from "@/lib/arcade";
@@ -75,6 +77,9 @@ function PlayerAvatar({player, small = false}: {player: Forecast; small?: boolea
 }
 
 export default function ArcadeDashboard({sport, league, leagues, team, clubs, players: basePlayers, info, error, automaticMatchups, nbaSchedule, fetchSummary}: Props) {
+  const injuryTipoffs=useMemo(()=>basePlayers.map(p=>p.nextGameTipoff),[basePlayers]);
+  const availability=useAvailability(sport,league,injuryTipoffs);
+  const injuryById=useMemo(()=>availability.data?availabilityForPlayers(basePlayers,availability.data.reports,sport):{},[availability.data,basePlayers,sport]);
   const [search, setSearch] = useState("");
   const searchRef = useRef<HTMLInputElement|null>(null);
   const [watchlist, setWatchlist] = useState<string[]>([]);
@@ -393,8 +398,8 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const ratedOpponents = opponents.filter(([name]) => validDefenseRating(effectiveRatings[name])).length;
   const matchupPicks = players.filter(p => p.opponentRating !== null && p.hasGame !== false && p.weighted > 0)
     .sort((a,b) => b.matchupAdjustmentPct - a.matchupAdjustmentPct || b.weighted - a.weighted).slice(0, 8);
-  const lockedIds = useMemo(() => players.filter(p => cardStore[p.id]?.locked).map(p => p.id), [players, cardStore]);
-  const excludedIds = useMemo(() => players.filter(p => cardStore[p.id]?.excluded).map(p => p.id), [players, cardStore]);
+  const lockedIds = useMemo(() => players.filter(p => cardStore[p.id]?.locked&&!isConfirmedOut(injuryById[p.id])).map(p => p.id), [players, cardStore,injuryById]);
+  const excludedIds = useMemo(() => players.filter(p => cardStore[p.id]?.excluded||isConfirmedOut(injuryById[p.id])).map(p => p.id), [players, cardStore,injuryById]);
   const eligibleCards: CardInput[] = useMemo(() => players.map((p) => ({
     player: p,
     owned: cardStore[p.id]?.owned === true,
@@ -595,12 +600,18 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
               <button type="button" className={builderMode === "manual" ? "active" : ""} aria-pressed={builderMode === "manual"} onClick={() => setBuilderMode("manual")}>✋ Selbst aufstellen</button>
               <button type="button" className={builderMode === "automatic" ? "active" : ""} aria-pressed={builderMode === "automatic"} onClick={() => setBuilderMode("automatic")}>✦ Automatisch optimieren</button>
             </div>
+            {builderMode === "automatic" && <div className="v26-injury-toolbar" role="status">
+              <strong>✚ INJURY-CHECK AKTIV</strong>
+              <span>{availability.loading?"Aktualisiere …":availability.error||`${Object.values(injuryById).filter(r=>r.status==="out").length} bestätigte OUT-Meldungen im Spielerpool`}</span>
+              <span>OUT wird bei automatischen Vorschlägen ausgeschlossen. Quelle: {availability.data?.sources.join(" · ")||"Nicht verfügbar"}</span>
+              <button type="button" disabled={availability.loading} onClick={availability.refresh}>↻ Ausfälle prüfen</button>
+            </div>}
             {builderMode === "manual" && <div className="manual-target-controls">
               <label htmlFor="manual-target">Score-Ziel (optional)</label>
               <input id="manual-target" type="number" min="1" step="1" inputMode="numeric" value={target} placeholder="Score-Ziel eingeben" onChange={e=>setTarget(e.target.value)}/>
               {sport === "football" && <><button type="button" onClick={()=>setTarget("180")}>180 Pkt.</button><button type="button" onClick={()=>setTarget("360")}>360 Pkt.</button></>}
             </div>}
-            {builderMode === "manual" ? <BuilderWorkspace sport={sport} players={players} cardStore={effectiveCardStore}
+            {builderMode === "manual" ? <BuilderWorkspace sport={sport} league={league} availability={availability} availabilityById={injuryById} players={players} cardStore={effectiveCardStore}
               updateCard={updateCard} targetScore={validTarget ? totalTarget : null}
               onOpenProfile={setSelectedPlayerId}
               onSavePredictions={items => items.forEach(saveTracked)} requestedPlayer={manualRequest}

@@ -1091,3 +1091,27 @@ body { background:#090d17; color:var(--ink); -webkit-font-smoothing:antialiased;
 .workspace-v23 .v23-card .v25-matchup-badge{font-size:7px;padding:3px 4px}
 @media(max-width:620px){.v25-battle-statgrid{grid-template-columns:1fr}.v25-battle-statgrid>div{min-height:35px}.workspace-v23 .v25-game-label{font-size:7px;padding:2px 3px}.workspace-v23 .v23-card .v25-matchup-badge{font-size:6.5px}.v25-card-games summary{font-size:7px}}
 @media(prefers-reduced-motion:reduce){.workspace-v23 .v25-tap-ready:hover{transition:none}}
+
+/* V2.6 – Injury & Availability Center: colors indicate report status, not prognosis. */
+.v26-injury-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px 15px;padding:11px 15px;margin:9px 0;border:1px solid rgba(168,85,247,.48);border-radius:12px;background:linear-gradient(105deg,rgba(74,30,123,.40),rgba(12,21,36,.92) 58%,rgba(20,69,75,.21));font-size:12px;color:#b9c6dd}
+.v26-injury-toolbar strong{letter-spacing:.065em;font-size:12px;color:#e9cdff}
+.v26-injury-toolbar span:nth-of-type(1){color:#36e3c1;font-weight:700}
+.v26-injury-toolbar .v26-status-error{color:#fb7185!important}
+.v26-injury-toolbar button{margin-left:auto;background:#372060;border:1px solid #9162d9;color:#f4e9ff;border-radius:9px;padding:7px 13px;font-weight:700;cursor:pointer}
+.v26-injury-toolbar button:disabled{opacity:.6;cursor:wait}
+.v26-breaking{margin:9px 0;padding:11px 14px;border:1px solid #fb7185;border-radius:10px;background:rgba(155,37,57,.22);color:#ffbdc6;font-size:13px}
+.v26-source-note{margin:2px 0 10px;padding:7px 12px;border:1px solid rgba(133,151,179,.29);border-radius:9px;color:#b7c4d9;font-size:11px;background:rgba(19,29,46,.8)}
+.v26-source-note summary{cursor:pointer;color:#c1addd;font-weight:600}.v26-source-note p{margin:5px 0}
+.v26-availability{display:inline-flex;align-items:center;justify-content:center;min-width:0;max-width:100%;padding:4px 7px;line-height:1.15;font-size:10px;font-weight:800;letter-spacing:.01em;border-radius:6px;text-align:center;white-space:normal;overflow-wrap:anywhere;border:1px solid transparent}
+.v26-availability.v26-out{color:#ffe1e5;background:rgba(251,113,133,.28);border-color:#fb7185;box-shadow:0 0 11px rgba(251,113,133,.22)}
+.v26-availability.v26-doubtful{color:#ffd3ad;background:rgba(251,146,60,.18);border-color:rgba(251,146,60,.8)}
+.v26-availability.v26-questionable{color:#ffdf90;background:rgba(251,191,36,.17);border-color:rgba(251,191,36,.64)}
+.v26-availability.v26-probable{color:#b1f0ff;background:rgba(34,211,238,.16);border-color:rgba(34,211,238,.45)}
+.v26-availability.v26-available{color:#abffde;background:rgba(46,230,181,.18);border-color:rgba(46,230,181,.5)}
+.v26-availability.v26-unknown{color:#a5b1c7;background:rgba(108,128,154,.09);border-color:rgba(108,128,154,.27)}
+.v26-availability.v26-compact{font-size:10px;min-width:105px;max-width:155px;padding:5px 7px}
+.v24-card.v26-card-out{border-color:rgba(251,113,133,.85)!important;box-shadow:inset 0 0 0 1px rgba(251,113,133,.25),0 0 13px rgba(251,113,133,.12)}
+.v24-card.v26-card-questionable{border-color:rgba(251,191,36,.75)!important}
+.v26-risk-alert{color:#fbbf74}
+@media(max-width:900px){.v26-injury-toolbar{align-items:flex-start;gap:8px}.v26-injury-toolbar button{margin-left:0}}
+@media(max-width:550px){.v26-injury-toolbar>*{flex:1 1 45%}.v26-injury-toolbar button{flex-basis:100%}}

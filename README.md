@@ -1,3 +1,7 @@
+# Markerras Sorare Helper V2.6 – Injury & Availability Center
+
+Installationsanleitung: **[UPDATE_V2_6_DE.md](UPDATE_V2_6_DE.md)**. V2.6 baut auf V2.5 auf und ergänzt eine getrennte Verfügbarkeitsprüfung für NBA und die vier Fußballligen. ESPN-Best-Effort-Feeds ohne Zugangsschlüssel, API-Football optional über die Server-Variable `API_FOOTBALL_KEY` (siehe `.env.example`). Verletzungsdaten werden nicht als Gesundheitsbestätigung interpretiert, wenn keine Meldung vorhanden ist. Kein Monitoring bei geschlossener Webseite.
+
 # Markerras Sorare Helper V2.5 – Arena Intelligence
 
 **Aktuelle Version: V2.5**, aufgebaut auf der getesteten V2.4.1. NBA Double-Game-Scouting im 3-/7-/14-Tage-Fenster, neue Matchup Difficulty mit separatem ESPN-Defensiv-Fallback, Team Battle und mobil nutzbarer Spielertransfer (Kopieren oder Verschieben). Der Obsidian-Neon-Builder bleibt der zentrale Arbeitsbereich. Prognosewerte, Spielplan, Sterne und Sorare-Scoreabruf bleiben unabhängig.
