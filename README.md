@@ -1,3 +1,11 @@
+# Markerras Sorare Helper V2.2 – Arcade Lineup Intelligence
+
+**Aktuelle Version:** V2.2 integriert einen neuen Strategie-Vergleich mit bis zu vier verschiedenen, gültigen Aufstellungen (Safety First, Best Projection, High Ceiling, Arcade Target), Risikoindex, Floor/Ceiling, heuristischer Zielchance und einer direkten Vorschau im automatischen Builder. NBA nutzt weiterhin die offiziellen Sterne aus V2.1.1. Die bestehenden Sorare- und NBA-Sterne-Abfragen wurden **nicht verändert**. Anleitung: [`UPDATE_V2_2_DE.md`](UPDATE_V2_2_DE.md).
+
+**Wichtig:** Die Zielchancen sind nicht kalibriert; ein hoher Prozentwert ist keine garantierte Gewinnwahrscheinlichkeit. Die Zielvariante ist die beste im erzeugten *begrenzten Kandidatenpool*, nicht mathematisch global optimal. Aktuelle NBA-Tier-Sterne können von bereits festgelegten Sternkosten der Gameweek abweichen. Der Helper übermittelt keine Lineups an Sorare.
+
+---
+
 # Markerras Sorare Helper V2.1 – Obsidian Intelligence
 
 **Aktuelle Version:** Lineup Doctor, Hidden Gems Finder, Data Health & Sync Center. Die Datenanbindung aus V2.0 ist bytegenau unverändert. **Installation:** [`UPDATE_V2_1_DE.md`](UPDATE_V2_1_DE.md).
@@ -36,10 +44,10 @@ This is an updated version of the uploaded Next.js 14 repository. Nothing is dep
 - Technical diagnosis endpoints disabled in production.
 
 ## Important limitations
-- The available Sorare API player response currently **does not include Arcade card ownership, card edition or current NBA star values**. These must be entered manually. Never treat automatic recommendations from all players as a confirmed collection lineup.
+- Sorare-Spielersterne werden seit V2.1.1 über einen getrennten API-Abruf bezogen (`gameplayTierStars`). Persönlicher Kartenbesitz und Boni werden weiterhin manuell gepflegt. Aktuelle Sterne können vom festgeschriebenen Gameweek-Sternpreis abweichen.
 - Football targets **180** and **360** are examples visible on the user's screenshots and may differ for other steps/sets.
 - Current point forecast is a rough average of Sorare projection and historical average weighted by estimated play probability. No calibrated hit probability or defensive matchup rating is claimed.
-- One card per player is supported. Multiple card editions per player, collection sync, live stars, set eligibility and exact multi-game rules remain future work.
+- One card per player is supported. Multiple card editions per player, collection sync, specific Gameweek star costs, set eligibility and exact multi-game rules remain future work.
 - `getPlayers` and GraphQL schema tiers rely on a working `SORARE_API_KEY` and Sorare's current GraphQL schema. They have not been tested against a live authenticated API in this environment.
 - Football optimizer uses bounded beam search and may miss a mathematical optimum in large player pools. The NBA optimizer is an exact dynamic program over manually supplied star values.
 
