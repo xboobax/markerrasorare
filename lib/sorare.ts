@@ -58,12 +58,13 @@ const NBA_CORE = "slug displayName anyPositions avatarPictureUrl";
 const FOOT_AVERAGES = `averageL5: averageScore(type: LAST_FIVE_SO5_AVERAGE_SCORE)
   averageL10: averageScore(type: LAST_TEN_PLAYED_SO5_AVERAGE_SCORE)`;
 const FOOT_RECENT = "rawPlayerGameScores(last: 10)";
-// NBAPlayer does not expose the football-only rawPlayerGameScores field.
-// Keep NBA averages in the first, compact roster request. Do not request
-// optional injury/nextGame fields in this query: one unsupported field would
-// otherwise downgrade the *entire* league to name/photo-only records.
-// Source: Sorare NBAPlayer lastFiveSo5AverageScore / lastTenPlayedSo5AverageScore.
-const NBA_AVERAGES = "lastFiveSo5AverageScore lastTenPlayedSo5AverageScore";
+// The live official Sorare schema (Nov 2026) defines BOTH NBAPlayer.averageScore
+// and NBAPlayer.rawPlayerGameScores.  The legacy `lastFiveSo5AverageScore`
+// and `lastTenPlayedSo5AverageScore` are NOT valid NBAPlayer fields.
+// Keep the aliases identical to the football player model's keys.
+const NBA_AVERAGES = `averageL5: averageScore(type: LAST_FIVE_SO5_AVERAGE_SCORE)
+  averageL10: averageScore(type: LAST_TEN_PLAYED_SO5_AVERAGE_SCORE)`;
+const NBA_RECENT = "rawPlayerGameScores(last: 10)";
 const FOOT_SCORING = `${FOOT_RECENT} ${FOOT_AVERAGES} lastFiveSo5Appearances nextClassicFixtureProjectedScore`;
 const TIERS: Record<Sport, string[]> = {
   football: [
@@ -76,13 +77,15 @@ const TIERS: Record<Sport, string[]> = {
     FOOT_CORE,
   ],
   nba: [
-    // Prefer NBA's established L5/L10 fields. Projection fields are optional;
-    // if Sorare removes one, the following tier preserves the averages.
-    `${NBA_CORE} ${NBA_AVERAGES} nextDailyFixtureProjectedScore nextClassicFixtureProjectedScore lastFiveSo5Appearances`,
+    // First query uses verified NBAPlayer fields and returns raw scores for charts.
+    `${NBA_CORE} ${NBA_AVERAGES} ${NBA_RECENT} nextDailyFixtureProjectedScore nextClassicFixtureProjectedScore lastFiveSo5Appearances`,
+    // An optional projection error must not discard the NBA historical scores.
+    `${NBA_CORE} ${NBA_AVERAGES} ${NBA_RECENT}`,
+    // If the raw score field becomes unavailable, preserve L5/L10 averages.
     `${NBA_CORE} ${NBA_AVERAGES} nextDailyFixtureProjectedScore`,
     `${NBA_CORE} ${NBA_AVERAGES}`,
-    `${NBA_CORE} lastFiveSo5AverageScore`,
-    `${NBA_CORE} seasonAverage`,
+    // Or obtain the historical scores directly, without averages.
+    `${NBA_CORE} ${NBA_RECENT}`,
     NBA_CORE,
   ],
 };
@@ -125,9 +128,13 @@ function toPlayer(n: any, club: Club, sport: Sport): Player {
   const raw: number[] = Array.isArray(n.rawPlayerGameScores)
     ? n.rawPlayerGameScores.filter((x: unknown): x is number => typeof x === "number" && isFinite(x))
     : [];
-  const avg = raw.length ? raw.reduce((a, b) => a + b, 0) / raw.length :
-    num(n.averageL10) ?? num(n.averageL5) ?? num(n.lastTenPlayedSo5AverageScore) ?? num(n.lastFiveSo5AverageScore)
-      ?? (sport === "nba" ? num(n.seasonAverage) : null);
+  const recentAvg = raw.length ? raw.reduce((a, b) => a + b, 0) / raw.length : null;
+  // Preserve football's established scoring priority. For NBA, the L10
+  // average from Sorare is authoritative when present; otherwise use recent.
+  const avg = sport === "nba"
+    ? num(n.averageL10) ?? recentAvg ?? num(n.averageL5)
+    : recentAvg ?? num(n.averageL10) ?? num(n.averageL5)
+      ?? num(n.lastTenPlayedSo5AverageScore) ?? num(n.lastFiveSo5AverageScore);
   const playOdds = o
     ? Math.max(0, Math.min(1, (Number(o.starterOddsBasisPoints) + 0.6 * Number(o.substituteOddsBasisPoints)) / 10000))
     : null;
@@ -140,8 +147,12 @@ function toPlayer(n: any, club: Club, sport: Sport): Player {
     recentScores: raw,
     position: mapPosition(sport, n),
     avg,
-    averageL5: num(n.averageL5) ?? num(n.lastFiveSo5AverageScore),
-    averageL10: num(n.averageL10) ?? num(n.lastTenPlayedSo5AverageScore),
+    averageL5: sport === "nba"
+      ? num(n.averageL5) ?? (raw.length ? raw.slice(0, 5).reduce((a, b) => a + b, 0) / Math.min(5, raw.length) : null)
+      : num(n.averageL5) ?? num(n.lastFiveSo5AverageScore),
+    averageL10: sport === "nba"
+      ? num(n.averageL10) ?? recentAvg
+      : num(n.averageL10) ?? num(n.lastTenPlayedSo5AverageScore),
     proj: num(n.nextDailyFixtureProjectedScore) ?? num(n.nextClassicFixtureProjectedScore),
     last5Apps: num(n.lastFiveSo5Appearances),
     status: String(n.playingStatus ?? ""),
@@ -158,7 +169,7 @@ function toPlayer(n: any, club: Club, sport: Sport): Player {
  * has no pageInfo field, fall back to the known legacy first-page query and
  * mark that roster as incomplete rather than advertising completeness.
  */
-const rosterPageSize = (sport: Sport): number => sport === "football" ? 40 : 100;
+const rosterPageSize = (sport: Sport): number => sport === "football" ? 40 : 20;
 
 function teamQuery(sport: Sport, slug: string, fields: string, after?: string, legacy = false): string {
   const cursor = after ? `, after: ${JSON.stringify(after)}` : "";
@@ -198,6 +209,9 @@ async function fetchFirstPage(sport: Sport, club: Club): Promise<{players: Playe
       // A 429/timeout/complexity error is NOT proof that a stats field is missing.
       // Do not silently downgrade those cases to stats-free player records.
       if (!isSchemaValidationError(e)) throw e;
+      // Complexity limits are not unsupported schema fields. For NBA, never
+      // silently lose score data after a complexity rejection.
+      if (sport === "nba" && /complexity|depth limit/i.test(String(e))) throw e;
       lastValidationError = e;
       workingTier[sport] = Math.min(tier + 1, TIERS[sport].length - 1);
     }
