@@ -1,5 +1,6 @@
 // Alle Sorare-Abfragen stehen nur in dieser Datei.
 import { Player, Sport } from "./model";
+import { footballLeagueFromSorare } from "./leagues";
 
 const API = "https://api.sorare.com/graphql";
 
@@ -19,9 +20,16 @@ const validSlug = (c: Club) => /^[a-z0-9-]+$/.test(c.slug);
 
 export async function getFootballClubs(): Promise<Club[]> {
   const d = await gql(`{ football { clubsReady { slug name domesticLeague { displayName } } } }`, 3600);
-  return (d.football.clubsReady as any[])
-    .map((c) => ({ slug: String(c.slug), name: String(c.name), league: c.domesticLeague?.displayName ?? "Ohne Liga" }))
-    .filter(validSlug);
+  // Restrict the data source itself, not merely the visible league chips.
+  // Only Bundesliga, LaLiga, Ligue 1 and Premier League clubs reach the app.
+  const clubs: Club[] = [];
+  for (const c of d.football.clubsReady as any[]) {
+    const league = footballLeagueFromSorare(c.domesticLeague?.displayName);
+    if (!league) continue;
+    const club: Club = { slug: String(c.slug), name: String(c.name), league };
+    if (validSlug(club)) clubs.push(club);
+  }
+  return clubs;
 }
 
 export async function getNbaTeams(): Promise<Club[]> {

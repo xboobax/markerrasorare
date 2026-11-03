@@ -1,12 +1,12 @@
 {
-  "name": "divisorare",
-  "version": "0.2.0",
+  "name": "markerras-sorare-helper",
+  "version": "1.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test:arcade": "tsc --target ES2020 --module commonjs --moduleResolution node --strict --skipLibCheck --outDir .test-build lib/model.ts lib/arcade.ts config/divination.ts && node tests/arcade.test.js"
+    "test:arcade": "tsc --target ES2020 --module commonjs --moduleResolution node --strict --skipLibCheck --outDir .test-build lib/model.ts lib/arcade.ts config/divination.ts lib/leagues.ts && node tests/arcade.test.js && node tests/leagues.test.js"
   },
   "dependencies": {
     "next": "14.2.35",

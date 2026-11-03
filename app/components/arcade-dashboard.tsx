@@ -52,7 +52,9 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   useEffect(() => {
     setLoadedSport(null);
     try {
-      const value = window.localStorage.getItem(`divisorare.cards.v2.${sport}`);
+      // Fall back to the old key so existing manually saved cards are retained.
+      const value = window.localStorage.getItem(`markerras.sorare.cards.v1.${sport}`)
+        ?? window.localStorage.getItem(`divisorare.cards.v2.${sport}`);
       const parsed: unknown = value ? JSON.parse(value) : {};
       setCardStore(parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as CardStore : {});
     } catch { setCardStore({}); }
@@ -60,7 +62,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   }, [sport]);
   useEffect(() => {
     if (loadedSport === sport) {
-      try { window.localStorage.setItem(`divisorare.cards.v2.${sport}`, JSON.stringify(cardStore)); }
+      try { window.localStorage.setItem(`markerras.sorare.cards.v1.${sport}`, JSON.stringify(cardStore)); }
       catch { /* private mode or storage limit: UI still works in this session */ }
     }
   }, [sport, cardStore, loadedSport]);
@@ -116,9 +118,9 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   return (
     <div className="app-shell">
       <header className="app-topbar">
-        <Link href="/?sport=football" className="brand" aria-label="DiviSorare Startseite">
-          <span className="brand-logo">D<span>◆</span></span>
-          <span className="brand-text"><strong>DIVISORARE</strong><small>ARCADE INTELLIGENCE</small></span>
+        <Link href="/?sport=football" className="brand" aria-label="Markerras Sorare Helper Startseite">
+          <span className="brand-logo">M<span>◆</span></span>
+          <span className="brand-text"><strong>MARKERRAS SORARE HELPER</strong><small>ARCADE INTELLIGENCE</small></span>
         </Link>
         <nav className="sport-switch" aria-label="Sportart wählen">
           <Link href="/?sport=football" aria-current={sport === "football" ? "page" : undefined}>⚽ Football</Link>
@@ -133,9 +135,10 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
             <div className="eyebrow"><span className="eyebrow-line"/> GAMEWEEK RESEARCH CENTER</div>
             <h1>Das perfekte <em>{title}</em> Lineup.</h1>
             <p>Spieler analysieren. Karten bewerten. Aufstellungen mit nachvollziehbaren Prognosen optimieren.</p>
+            {sport === "football" && <p className="league-focus">Nur Bundesliga · LaLiga · Ligue 1 · Premier League</p>}
             <div className="hero-tags"><span>◆ 5 Karten</span><span>{sport === "nba" ? "★ Maximal 16 Sterne" : "◈ TW · VER · MF · FWD · EX"}</span><span>◎ Sorare-Prognosen</span></div>
           </div>
-          <div className="hero-orbit" aria-hidden="true"><div className="orbit-inner"><span>DS</span><small>ARCADE</small></div></div>
+          <div className="hero-orbit" aria-hidden="true"><div className="orbit-inner"><span>MS</span><small>ARCADE</small></div></div>
         </section>
 
         <div className="metric-grid">
@@ -152,7 +155,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
           <div className="section-top"><div><span className="section-kicker">01 / DATENBEREICH</span><h2>Liga & Team auswählen</h2></div><span className="caption-small">Suche wirkt innerhalb des geladenen Bereichs</span></div>
           {sport === "football" && leagues.length > 0 && (
             <div className="chip-strip" aria-label="Fußball-Ligen">
-              <Link className={league === "__all" && !team ? "chip active" : "chip"} href={makeLink({sport, league:"__all"})}>Alle Ligen</Link>
+              <Link className={league === "__all" && !team ? "chip active" : "chip"} href={makeLink({sport, league:"__all"})}>Alle 4 Ligen</Link>
               {leagues.map(l => <Link className={l === league && !team ? "chip active" : "chip"} key={l} href={makeLink({sport,league:l})}>{l}</Link>)}
             </div>
           )}
@@ -238,7 +241,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
           {showCount < filtered.length && <button className="load-more" onClick={()=>setShowCount(n=>n+70)}>Weitere Spieler anzeigen ({Math.min(70,filtered.length-showCount)}) ↓</button>}
           <div className="footnote">Tipp: Mit „Meine Karte“ markierst du deinen Bestand. Sterne und Bonus stammen derzeit aus deinen Eingaben und bleiben nur in diesem Browser gespeichert. Die angezeigten Projektionen beruhen auf Sorare-Spielerdaten und einem vereinfachten Risikomodell.</div>
         </section>
-        <footer className="app-footer"><strong>DIVISORARE</strong><span>Independent Sorare companion · Nicht mit Sorare verbunden · Kein automatisches Einreichen von Lineups</span></footer>
+        <footer className="app-footer"><strong>MARKERRAS SORARE HELPER</strong><span>Independent Sorare companion · Nicht mit Sorare verbunden · Kein automatisches Einreichen von Lineups</span></footer>
       </main>
     </div>
   );

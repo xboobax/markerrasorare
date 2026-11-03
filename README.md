@@ -1,6 +1,13 @@
-# DiviSorare — Arcade Planner (Football & NBA)
+# Markerras Sorare Helper — Football & NBA Arcade
 
 This is an updated version of the uploaded Next.js 14 repository. Nothing is deployed automatically.
+
+## Fußball-Ligen (gezielt begrenzt)
+- **Nur Bundesliga, LaLiga, Ligue 1 und Premier League** werden im Fußballbereich geladen.
+- Die Filterung erfolgt auf dem Server (`lib/sorare.ts`, `lib/leagues.ts`) bereits vor dem Abruf der Spieler; andere Ligen gelangen nicht in die Suche oder den Optimizer.
+- „Alle 4 Ligen“ kombiniert nur diese vier Wettbewerbe. Ein ungültiger URL-Ligaparameter fällt auf Bundesliga zurück.
+- NBA-Daten und die 16-Sterne-Regel bleiben unverändert.
+- Unterstützte bekannte alternative Sorare-Anzeigenamen sind in `lib/leagues.ts` hinterlegt. Wenn Sorare die Liga umbenennt, muss die Alias-Liste aktualisiert werden.
 
 ## Implemented
 - Football: five positions GK / DEF / MID / FWD / FLEX (FLEX is a field player, never a second GK).
@@ -29,8 +36,9 @@ With global `tsc` available, or use `npx tsc`:
 ```
 mkdir -p .test-build
 npx tsc --target ES2020 --module commonjs --moduleResolution node \
-  --strict --skipLibCheck --outDir .test-build lib/model.ts lib/arcade.ts config/divination.ts
+  --strict --skipLibCheck --outDir .test-build lib/model.ts lib/arcade.ts config/divination.ts lib/leagues.ts
 node tests/arcade.test.js
+node tests/leagues.test.js
 ```
 
 ## Files to look at
@@ -45,3 +53,8 @@ node tests/arcade.test.js
 - Validate actual user card ownership and star ratings through supported Sorare API data or a verified upload.
 - Verify every competition's published rules and board target separately.
 - Calibrate projections and probability estimates with historical outcomes.
+
+## Deployment
+GitHub: https://github.com/xboobax/markerrasorare  
+Vercel: https://markerrasorarev1.vercel.app/
+Siehe `DEPLOYMENT_DE.md`. Die ZIP-Datei ist ein Projekt-Update, kein automatisch ausgeführtes Deployment.

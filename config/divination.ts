@@ -3,7 +3,7 @@
  * Do not silently apply these rules to other Sorare competitions.
  */
 export const ARCADE = {
-  name: "Sorare Arcade / Divination",
+  name: "Markerras Sorare Helper / Arcade",
   football: {
     slots: ["GK", "DEF", "MID", "FWD", "FLEX"] as const,
     exampleTargets: [180, 360] as const,

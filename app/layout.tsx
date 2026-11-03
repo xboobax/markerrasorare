@@ -1,8 +1,8 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "DiviSorare | Arcade Lineup & Spieleranalyse",
-  description: "Sorare Football und NBA: Spielerprognosen, Karten-Suche und Lineup-Optimierung mit NBA-16-Sterne-Budget.",
+  title: "Markerras Sorare Helper | NBA & Football Arcade",
+  description: "NBA & Fußball Arcade: Spielerprognosen, Suche und Lineup-Optimierung. Fußball: Bundesliga, LaLiga, Ligue 1 und Premier League. NBA: maximal 16 Sterne.",
 };
 
 export default function RootLayout({children}: {children: React.ReactNode}) {
