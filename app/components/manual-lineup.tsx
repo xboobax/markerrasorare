@@ -5,6 +5,7 @@ import {useEffect, useMemo, useState} from "react";
 import {ARCADE} from "@/config/divination";
 import {slotAccepts, isValidNbaStars, type CardInput} from "@/lib/arcade";
 import {emptyManualSelection, evaluateManualLineup, suggestManualSwaps, normalizeManualSelection, type ManualSelection} from "@/lib/manual-lineup";
+import {assessLineup, duplicateToFreePreset, firstEligibleEmptySlot} from "@/lib/lineup-intelligence";
 import type {Forecast, Sport} from "@/lib/model";
 
 type CardSettings = {owned?:boolean; stars?:number|null; bonusPercent?:number};
@@ -16,6 +17,7 @@ type Props = {
   targetScore: number|null;
   onOpenProfile: (id:string)=>void;
   onSavePredictions: (picks:Forecast[])=>void;
+  requestedPlayer?: {id:string;seq:number}|null;
 };
 const abbreviations:Record<string,string>={GK:"TW",DEF:"VER",MID:"MF",FWD:"FWD",FLEX:"EX",ANY:"NBA"};
 const names:Record<string,string>={GK:"Torwart",DEF:"Verteidiger",MID:"Mittelfeld",FWD:"Stürmer",FLEX:"Zusätzlicher Feldspieler",ANY:"Freie Wahl"};
@@ -34,7 +36,7 @@ function ManualAvatar({player}:{player?:Forecast}) {
     </span>;
 }
 
-export default function ManualLineup({sport,players,cardStore,updateCard,targetScore,onOpenProfile,onSavePredictions}:Props) {
+export default function ManualLineup({sport,players,cardStore,updateCard,targetScore,onOpenProfile,onSavePredictions,requestedPlayer}:Props) {
   const [selection,setSelection]=useState<ManualSelection>(emptyManualSelection);
   const [presets,setPresets]=useState<Record<string,ManualSelection>>({});
   const [loadedSport,setLoadedSport]=useState<Sport|null>(null);
@@ -43,9 +45,10 @@ export default function ManualLineup({sport,players,cardStore,updateCard,targetS
   const [ownedOnly,setOwnedOnly]=useState(false);
   const [swapOwnedOnly,setSwapOwnedOnly]=useState(false);
   const [message,setMessage]=useState("");
+  const [lastHandledRequest,setLastHandledRequest]=useState<number|null>(null);
 
   useEffect(()=>{
-    setLoadedSport(null); setActiveSlot(null); setSearch(""); setMessage("");
+    setLoadedSport(null); setActiveSlot(null); setSearch(""); setMessage(""); setLastHandledRequest(null);
     try {
       const raw=window.localStorage.getItem(storageKey(sport));
       const data=raw?JSON.parse(raw):null;
@@ -70,6 +73,25 @@ export default function ManualLineup({sport,players,cardStore,updateCard,targetS
   const swaps=useMemo(()=>suggestManualSwaps(selection,cards,sport,{ownedOnly:swapOwnedOnly,limit:5}),[selection,cards,sport,swapOwnedOnly]);
   const riskyPicks=lineup.picks.filter(p=>p.player.playProb<0.6 || p.player.confidence==="gering" || p.player.sampleSize===0).length;
   const slots=sport==="nba"?ARCADE.nba.slots:ARCADE.football.slots;
+  const findings=useMemo(()=>assessLineup(lineup,sport,targetScore),[lineup,sport,targetScore]);
+  // A request originates from a deliberate click in the Explorer or player profile.
+  // Never evict a current pick silently; if all slots are full, tell the user.
+  useEffect(()=>{
+    if(!requestedPlayer || loadedSport!==sport || requestedPlayer.seq===lastHandledRequest)return;
+    setLastHandledRequest(requestedPlayer.seq);
+    const card=cards.find(c=>c.player.id===requestedPlayer.id);
+    if(!card){setMessage("Dieser Spieler ist im aktuellen Datenbereich nicht mehr verfügbar.");return;}
+    if(selection.includes(requestedPlayer.id)){
+      setMessage(`${card.player.name} steht bereits in deiner Aufstellung.`);return;
+    }
+    const slot=firstEligibleEmptySlot(selection,cards,sport,requestedPlayer.id);
+    if(slot===null){
+      setMessage(`Kein freier passender Slot für ${card.player.name}. Wähle bei einem besetzten Slot „Ändern“, um manuell zu tauschen.`);return;
+    }
+    setSelection(old=>{const next=old.slice();next[slot]=requestedPlayer.id;return next;});
+    setActiveSlot(null);
+    setMessage(`${card.player.name} wurde in ${sport==="nba"?`Karte ${slot+1}`:names[slots[slot]]} aufgenommen. Bitte Sterne, Bonus und Kartenbesitz prüfen.`);
+  },[requestedPlayer,loadedSport,sport,lastHandledRequest,selection,cards,slots]);
   const selectedIds=new Set(selection.filter((id):id is string=>Boolean(id)));
   const candidates=useMemo(()=>{
     if(activeSlot===null) return [];
@@ -90,6 +112,19 @@ export default function ManualLineup({sport,players,cardStore,updateCard,targetS
     setPresets(previous=>({...previous,[key]:normalizeManualSelection(selection)}));
     setMessage(`Aufstellung ${key} lokal gespeichert.`);
   };
+  const duplicateLineup=()=>{
+    const next=duplicateToFreePreset(presets,selection);
+    if(!next.key){setMessage("Alle drei Speicherplätze sind belegt. Du kannst einen Speicherplatz gezielt mit „Speichern“ überschreiben.");return;}
+    setPresets(next.presets);setMessage(`Aktuelle Aufstellung als Variante ${next.key} gesichert. Du kannst sie nun verändern und vergleichen.`);
+  };
+  const copyLineup=async()=>{
+    const lines=[`Markerras Sorare Helper · ${sport==="nba"?"NBA":"Fußball"} Lineup`,
+      ...slots.map((slot,index)=>{const p=lineup.slots[index];return `${sport==="nba"?`Karte ${index+1}`:names[slot]}: ${p?.player.name??"—"}${p?.stars!==null&&p?.stars!==undefined?` (${fmt(p.stars)} ★)`:""}`;}),
+      `Prognose: ${fmt(lineup.projectedScore)} Punkte`,sport==="nba"?`Sterne: ${fmt(lineup.starsUsed)} / 16`:"",
+      "Modellschätzung · keine offizielle Sorare-Einreichung"].filter(Boolean).join("\n");
+    try {await navigator.clipboard.writeText(lines);setMessage("Aufstellung als Text kopiert.");}
+    catch {setMessage("Text konnte nicht kopiert werden (Browser-Berechtigung). Du kannst die Spieler auch manuell markieren.");}
+  };
   const loadPreset=(key:string)=>{
     if(!presets[key]) return;
     setSelection(normalizeManualSelection(presets[key]));setActiveSlot(null);setMessage(`Aufstellung ${key} geladen.`);
@@ -99,7 +134,7 @@ export default function ManualLineup({sport,players,cardStore,updateCard,targetS
   return <div className="manual-builder">
     <div className="manual-intro">
       <div><strong>Deine Aufstellung – du entscheidest</strong><p>Wähle jeden Spieler einzeln für einen Slot aus. Keine automatische Ersetzung. Deine Auswahl wird auf diesem Gerät gespeichert.</p></div>
-      <button type="button" className="manual-reset" onClick={()=>{setSelection(emptyManualSelection());setActiveSlot(null);setMessage("Aufstellung geleert.");}}>Alle entfernen</button>
+      <div className="manual-intro-actions"><button type="button" className="manual-duplicate" onClick={duplicateLineup} disabled={!selection.some(Boolean)}>⧉ Variante duplizieren</button><button type="button" className="manual-duplicate" onClick={()=>void copyLineup()} disabled={!selection.some(Boolean)}>↗ Lineup kopieren</button><button type="button" className="manual-reset" onClick={()=>{setSelection(emptyManualSelection());setActiveSlot(null);setMessage("Aufstellung geleert.");}}>Alle entfernen</button></div>
     </div>
     <div className="manual-presets" aria-label="Gespeicherte Aufstellungen">
       {["1","2","3"].map(key=><div className="manual-preset" key={key}>
@@ -138,7 +173,7 @@ export default function ManualLineup({sport,players,cardStore,updateCard,targetS
       <label className="manual-only-owned"><input type="checkbox" checked={ownedOnly} onChange={e=>setOwnedOnly(e.target.checked)}/> Nur meine markierten Karten</label>
       <div className="manual-candidates">
         {candidates.map(p=><button type="button" key={p.id} className="manual-candidate" onClick={()=>pickPlayer(activeSlot,p.id)}>
-          <span className="manual-candidate-person"><strong>{p.name}</strong><small>{p.team} · {p.position}</small></span>
+          <ManualAvatar player={p}/><span className="manual-candidate-person"><strong>{p.name}</strong><small>{p.team} · {p.position}</small></span>
           <span>{p.avg===null&&p.proj===null&&p.sampleSize===0?"Score unbekannt":`${fmt(p.weighted)} Pkt.`}</span>
           {sport==="nba"&&<small>{isValidNbaStars(cardStore[p.id]?.stars)?`${fmt(cardStore[p.id]!.stars!)} ★`:"★ fehlt"}</small>}
           <span className="manual-plus">+</span>
@@ -153,6 +188,12 @@ export default function ManualLineup({sport,players,cardStore,updateCard,targetS
       <div><small>FLOOR / CEILING*</small><strong>{fmt(lineup.floorScore)} – {fmt(lineup.ceilingScore)}</strong><small>Heuristische Modellspanne</small></div>
       {targetScore!==null&&<div><small>GESCHÄTZTE ZIELCHANCE*</small><strong>{lineup.targetProbability===null?"—":`${Math.round(lineup.targetProbability*100)} %`}</strong><small>Score-Ziel {fmt(targetScore)}</small></div>}
     </div>
+    <section className="lineup-assistant" aria-label="Smart Lineup Assistant">
+      <div className="assistant-heading"><div className="assistant-symbol" aria-hidden="true">✦</div><div><span className="section-kicker">V1.9 / LINEUP INTELLIGENCE</span><h3>Dein Smart Lineup Assistant</h3><p>Prüft nur deine tatsächliche Auswahl und die geladenen Modelldaten. Keine automatische Änderung.</p></div><span className="assistant-counter">{lineup.picks.length} / 5</span></div>
+      <div className="assistant-findings">{findings.map(item=><div className={`assistant-finding tone-${item.tone}`} key={item.id}><span aria-hidden="true">{item.tone==="success"?"✓":item.tone==="warning"?"!":"i"}</span><div><strong>{item.title}</strong><small>{item.description}</small></div></div>)}</div>
+      {swaps.length>0 && lineup.valid && <div className="assistant-highlight"><div><small>BESTER OPTIONALER WECHSEL</small><strong>{swaps[0].fromName} → {swaps[0].toName}</strong><span>Prognose vorher {fmt(lineup.projectedScore)} · nachher {fmt(swaps[0].newProjectedTotal)} Pkt. {sport==="nba"?`· ${fmt(swaps[0].newStarsUsed)} / 16 ★`:""}</span></div><span className="assistant-gain">+{fmt(swaps[0].gain)}</span></div>}
+      {targetScore!==null && targetScore>0 && <div className="assistant-target"><div><span>Fortschritt zum gewählten Ziel</span><strong>{fmt(lineup.projectedScore)} / {fmt(targetScore)}</strong></div><div className="assistant-progress"><span style={{width:`${Math.min(100,Math.max(0,lineup.projectedScore/targetScore*100))}%`}}/></div><small>Nur ein Vergleich des Modell-Erwartungswertes mit dem Ziel, keine Erfolgsgarantie.</small></div>}
+    </section>
     {lineup.complete && <div className="manual-health" aria-label="Datenqualität deiner Aufstellung">
       <strong>Datencheck deiner Aufstellung</strong>
       <span>{riskyPicks === 0 ? "Keine besonders auffällige Datenlücke oder niedrige Einsatzquote nach den verwendeten Modellgrenzen." : `${riskyPicks} von ${lineup.picks.length} Spielern mit erhöhtem Einsatzrisiko oder dünner Datenlage.`}</span>

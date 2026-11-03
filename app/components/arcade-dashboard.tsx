@@ -15,6 +15,7 @@ import {alignOpponentNames, type AutomaticMatchupData} from "@/lib/auto-matchups
 import {buildForecastV18, pointsAtLeast, type ForecastV18} from "@/lib/forecast-v18";
 import {backtestForecasts} from "@/lib/backtesting";
 import {loadArchive, persistArchive} from "@/lib/prediction-db";
+import {parseWatchlist, toggleWatchlist, watchlistKey} from "@/lib/watchlist";
 import {automaticSnapshotCandidates} from "@/lib/snapshot-policy";
 import type {TrackingModelSnapshot} from "@/lib/tracking";
 
@@ -64,6 +65,12 @@ function PlayerAvatar({player, small = false}: {player: Forecast; small?: boolea
 
 export default function ArcadeDashboard({sport, league, leagues, team, clubs, players: basePlayers, info, error, automaticMatchups}: Props) {
   const [search, setSearch] = useState("");
+  const searchRef = useRef<HTMLInputElement|null>(null);
+  const [watchlist, setWatchlist] = useState<string[]>([]);
+  const [loadedWatchSport, setLoadedWatchSport] = useState<Sport|null>(null);
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [manualRequest, setManualRequest] = useState<{id:string;seq:number}|null>(null);
+  const [quickNotice, setQuickNotice] = useState("");
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [profileHistories, setProfileHistories] = useState<Record<string, number[]>>({});
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -93,6 +100,37 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const [builderMode, setBuilderMode] = useState<"automatic" | "manual">("manual");
   const [strategy, setStrategy] = useState<Strategy>("balanced");
   const [target, setTarget] = useState(sport === "football" ? "180" : "");
+
+  // Personal watchlist is kept apart from "owned cards" (favorite != owned).
+  useEffect(() => {
+    setLoadedWatchSport(null);
+    try {setWatchlist(parseWatchlist(JSON.parse(window.localStorage.getItem(watchlistKey(sport)) ?? "[]")));}
+    catch {setWatchlist([]);}
+    setLoadedWatchSport(sport);
+  }, [sport]);
+  useEffect(() => {
+    if (loadedWatchSport !== sport) return;
+    try {window.localStorage.setItem(watchlistKey(sport),JSON.stringify(watchlist));} catch {}
+  }, [sport,loadedWatchSport,watchlist]);
+  useEffect(() => {
+    const handler=(e:KeyboardEvent)=>{
+      const target=e.target as HTMLElement|null;
+      if(e.key==="/" && !e.altKey && !e.ctrlKey && !e.metaKey && target?.tagName!=="INPUT" && target?.tagName!=="TEXTAREA" && target?.tagName!=="SELECT" && !target?.isContentEditable){
+        e.preventDefault();searchRef.current?.focus();document.getElementById("spieler")?.scrollIntoView({behavior:"smooth",block:"start"});
+      }
+      if(e.key==="Escape" && document.activeElement===searchRef.current)searchRef.current?.blur();
+    };
+    document.addEventListener("keydown",handler);
+    return ()=>document.removeEventListener("keydown",handler);
+  },[]);
+  const queueManualPlayer=(id:string)=>{
+    setBuilderMode("manual");
+    setManualRequest(old=>({id,seq:(old?.seq??0)+1}));
+    setSelectedPlayerId(null);
+    setQuickNotice("Spieler wird dem ersten passenden freien Slot zugeordnet. Kartenregeln werden im Builder geprüft.");
+    document.getElementById("lineup-builder")?.scrollIntoView({behavior:"smooth",block:"start"});
+  };
+  const toggleFavorite=(id:string)=>setWatchlist(prev=>toggleWatchlist(prev,id));
 
   // A player entry is not proof of owning a specific Sorare card.
   // Browser-side settings are a temporary bridge until collection API sync exists.
@@ -133,7 +171,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
     }
   }, [sport, loadedRatingSport, opponentRatings]);
   useEffect(() => {
-    setSearch(""); setPosition("all"); setShowCount(70); setActiveResult(0);
+    setSearch(""); setPosition("all"); setShowCount(70); setActiveResult(0); setFavoritesOnly(false); setQuickNotice(""); setManualRequest(null);
     setTarget(sport === "football" ? "180" : "");
   }, [sport]);
 
@@ -305,6 +343,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
     bonusPercent: cardStore[p.id]?.bonusPercent ?? 0,
   })), [players, cardStore]);
 
+  const favoriteSet=useMemo(()=>new Set(watchlist),[watchlist]);
   const ownedCount = players.filter(p => cardStore[p.id]?.owned).length;
   const ratedCount = players.filter(p => isValidNbaStars(cardStore[p.id]?.stars)).length;
   const hasGameCount = players.filter(p => p.hasGame !== false && p.weighted > 0).length;
@@ -348,6 +387,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
       if (hideUnavailable && (p.hasGame === false || p.playProb < .3)) return false;
       if (hasForecastOnly && p.forecastSources.length === 0) return false;
       if (ownedOnly && !cardStore[p.id]?.owned) return false;
+      if (favoritesOnly && !favoriteSet.has(p.id)) return false;
       if (needle && !normalize(`${p.name} ${p.team} ${p.position}`).includes(needle)) return false;
       return true;
     });
@@ -363,22 +403,24 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
         default: return b.weighted - a.weighted;
       }
     });
-  }, [players, position, hideUnavailable, hasForecastOnly, ownedOnly, cardStore, search, sortBy]);
+  }, [players, position, hideUnavailable, hasForecastOnly, ownedOnly, favoritesOnly, favoriteSet, cardStore, search, sortBy]);
   const positions = Array.from(new Set(players.map(p => p.position))).sort();
   const topPicks = players.filter(p => p.hasGame !== false && p.weighted > 0).slice().sort((a,b) => b.weighted - a.weighted).slice(0, 4);
   const title = sport === "football" ? "Football Arcade" : "NBA Arcade";
+  const favorites=useMemo(()=>{const index=new Map(players.map(p=>[p.id,p]));return watchlist.map(id=>index.get(id)).filter((p):p is typeof players[number]=>Boolean(p));},[watchlist,players]);
 
   return (
     <div className="app-shell">
       <header className="app-topbar">
         <Link href="/?sport=football" className="brand" aria-label="Markerras Sorare Helper Startseite">
           <span className="brand-logo">M<span>◆</span></span>
-          <span className="brand-text"><strong>MARKERRAS SORARE HELPER</strong><small>ARCADE INTELLIGENCE</small></span>
+          <span className="brand-text"><strong>MARKERRAS SORARE HELPER</strong><small>ARCADE INTELLIGENCE · V1.9</small></span>
         </Link>
         <nav className="sport-switch" aria-label="Sportart wählen">
           <Link href="/?sport=football" aria-current={sport === "football" ? "page" : undefined}>⚽ Football</Link>
           <Link href="/?sport=nba" aria-current={sport === "nba" ? "page" : undefined}>🏀 NBA</Link>
         </nav>
+        <nav className="quick-nav" aria-label="Schnellnavigation"><a href="#lineup-builder">Lineup Studio</a><a href="#spieler">Spielersuche</a><a href="#forecast-lab">Forecast Lab</a></nav>
         <span className="topbar-pill"><span className="status-dot" style={error ? {background: "#d9a06f"} : undefined}/>{error ? "API nicht erreichbar" : players.length ? "Sorare-Daten geladen" : "Sorare Datenadapter"}</span>
       </header>
 
@@ -389,6 +431,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
             <h1>Das perfekte <em>{title}</em> Lineup.</h1>
             <p>Spieler analysieren. Karten bewerten. Aufstellungen mit nachvollziehbaren Prognosen optimieren.</p>
             {sport === "football" && <p className="league-focus">Nur Bundesliga · LaLiga · Ligue 1 · Premier League</p>}
+            <div className="hero-cta"><a href="#lineup-builder" className="hero-primary">Lineup erstellen <span aria-hidden="true">↗</span></a><a href="#spieler" className="hero-secondary">Spieler entdecken →</a></div>
             <div className="hero-tags"><span>◆ 5 Karten</span><span>{sport === "nba" ? "★ Maximal 16 Sterne" : "◈ TW · VER · MF · FWD · EX"}</span><span>◎ Sorare-Prognosen</span></div>
           </div>
           <div className="hero-orbit" aria-hidden="true"><div className="orbit-inner"><span>MS</span><small>ARCADE</small></div></div>
@@ -476,7 +519,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
             {builderMode === "manual" ? <ManualLineup sport={sport} players={players} cardStore={cardStore}
               updateCard={updateCard} targetScore={validTarget ? totalTarget : null}
               onOpenProfile={setSelectedPlayerId}
-              onSavePredictions={items => items.forEach(saveTracked)}/> : <>
+              onSavePredictions={items => items.forEach(saveTracked)} requestedPlayer={manualRequest}/> : <>
             <div className="mode-switch" role="group" aria-label="Spielerauswahl">
               <button type="button" className={!ownedOnly ? "active" : ""} onClick={() => {setOwnedOnly(false); setActiveResult(0);}}>Alle Spieler · theoretisch</button>
               <button type="button" className={ownedOnly ? "active" : ""} onClick={() => {setOwnedOnly(true); setActiveResult(0);}}>Nur meine Karten</button>
@@ -533,18 +576,30 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
           </aside>
         </section>
 
+        <section className="panel watchlist-panel" id="watchlist">
+          <div className="section-top"><div><span className="section-kicker">DEIN SCOUTING BOARD</span><h2>Meine Watchlist <span className="watchlist-star">★</span></h2></div><span className="record-count">{watchlist.length} Favoriten · {favorites.length} geladen</span></div>
+          <p className="watchlist-note">Beobachte deine Lieblingsspieler und nimm sie mit einem Klick in deine Aufstellung auf. Favoriten sind keine Bestätigung deines Kartenbesitzes. Sie bleiben nur in diesem Browser gespeichert.</p>
+          {favorites.length ? <div className="watchlist-grid">{favorites.slice(0,12).map(p=><article key={p.id} className="watchlist-card">
+            <PlayerAvatar player={p}/><div className="watchlist-card-body"><button type="button" onClick={()=>setSelectedPlayerId(p.id)}>{p.name} ↗</button><small>{p.team} · {p.position}</small><strong>{p.forecastSources.length?`${fmt(p.weighted)} Pkt.`:"Keine Score-Daten"}</strong></div>
+            <div className="watchlist-card-actions"><button type="button" title={`${p.name} zur Aufstellung hinzufügen`} aria-label={`${p.name} in manuellen Builder übernehmen`} onClick={()=>queueManualPlayer(p.id)}>+ Lineup</button><button type="button" title="Aus Favoriten entfernen" aria-label={`${p.name} aus Favoriten entfernen`} onClick={()=>toggleFavorite(p.id)}>★</button></div>
+          </article>)}</div> : <div className="watchlist-empty">Noch keine geladenen Favoriten. Markiere in der Spielersuche einen Spieler mit ☆. {watchlist.length>0 && "Einige Favoriten sind im aktuellen Team-/Ligabereich nicht geladen."}</div>}
+          {favorites.length>12 && <a href="#spieler" className="watchlist-more" onClick={()=>setFavoritesOnly(true)}>Alle Favoriten in der Suche ansehen →</a>}
+        </section>
         <section className="panel explorer-panel" id="spieler">
           <div className="section-top"><div><span className="section-kicker">06 / SPIELER EXPLORER</span><h2>Spieler suchen & Spielerprofile öffnen</h2></div><span className="record-count">{filtered.length.toLocaleString("de-DE")} Ergebnisse</span></div>
           <div className="search-controls">
-            <label className="searchbox"><span>⌕</span><input placeholder="Spieler, Verein oder Position suchen …" value={search} onChange={e=>{setSearch(e.target.value);setShowCount(70);}} aria-label="Spieler suchen"/><kbd>{filtered.length} Treffer</kbd></label>
+            <label className="searchbox"><span>⌕</span><input ref={searchRef} placeholder="Spieler, Verein oder Position suchen …" value={search} onChange={e=>{setSearch(e.target.value);setShowCount(70);}} aria-label="Spieler suchen"/><kbd>/ Suche · {filtered.length}</kbd></label>
             <select aria-label="Nach Position filtern" value={position} onChange={e=>{setPosition(e.target.value);setShowCount(70);}}><option value="all">Alle Positionen</option>{positions.map(p=><option key={p} value={p}>{POS_LABEL[p] ?? p}</option>)}</select>
             <select aria-label="Sortierung" value={sortBy} onChange={e=>setSortBy(e.target.value)}><option value="weighted">Beste Prognose</option><option value="avg">Höchster Ø-Score</option><option value="last5">Beste L5-Form</option><option value="upside">Höchstes Ceiling</option><option value="risk">Höchste Einsatzchance</option><option value="matchup">Bester bewerteter Gegner</option><option value="name">Name A–Z</option><option value="team">Team A–Z</option></select>
           </div>
+          {search.trim().length>=2 && filtered.length>0 && <div className="search-suggestions" aria-label="Schnelltreffer zur Spielersuche"><div className="search-suggestions-heading"><strong>Schnelltreffer</strong><small>Vorschläge aus dem geladenen Spielerbereich</small></div><div className="search-suggestions-grid">{filtered.slice(0,6).map(p=><div key={p.id} className="search-suggestion"><PlayerAvatar player={p} small/><div><button type="button" onClick={()=>setSelectedPlayerId(p.id)}>{p.name} ↗</button><small>{p.team} · {p.position} · {p.forecastSources.length?`${fmt(p.weighted)} Pkt.`:"Score offen"}</small></div><button className="suggestion-add" type="button" onClick={()=>queueManualPlayer(p.id)} aria-label={`${p.name} direkt ins Lineup hinzufügen`}>+</button></div>)}</div></div>}
+          <div className="search-quickfilters"><button type="button" className={favoritesOnly?"active":""} aria-pressed={favoritesOnly} onClick={()=>{setFavoritesOnly(v=>!v);setShowCount(70);}}>★ Nur Favoriten {watchlist.length>0?`(${watchlist.length})`:""}</button>{search && <button type="button" onClick={()=>{setSearch("");searchRef.current?.focus();}}>× Suche leeren</button>}<span>Tipp: <kbd>/</kbd> öffnet die Suche</span></div>
           <div className="filter-checkbox"><label><input type="checkbox" checked={hideUnavailable} onChange={e=>setHideUnavailable(e.target.checked)}/> Spieler mit fehlendem Spiel oder geringerer Einsatzchance ausblenden</label><label><input type="checkbox" checked={hasForecastOnly} onChange={e=>setHasForecastOnly(e.target.checked)}/> Nur Spieler mit mindestens einer Score-Datenquelle anzeigen</label></div>
-          <div className="table-scroll"><table className="players-table"><thead><tr><th>Spieler / Team</th><th>Pos.</th><th>Ø Score</th><th>L5</th><th>Gegner</th><th>Floor – Ceiling</th><th>Daten</th><th>Einsatz</th><th>Prognose</th><th>Scouting (manuell)</th><th>Builder</th><th>Mein Bestand</th>{sport === "nba" && <th>Sterne ★</th>}<th>Kartenbonus</th></tr></thead>
+          <div className="table-scroll"><table className="players-table"><thead><tr><th title="Favoriten in deiner Watchlist">★</th><th>Spieler / Team</th><th>Pos.</th><th>Ø Score</th><th>L5</th><th>Gegner</th><th>Floor – Ceiling</th><th>Daten</th><th>Einsatz</th><th>Prognose</th><th>Scouting (manuell)</th><th>Builder</th><th>Mein Bestand</th>{sport === "nba" && <th>Sterne ★</th>}<th>Kartenbonus</th></tr></thead>
             <tbody>{filtered.slice(0,showCount).map(p => {
               const card = cardStore[p.id] ?? {};
               return <tr key={p.id}>
+                <td><button type="button" className={`favorite-toggle ${watchlist.includes(p.id)?"is-favorite":""}`} aria-pressed={watchlist.includes(p.id)} aria-label={`${p.name} ${watchlist.includes(p.id)?"aus Favoriten entfernen":"zu Favoriten hinzufügen"}`} onClick={()=>toggleFavorite(p.id)}>{watchlist.includes(p.id)?"★":"☆"}</button></td>
                 <td><div className="player-identity"><PlayerAvatar player={p}/><span><button type="button" className="player-open" onClick={() => setSelectedPlayerId(p.id)} title={`Profil von ${p.name} öffnen`}>{p.name} ↗</button><small>{p.team}{p.injuries > 0 ? " · ⚠ Verletzung" : ""}{p.hasGame === false ? " · kein Spiel" : ""}</small>{p.nextGame && <small className="game-caption">{p.nextGame}</small>}</span></div></td>
                 <td><span className="position-pill">{p.position}</span></td>
                 <td className="numeric-cell">{p.avg === null ? "—" : fmt(p.avg)}</td>
@@ -562,7 +617,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
                     <label>xA<input type="number" min="0" max="10" step="0.05" placeholder="—" value={card.xa ?? ""} onChange={e=>updateCard(p.id,{xa:e.target.value ? Number(e.target.value) : null})}/></label>
                   </>}
                 </div></td>
-                <td><div className="builder-actions">
+                <td><div className="builder-actions"><button type="button" className="quick-add-table" title={`${p.name} direkt in den manuellen Builder übernehmen`} onClick={()=>queueManualPlayer(p.id)}>+ Lineup</button>
                   <button type="button" aria-pressed={card.locked === true} className={card.locked ? "active" : ""} title="Spieler fest ins Lineup aufnehmen" onClick={()=>updateCard(p.id,{locked:!card.locked,excluded:false})}>🔒 {card.locked ? "Fixiert" : "Fixieren"}</button>
                   <button type="button" aria-pressed={card.excluded === true} className={card.excluded ? "excluded" : ""} title="Spieler aus Lineups ausschließen" onClick={()=>updateCard(p.id,{excluded:!card.excluded,locked:false})}>🚫</button>
                 </div></td>
@@ -573,6 +628,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
             })}</tbody></table></div>
           {!filtered.length && <div className="empty-state">Keine passenden Spieler im geladenen Datenbereich.</div>}
           {showCount < filtered.length && <button className="load-more" onClick={()=>setShowCount(n=>n+70)}>Weitere Spieler anzeigen ({Math.min(70,filtered.length-showCount)}) ↓</button>}
+          {quickNotice && <p className="quick-add-notice" role="status">{quickNotice}</p>}
           <div className="footnote">Klicke auf einen Spielernamen, um sein Detailprofil zu öffnen. Tipp: Mit „Meine Karte“ markierst du deinen Bestand. Sterne und Bonus stammen derzeit aus deinen Eingaben und bleiben nur in diesem Browser gespeichert. Spielerbilder stammen soweit vorhanden aus der Sorare-API; fehlt ein Foto oder lässt es sich nicht laden, werden Initialen gezeigt. Die Spannen und Zielchancen sind heuristisch und noch nicht gegen echte Spieltagsergebnisse kalibriert. xG/xA sind vorerst nur Informationsfelder (ohne rechnerischen Einfluss); für die Minutenkorrektur musst du übliche UND erwartete Minuten eingeben. Gegnerbewertungen basieren bei aktiviertem Feed auf realen Team-Gegentoren/-punkten oder ansonsten auf deinen manuellen Eingaben; die 1–5-Skala bleibt nur eine grobe Einordnung.</div>
         </section>
         <section className="panel tracking-panel" id="tracking">
@@ -645,7 +701,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
             <h3>Formkurve · letzte {profileScores.length} Scores</h3>
             {profileScores.length ? <div className="score-bars">{[...profileScores].reverse().map((score,i) => <div key={i} title={`${fmt(score)} Punkte`}><span style={{height:`${Math.min(100, Math.max(4, score / Math.max(1,...profileScores) * 100))}%`}}/><small>{fmt(score)}</small></div>)}</div> : <p className="profile-muted">{historyLoading ? "Historische Scores werden geladen …" : historyError ? "Einzelscores konnten aktuell nicht geladen werden. L5/L10-Durchschnittswerte bleiben nutzbar, sofern Sorare sie liefert." : "Keine historischen Einzelscores von Sorare verfügbar."}</p>}
             <div className="profile-detail-grid"><p><strong>Nächstes Spiel:</strong> {selectedPlayer.nextGame ?? "Nicht verfügbar"}</p><p><strong>Gegner:</strong> {selectedPlayer.opponent ?? "Nicht verfügbar"}</p><p><strong>Form L5 / L10:</strong> {selectedPlayer.last5Avg === null ? "—" : fmt(selectedPlayer.last5Avg)} / {selectedPlayer.last10Avg === null ? "—" : fmt(selectedPlayer.last10Avg)}</p><p><strong>Datenabdeckung:</strong> {selectedPlayer.confidence} ({profileScores.length} Einzelscores; ggf. separate L5/L10-Mittelwerte)</p><p><strong>Bewertung Gegner:</strong> {matchupLabel(selectedPlayer.opponentRating)} {selectedPlayer.opponentRating !== null ? (opponentRatings[selectedPlayer.opponent ?? ""] ? "· manuell" : "· automatisch") : ""}</p><p><strong>Verletzungseinträge:</strong> {selectedPlayer.injuries}</p></div>
-            <div className="profile-actions"><button className="action-primary" type="button" onClick={() => saveTracked(selectedPlayer)}>{tracked.some(t=>t.key===createTrackedPrediction(selectedPlayer,sport).key) ? "Prognose gespeichert ✓" : "Prognose merken"}</button><button type="button" onClick={() => updateCard(selectedPlayer.id,{locked:!selectedCard.locked, excluded:false})}>{selectedCard.locked ? "Fixierung lösen" : "Für Lineup fixieren"}</button><button type="button" onClick={() => updateCard(selectedPlayer.id,{owned:!selectedCard.owned})}>{selectedCard.owned ? "Aus Kartenbestand entfernen" : "Als eigene Karte markieren"}</button></div>
+            <div className="profile-actions"><button type="button" className="action-primary" onClick={()=>queueManualPlayer(selectedPlayer.id)}>+ Direkt in mein Lineup</button><button type="button" className="profile-favorite" aria-pressed={watchlist.includes(selectedPlayer.id)} onClick={()=>toggleFavorite(selectedPlayer.id)}>{watchlist.includes(selectedPlayer.id)?"★ Favorit entfernen":"☆ Zu Favoriten"}</button><button className="action-primary" type="button" onClick={() => saveTracked(selectedPlayer)}>{tracked.some(t=>t.key===createTrackedPrediction(selectedPlayer,sport).key) ? "Prognose gespeichert ✓" : "Prognose merken"}</button><button type="button" onClick={() => updateCard(selectedPlayer.id,{locked:!selectedCard.locked, excluded:false})}>{selectedCard.locked ? "Fixierung lösen" : "Für Lineup fixieren"}</button><button type="button" onClick={() => updateCard(selectedPlayer.id,{owned:!selectedCard.owned})}>{selectedCard.owned ? "Aus Kartenbestand entfernen" : "Als eigene Karte markieren"}</button></div>
             <p className="profile-muted">Für den Lineup Builder zählen weiterhin die eingetragenen NBA-Sterne und Kartenboni. Für Spieler ohne aktuelle Sorare-Projektion sind Prognosen nicht belastbar.</p>
           </div>
         </div>}

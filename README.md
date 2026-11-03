@@ -1,6 +1,8 @@
-# Markerras Sorare Helper V1.8 – Forecast Lab
+# Markerras Sorare Helper V1.9 – Obsidian Studio
 
-**Stabile Basis:** Sorare-Adapter aus V1.7.2 ist unverändert. **Neue Module:** `lib/forecast-v18.ts`, `lib/backtesting.ts`, `lib/prediction-db.ts`, `lib/snapshot-policy.ts`. **Anleitung:** [`UPDATE_V1_8_DE.md`](UPDATE_V1_8_DE.md).
+**Stabile Basis:** Sorare-Adapter aus V1.7.2 ist unverändert. **Neue V1.9-Module:** `lib/lineup-intelligence.ts` und `lib/watchlist.ts`. **Installationsanleitung:** [`UPDATE_V1_9_DE.md`](UPDATE_V1_9_DE.md). Die V1.8-Forecast-Lab-Module bleiben erhalten.
+
+V1.9 ergänzt einen Smart Lineup Assistant, direkte Spielerübernahme, Favoriten, Lineup-Varianten und ein Obsidian-Dark-Mode-Design. Die V1.8-Vorhersagen und die reparierte Sorare-Abfrage bleiben erhalten.
 
 V1.8 vergleicht eine vorsichtige experimentelle Vorhersage mit dem bisherigen Modell und speichert zukünftige Prognosen vor dem Spiel im lokalen Browserarchiv (IndexedDB). Das neue Modell ist nicht als nachweislich besser ausgewiesen; es bleibt bis zur Validierung optional. Ohne Browserbesuch werden keine Snapshots gespeichert. Keine Cloud-Datenbank und kein Hintergrund-Cron.
 
