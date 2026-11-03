@@ -1,172 +1,180 @@
-import type { Forecast, Sport } from "./model";
-import { ARCADE } from "../config/divination";
+import type {Forecast, Sport} from "./model";
+import {ARCADE} from "../config/divination";
 
+export type Strategy = "balanced" | "safe" | "upside";
 export type CardInput = {
   player: Forecast;
-  /** Real star rating for the current NBA Arcade board, entered by user. */
   stars?: number | null;
-  /** Bonus on this particular card edition, in percentage points. */
   bonusPercent?: number;
   owned?: boolean;
 };
-
 export type LineupPick = {
   slot: string;
   player: Forecast;
   stars: number | null;
   bonusPercent: number;
   projectedScore: number;
+  floorScore: number;
+  ceilingScore: number;
+  optimizeScore: number;
 };
-
 export type OptimizedLineup = {
   picks: LineupPick[];
   projectedScore: number;
+  floorScore: number;
+  ceilingScore: number;
   starsUsed: number;
 };
-
 export type OptimizeOptions = {
   sport: Sport;
   ownedOnly?: boolean;
   limit?: number;
-  /** Breadth-limited search rather than a promise of exact global optimum. */
   beamWidth?: number;
   maxCandidatesPerSlot?: number;
+  strategy?: Strategy;
+  lockedPlayerIds?: string[];
+  excludedPlayerIds?: string[];
 };
-
 const footballSlots: string[] = [...ARCADE.football.slots];
 const nbaSlots: string[] = [...ARCADE.nba.slots];
 const clampBonus = (n: number | undefined) =>
-  typeof n === "number" && Number.isFinite(n) ? Math.max(0, Math.min(50, n)) : 0;
+  typeof n === "number" && Number.isFinite(n) ? Math.max(0,Math.min(50,n)) : 0;
 
 export function isValidNbaStars(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value) &&
-    value >= 1 && value <= 5 && Number.isInteger(value * 2);
+  return typeof value === "number" && Number.isFinite(value) && value >= 1 && value <= 5 && Number.isInteger(value * 2);
 }
-
 export function slotAccepts(slot: string, position: string): boolean {
   if (slot === "ANY") return true;
-  if (slot === "FLEX") return ["DEF", "MID", "FWD"].includes(position);
+  if (slot === "FLEX") return ["DEF","MID","FWD"].includes(position);
   return slot === position;
 }
-
-/** A card without a known NBA star value is deliberately NOT eligible. */
 export function candidateIsEligible(card: CardInput, opts: OptimizeOptions): boolean {
   if (opts.ownedOnly && !card.owned) return false;
   if (!Number.isFinite(card.player.weighted) || card.player.weighted <= 0) return false;
   if (card.player.hasGame === false) return false;
   return opts.sport !== "nba" || isValidNbaStars(card.stars);
 }
+const ranking = (pick: LineupPick) => pick.optimizeScore;
+function result(picks: LineupPick[]): OptimizedLineup {
+  return {
+    picks,
+    projectedScore: picks.reduce((n,p)=>n+p.projectedScore,0),
+    floorScore: picks.reduce((n,p)=>n+p.floorScore,0),
+    ceilingScore: picks.reduce((n,p)=>n+p.ceilingScore,0),
+    starsUsed: picks.reduce((n,p)=>n+(p.stars??0),0),
+  };
+}
+function dedupe(lineups: OptimizedLineup[], limit: number, strategy: Strategy) {
+  const byPlayers = new Map<string,OptimizedLineup>();
+  const metric = (l:OptimizedLineup) => strategy === "safe" ? l.floorScore : strategy === "upside" ? l.ceilingScore : l.projectedScore;
+  for (const line of lineups) {
+    const key = line.picks.map(p=>p.player.id).sort().join("|");
+    const prev = byPlayers.get(key);
+    if (!prev || metric(line)>metric(prev)) byPlayers.set(key,line);
+  }
+  return [...byPlayers.values()].sort((a,b)=>metric(b)-metric(a)).slice(0,limit);
+}
 
 /**
- * Finds legal lineups. For NBA, an exact cardinality/star-budget DP finds the
- * top-K combinations. Football uses a bounded beam search (not exact).
- * Star totals are counted as integer HALF-stars to avoid floating-point errors.
+ * NBA: exact budget-DP (half-stars, 5 distinct players), with mandatory picks.
+ * Football: constraint-valid bounded beam search with mandatory player assignments.
+ * The displayed projection always remains the risk-adjusted expected total;
+ * safe/upside only change the OPTIMIZATION OBJECTIVE.
  */
-export function optimizeArcadeLineups(
-  cards: CardInput[],
-  opts: OptimizeOptions,
-): OptimizedLineup[] {
-  const slots = opts.sport === "nba" ? nbaSlots : footballSlots;
-  const capHalf = Number.POSITIVE_INFINITY; // NBA is solved separately with exact DP.
-  const beamWidth = Math.max(5, Math.min(800, Math.floor(opts.beamWidth ?? 220)));
-  const maxPerSlot = Math.max(5, Math.min(500, Math.floor(opts.maxCandidatesPerSlot ?? 100)));
-  const limit = Math.max(1, Math.min(20, Math.floor(opts.limit ?? 3)));
+export function optimizeArcadeLineups(cards: CardInput[], opts: OptimizeOptions): OptimizedLineup[] {
+  const strategy = opts.strategy ?? "balanced";
+  const limit = Math.max(1,Math.min(20,Math.floor(opts.limit??3)));
+  const beamWidth = Math.max(5,Math.min(1000,Math.floor(opts.beamWidth??250)));
+  const perSlot = Math.max(5,Math.min(500,Math.floor(opts.maxCandidatesPerSlot??100)));
+  const lockedIds = new Set(opts.lockedPlayerIds??[]);
+  const excludedIds = new Set(opts.excludedPlayerIds??[]);
+  if (lockedIds.size > 5 || [...lockedIds].some(id=>excludedIds.has(id))) return [];
+  const clean: LineupPick[] = cards.filter(c=>!excludedIds.has(c.player.id) && candidateIsEligible(c,opts))
+    .map(card=>{
+      const bonusPercent = clampBonus(card.bonusPercent);
+      const factor=1+bonusPercent/100;
+      const p=card.player;
+      const projectedScore=p.weighted*factor;
+      const floorScore=(Number.isFinite(p.floor)?p.floor:p.expected)*p.playProb*factor;
+      const ceilingScore=(Number.isFinite(p.ceiling)?p.ceiling:p.expected)*p.playProb*factor;
+      return {slot:"",player:p,stars:opts.sport==="nba"?(card.stars as number):null,
+        bonusPercent,projectedScore,floorScore,ceilingScore,
+        optimizeScore:strategy==="safe"?floorScore:strategy==="upside"?ceilingScore:projectedScore};
+    });
+  // Distinct players: until multi-edition card support use the best edition per player.
+  const byId=new Map<string,LineupPick>();
+  for (const card of clean) {
+    const old=byId.get(card.player.id);
+    if (!old||ranking(card)>ranking(old)) byId.set(card.player.id,card);
+  }
+  if ([...lockedIds].some(id=>!byId.has(id))) return [];
+  const pinned=[...lockedIds].map(id=>byId.get(id)!);
+  const remaining=[...byId.values()].filter(p=>!lockedIds.has(p.player.id));
 
-  const clean = cards.filter((card) => candidateIsEligible(card, opts))
-    .map((card) => ({
-      player: card.player,
-      stars: opts.sport === "nba" ? card.stars as number : null,
-      bonusPercent: clampBonus(card.bonusPercent),
-      projectedScore: card.player.weighted * (1 + clampBonus(card.bonusPercent) / 100),
-    }));
-
-  // NBA has five interchangeable slots. A cardinality/budget DP gives an EXACT
-  // top-K answer among the entered cards, unlike beam search.
-  if (opts.sport === "nba") {
-    type NbaState = { picks: LineupPick[]; score: number };
-    const cap = ARCADE.nba.maxStars * 2;
-    const states: NbaState[][][] = Array.from({length: 6}, () =>
-      Array.from({length: cap + 1}, () => []));
-    states[0][0] = [{picks: [], score: 0}];
-    // If a player appears multiple times, keep the best version for now.
-    // Multi-edition card support should eventually use a card ID and a unique-player constraint.
-    const byId = new Map<string, typeof clean[number]>();
-    for (const card of clean) {
-      const old = byId.get(card.player.id);
-      if (!old || old.projectedScore < card.projectedScore) byId.set(card.player.id, card);
-    }
-    for (const card of byId.values()) {
-      const stars = Math.round((card.stars as number) * 2);
-      // Descending count prevents reusing the same card within one DP iteration.
-      for (let count = 4; count >= 0; count--) {
-        for (let spent = cap - stars; spent >= 0; spent--) {
-          if (!states[count][spent].length) continue;
-          const destination = states[count + 1][spent + stars];
-          for (const state of states[count][spent]) {
-            destination.push({
-              score: state.score + card.projectedScore,
-              picks: [...state.picks, {...card, slot:"ANY"}],
-            });
-          }
-          destination.sort((a, b) => b.score - a.score);
-          if (destination.length > limit) destination.length = limit;
+  if (opts.sport==="nba") {
+    const cap=Math.round(ARCADE.nba.maxStars*2);
+    const spent=pinned.reduce((n,p)=>n+Math.round((p.stars??0)*2),0);
+    if (spent>cap) return [];
+    type State={picks:LineupPick[];rank:number};
+    const dp:State[][][]=Array.from({length:6},()=>Array.from({length:cap+1},()=>[]));
+    const initial=pinned.map(p=>({...p,slot:"ANY"}));
+    dp[pinned.length][spent]=[{picks:initial,rank:initial.reduce((n,p)=>n+ranking(p),0)}];
+    for (const item of remaining) {
+      const cost=Math.round((item.stars??0)*2);
+      for(let count=4;count>=pinned.length;count--) {
+        for(let sum=cap-cost;sum>=0;sum--) {
+          if (!dp[count][sum].length) continue;
+          const dest=dp[count+1][sum+cost];
+          for(const state of dp[count][sum]) dest.push({picks:[...state.picks,{...item,slot:"ANY"}],rank:state.rank+ranking(item)});
+          dest.sort((a,b)=>b.rank-a.rank);
+          if(dest.length>limit) dest.length=limit;
         }
       }
     }
-    const complete = states[5].flat().sort((a,b)=>b.score-a.score).slice(0, limit);
-    return complete.map(r => ({
-      picks: r.picks,
-      projectedScore: r.score,
-      starsUsed: r.picks.reduce((sum,p) => sum + (p.stars ?? 0), 0),
-    }));
+    return dedupe(dp[5].flat().map(s=>result(s.picks)),limit,strategy);
   }
 
-  // Fill constrained football positions first, the free outfield slot last.
-  const orderedSlots = [...slots].sort((a, b) => Number(a === "FLEX" || a === "ANY") - Number(b === "FLEX" || b === "ANY"));
-  type State = { picks: LineupPick[]; used: Set<string>; halfStars: number; score: number };
-  let beam: State[] = [{ picks: [], used: new Set(), halfStars: 0, score: 0 }];
-
-  for (const slot of orderedSlots) {
-    const pool = clean.filter((c) => slotAccepts(slot, c.player.position))
-      .sort((a, b) => b.projectedScore - a.projectedScore)
-      .slice(0, maxPerSlot);
-    if (!pool.length) return [];
-
-    const next: State[] = [];
-    for (const state of beam) {
-      for (const card of pool) {
-        if (state.used.has(card.player.id)) continue;
-        const nextHalf = state.halfStars + (card.stars === null ? 0 : card.stars * 2);
-        if (nextHalf > capHalf) continue;
-        const used = new Set(state.used);
-        used.add(card.player.id);
-        next.push({
-          used,
-          halfStars: nextHalf,
-          score: state.score + card.projectedScore,
-          picks: [...state.picks, { ...card, slot }],
-        });
+  // Enumerate legal assignments for locked players, including a possible FLEX pick.
+  // Pinned GK always occupies GK and a second player of the same outfield
+  // position must use FLEX; reject impossible assignments rather than dropping pins.
+  const assignmentGroups:{picks:LineupPick[];usedSlots:Set<string>}[]=[];
+  function assign(idx:number, picks:LineupPick[], used:Set<string>) {
+    if(idx===pinned.length){assignmentGroups.push({picks,usedSlots:used});return;}
+    const pick=pinned[idx];
+    for(const slot of footballSlots) {
+      if(used.has(slot)||!slotAccepts(slot,pick.player.position)) continue;
+      assign(idx+1,[...picks,{...pick,slot}],new Set([...used,slot]));
+    }
+  }
+  assign(0,[],new Set());
+  if(!assignmentGroups.length) return [];
+  const candidates:OptimizedLineup[]=[];
+  const orderedSlots=[...footballSlots].sort((a,b)=>Number(a==="FLEX")-Number(b==="FLEX"));
+  for(const group of assignmentGroups) {
+    type State={picks:LineupPick[];used:Set<string>;rank:number};
+    let beam:State[]=[{picks:group.picks,used:new Set(group.picks.map(p=>p.player.id)),rank:group.picks.reduce((n,p)=>n+ranking(p),0)}];
+    for(const slot of orderedSlots.filter(slot=>!group.usedSlots.has(slot))) {
+      const pool=remaining.filter(p=>slotAccepts(slot,p.player.position))
+        .sort((a,b)=>ranking(b)-ranking(a)).slice(0,perSlot);
+      if(!pool.length){beam=[];break;}
+      const next:State[]=[];
+      for(const state of beam) for(const pick of pool) {
+        if(state.used.has(pick.player.id))continue;
+        next.push({picks:[...state.picks,{...pick,slot}],used:new Set([...state.used,pick.player.id]),rank:state.rank+ranking(pick)});
       }
+      next.sort((a,b)=>b.rank-a.rank);
+      const seen=new Set<string>();beam=[];
+      for(const state of next) {
+        const key=[...state.used].sort().join("|");
+        if(seen.has(key))continue;
+        seen.add(key);beam.push(state);
+        if(beam.length>=beamWidth)break;
+      }
+      if(!beam.length)break;
     }
-    next.sort((a, b) => b.score - a.score);
-    // Diversity: one beam state per combination. Order of picks can vary.
-    const seen = new Set<string>();
-    beam = [];
-    for (const state of next) {
-      const key = [...state.used].sort().join("|");
-      if (seen.has(key)) continue;
-      seen.add(key);
-      beam.push(state);
-      if (beam.length >= beamWidth) break;
+    for(const state of beam) if(state.picks.length===5) {
+      candidates.push(result([...state.picks].sort((a,b)=>footballSlots.indexOf(a.slot)-footballSlots.indexOf(b.slot))));
     }
-    if (!beam.length) return [];
   }
-
-  // Preserve board-slot order in the UI.
-  const results = beam.sort((a, b) => b.score - a.score).slice(0, limit);
-  return results.map((r) => ({
-    picks: [...r.picks].sort((a, b) => slots.indexOf(a.slot) - slots.indexOf(b.slot)),
-    projectedScore: r.score,
-    starsUsed: r.halfStars / 2,
-  }));
+  return dedupe(candidates,limit,strategy);
 }

@@ -43,13 +43,17 @@ export async function getNbaTeams(): Promise<Club[]> {
 // fällt der Abruf automatisch auf die nächstkleinere Stufe zurück.
 const GAME = "activeInjuries { __typename } nextGame { date homeTeam { name } awayTeam { name } }";
 const FOOT_CORE = "slug displayName position playingStatus";
+const FOOT_IMAGE = 'pictureUrl(derivative: "avatar")';
+// NBA photo availability depends on the current API schema. A field error
+// falls back to identical stats without the photo field.
 const FOOT_STATS = "rawPlayerGameScores(last: 10) lastFiveSo5Appearances nextClassicFixtureProjectedScore";
 const FOOT_ODDS = "nextClassicFixturePlayingStatusOdds { starterOddsBasisPoints substituteOddsBasisPoints nonPlayingOddsBasisPoints }";
 const NBA_CORE = "slug displayName anyPositions";
+const NBA_IMAGE = "pictureUrl";
 const NBA_STATS = "rawPlayerGameScores(last: 10) lastFiveSo5Appearances nextClassicFixtureProjectedScore nextDailyFixtureProjectedScore";
 const TIERS: Record<Sport, string[]> = {
-  football: [`${FOOT_CORE} ${FOOT_STATS} ${GAME} ${FOOT_ODDS}`, `${FOOT_CORE} ${FOOT_STATS}`, FOOT_CORE],
-  nba: [`${NBA_CORE} ${NBA_STATS} ${GAME}`, `${NBA_CORE} ${NBA_STATS}`, NBA_CORE],
+  football: [`${FOOT_CORE} ${FOOT_IMAGE} ${FOOT_STATS} ${GAME} ${FOOT_ODDS}`, `${FOOT_CORE} ${FOOT_STATS} ${GAME} ${FOOT_ODDS}`, `${FOOT_CORE} ${FOOT_STATS}`, FOOT_CORE],
+  nba: [`${NBA_CORE} ${NBA_IMAGE} ${NBA_STATS} ${GAME}`, `${NBA_CORE} ${NBA_STATS} ${GAME}`, `${NBA_CORE} ${NBA_STATS}`, NBA_CORE],
 };
 const tier: Record<Sport, number> = { football: 0, nba: 0 };
 
@@ -64,6 +68,14 @@ function mapPosition(sport: Sport, n: any): string {
   if (raw.includes("forward")) return "F";
   if (raw.includes("center")) return "C";
   return raw || "?";
+}
+
+export function safeImageUrl(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  try {
+    const url = new URL(value.startsWith("//") ? `https:${value}` : value);
+    return url.protocol === "https:" ? url.toString() : null;
+  } catch { return null; }
 }
 
 function toPlayer(n: any, club: Club, sport: Sport): Player {
@@ -81,6 +93,8 @@ function toPlayer(n: any, club: Club, sport: Sport): Player {
     name: String(n.displayName),
     team: club.name,
     teamSlug: club.slug,
+    imageUrl: safeImageUrl(n.pictureUrl),
+    recentScores: raw,
     position: mapPosition(sport, n),
     avg,
     proj: num(n.nextDailyFixtureProjectedScore) ?? num(n.nextClassicFixtureProjectedScore),

@@ -168,3 +168,31 @@ input[type="checkbox"] { accent-color:#9a76ee; }
   .brand { min-width:0; }
 }
 @media (max-width:380px) { .brand-logo { width:36px; height:36px; flex-shrink:0; } .brand-text strong { font-size:11px; } }
+
+/* V1.2 · Spielerporträts, Risikoanalyse und manuelle Lineup-Kontrolle */
+.player-portrait { overflow:hidden; border-radius:11px; background:linear-gradient(140deg,#393454,#1b2c43); }
+.player-portrait img { display:block; width:100%; height:100%; object-fit:cover; object-position:center 17%; }
+.player-portrait .portrait-placeholder { display:grid; place-items:center; width:100%; height:100%; font-size:11px; }
+.slot-icon:has(.player-portrait) { border:0; background:transparent!important; padding:0; }
+.portrait-small { width:49px; height:49px; border-radius:11px; }
+.strategy-bar { display:flex; gap:12px; align-items:center; justify-content:space-between; flex-wrap:wrap; margin:15px 0 10px; padding:13px 15px; border:1px solid #3f405f; border-radius:10px; background:#1c2035; }
+.strategy-title { display:flex; flex-direction:column; gap:3px; }
+.strategy-title strong { font-size:12px; color:#f1e8ff; }
+.strategy-title small { font-size:10px; color:#9ca7bf; }
+.strategy-options { display:flex; gap:5px; flex-wrap:wrap; }
+.strategy-options button { background:#242940; border:1px solid #444969; color:#d0d1e3; padding:8px 11px; border-radius:8px; cursor:pointer; font-size:11px; }
+.strategy-options button.active { background:#6949a8; border-color:#b18efa; color:#fff; }
+.lock-info { display:flex; justify-content:space-between; gap:10px; align-items:center; flex-wrap:wrap; margin:6px 0 12px; color:#afbad1; font-size:11px; }
+.lock-info button { border:1px solid #444862; border-radius:7px; color:#d3c7ef; background:#222840; padding:6px 10px; cursor:pointer; }
+.lineup-range { display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap; margin:0 14px 13px; padding:10px 12px; border:1px solid #353751; border-radius:9px; background:#12182a; color:#a7b2c8; font-size:11px; }
+.lineup-range strong { color:#e6d8ff; }
+.builder-actions { display:flex; align-items:center; gap:4px; white-space:nowrap; }
+.builder-actions button { background:#252b3d; color:#b6c1d4; padding:6px 8px; border:1px solid #39435a; border-radius:7px; cursor:pointer; font-size:10px; }
+.builder-actions button.active { background:#52417c; border-color:#a081dc; color:#fff; }
+.builder-actions button.excluded { background:#5b293a; border-color:#cf7185; }
+.confidence-tag { padding:4px 7px; border-radius:6px; font-size:10px; background:#313a53; color:#b9c9e1; }
+.confidence-hoch { background:#1c5348; color:#a1f1d8; }
+.confidence-gering { background:#57402d; color:#f0c8a1; }
+.range-cell { color:#b3b4de; font-size:11px!important; }
+.players-table { min-width:1320px; }
+@media(max-width:640px) { .strategy-options { width:100%; } .strategy-options button { flex:1; } }

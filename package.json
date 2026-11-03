@@ -1,12 +1,12 @@
 {
   "name": "markerras-sorare-helper",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test:arcade": "tsc --target ES2020 --module commonjs --moduleResolution node --strict --skipLibCheck --outDir .test-build lib/model.ts lib/arcade.ts config/divination.ts lib/leagues.ts lib/sorare.ts tests/next-test-types.d.ts && node tests/arcade.test.js && node tests/leagues.test.js && node tests/football-clubs.test.js"
+    "test:arcade": "tsc --target ES2020 --module commonjs --moduleResolution node --strict --skipLibCheck --outDir .test-build lib/model.ts lib/arcade.ts config/divination.ts lib/leagues.ts lib/sorare.ts tests/next-test-types.d.ts && node tests/arcade.test.js && node tests/leagues.test.js && node tests/football-clubs.test.js && node tests/v12.test.js"
   },
   "dependencies": {
     "next": "14.2.35",

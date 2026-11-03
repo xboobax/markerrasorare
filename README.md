@@ -58,3 +58,7 @@ node tests/leagues.test.js
 GitHub: https://github.com/xboobax/markerrasorare  
 Vercel: https://markerrasorarev1.vercel.app/
 Siehe `DEPLOYMENT_DE.md`. Die ZIP-Datei ist ein Projekt-Update, kein automatisch ausgeführtes Deployment.
+
+## Update V1.2
+
+Spielerbilder, L5-/L10-basierte Prognosespanne und verbesserter Lineup Builder mit drei Strategien sowie Fixieren/Sperren. Details und Vorsichtsmaßnahmen siehe `UPDATE_V1_2_DE.md`.
