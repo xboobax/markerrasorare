@@ -10,7 +10,7 @@ const {forecast}=require('../.test-build/lib/model.js');
   let calls=0;
   const athlete=(slug)=>({slug,displayName:slug,position:'Defender',playingStatus:'STARTER',
     rawPlayerGameScores:[52,49,61],nextClassicFixtureProjectedScore:55,lastFiveSo5Appearances:5});
-  const firstBatch=Array.from({length:100},(_,i)=>athlete(`athlete-${i}`));
+  const firstBatch=Array.from({length:40},(_,i)=>athlete(`athlete-${i}`));
   let rejectPagination=false;
   global.fetch=async(_url,init)=>{
     const query=JSON.parse(init.body).query;
@@ -31,21 +31,21 @@ const {forecast}=require('../.test-build/lib/model.js');
   const club={slug:'club',name:'Club',league:'Bundesliga'};
   const data=await getTeamRoster('football',club);
   assert.equal(data.complete,true);
-  assert.equal(data.players.length,101);
+  assert.equal(data.players.length,41);
   assert.deepEqual(data.players[0].recentScores,[52,49,61]);
-  assert.equal(data.players[100].id,'extra');
+  assert.equal(data.players[40].id,'extra');
   assert.equal(calls,3); // stats page, separate metadata, next stats page
   const more=await getPlayers('football',[club]);
   assert.equal(more.incomplete,0);
   assert.equal(more.failed,0);
-  assert.equal(more.players.length,101);
+  assert.equal(more.players.length,41);
   assert.equal(more.noScoreFields,0);
 
   // Regression: pageInfo not available. Score data MUST survive.
   rejectPagination=true;
   const fallback=await getTeamRoster('football',club);
   assert.equal(fallback.complete,false);
-  assert.equal(fallback.players.length,100);
+  assert.equal(fallback.players.length,40);
   assert.deepEqual(fallback.players[0].recentScores,[52,49,61]);
   assert.equal(fallback.players[0].proj,55);
   rejectPagination=false;

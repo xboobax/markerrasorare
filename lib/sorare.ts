@@ -51,14 +51,23 @@ const GAME = "activeInjuries { __typename } nextGame { date homeTeam { name } aw
 const FOOT_CORE = "slug displayName position playingStatus avatarPictureUrl";
 const FOOT_ODDS = "nextClassicFixturePlayingStatusOdds { starterOddsBasisPoints substituteOddsBasisPoints nonPlayingOddsBasisPoints }";
 const NBA_CORE = "slug displayName anyPositions avatarPictureUrl";
-const FOOT_AVERAGES = "lastFiveSo5AverageScore lastTenPlayedSo5AverageScore lastFiveSo5Appearances nextClassicFixtureProjectedScore";
+// Current Sorare schema (Nov 2026): Player.averageScore(type: ...) and
+// rawPlayerGameScores(last: ...). Legacy lastFiveSo5AverageScore /
+// lastTenPlayedSo5AverageScore are NOT Player fields and caused the UI to show
+// zero data for LaLiga, Ligue 1 and Premier League when projections were null.
+const FOOT_AVERAGES = `averageL5: averageScore(type: LAST_FIVE_SO5_AVERAGE_SCORE)
+  averageL10: averageScore(type: LAST_TEN_PLAYED_SO5_AVERAGE_SCORE)`;
+const FOOT_RECENT = "rawPlayerGameScores(last: 10)";
+// Keep NBA untouched in this HOTFIX; it was working in the deployed version.
 const NBA_AVERAGES = "lastFiveSo5AverageScore lastTenPlayedSo5AverageScore lastFiveSo5Appearances nextClassicFixtureProjectedScore nextDailyFixtureProjectedScore";
+const FOOT_SCORING = `${FOOT_RECENT} ${FOOT_AVERAGES} lastFiveSo5Appearances nextClassicFixtureProjectedScore`;
 const TIERS: Record<Sport, string[]> = {
   football: [
-    `${FOOT_CORE} rawPlayerGameScores(last: 10) ${FOOT_AVERAGES} ${GAME} ${FOOT_ODDS}`,
-    `${FOOT_CORE} ${FOOT_AVERAGES} ${GAME} ${FOOT_ODDS}`,
-    `${FOOT_CORE} ${FOOT_AVERAGES} ${GAME} ${FOOT_ODDS}`,
-    `${FOOT_CORE} ${FOOT_AVERAGES}`,
+    `${FOOT_CORE} ${FOOT_SCORING} ${GAME} ${FOOT_ODDS}`,
+    `${FOOT_CORE} ${FOOT_SCORING} ${FOOT_ODDS}`,
+    `${FOOT_CORE} ${FOOT_SCORING}`,
+    `${FOOT_CORE} ${FOOT_AVERAGES} lastFiveSo5Appearances nextClassicFixtureProjectedScore`,
+    `${FOOT_CORE} ${FOOT_RECENT} nextClassicFixtureProjectedScore`,
     `${FOOT_CORE} nextClassicFixtureProjectedScore`,
     FOOT_CORE,
   ],
@@ -111,7 +120,7 @@ function toPlayer(n: any, club: Club, sport: Sport): Player {
     ? n.rawPlayerGameScores.filter((x: unknown): x is number => typeof x === "number" && isFinite(x))
     : [];
   const avg = raw.length ? raw.reduce((a, b) => a + b, 0) / raw.length :
-    num(n.lastTenPlayedSo5AverageScore) ?? num(n.lastFiveSo5AverageScore);
+    num(n.averageL10) ?? num(n.averageL5) ?? num(n.lastTenPlayedSo5AverageScore) ?? num(n.lastFiveSo5AverageScore);
   const playOdds = o
     ? Math.max(0, Math.min(1, (Number(o.starterOddsBasisPoints) + 0.6 * Number(o.substituteOddsBasisPoints)) / 10000))
     : null;
@@ -124,8 +133,8 @@ function toPlayer(n: any, club: Club, sport: Sport): Player {
     recentScores: raw,
     position: mapPosition(sport, n),
     avg,
-    averageL5: num(n.lastFiveSo5AverageScore),
-    averageL10: num(n.lastTenPlayedSo5AverageScore),
+    averageL5: num(n.averageL5) ?? num(n.lastFiveSo5AverageScore),
+    averageL10: num(n.averageL10) ?? num(n.lastTenPlayedSo5AverageScore),
     proj: num(n.nextDailyFixtureProjectedScore) ?? num(n.nextClassicFixtureProjectedScore),
     last5Apps: num(n.lastFiveSo5Appearances),
     status: String(n.playingStatus ?? ""),
@@ -142,13 +151,15 @@ function toPlayer(n: any, club: Club, sport: Sport): Player {
  * has no pageInfo field, fall back to the known legacy first-page query and
  * mark that roster as incomplete rather than advertising completeness.
  */
+const rosterPageSize = (sport: Sport): number => sport === "football" ? 40 : 100;
+
 function teamQuery(sport: Sport, slug: string, fields: string, after?: string, legacy = false): string {
   const cursor = after ? `, after: ${JSON.stringify(after)}` : "";
   const nodes = `nodes { ${fields} }`;
   const selection = legacy ? nodes : `${nodes} pageInfo { hasNextPage endCursor }`;
   return sport === "football"
-    ? `{ football { club(slug: ${JSON.stringify(slug)}) { activePlayers(first: 100${cursor}) { ${selection} } } } }`
-    : `{ team(slug: ${JSON.stringify(slug)}) { anyActivePlayers(first: 100${cursor}) { ${selection} } } }`;
+    ? `{ football { club(slug: ${JSON.stringify(slug)}) { activePlayers(first: ${rosterPageSize(sport)}${cursor}) { ${selection} } } } }`
+    : `{ team(slug: ${JSON.stringify(slug)}) { anyActivePlayers(first: ${rosterPageSize(sport)}${cursor}) { ${selection} } } }`;
 }
 
 /**
@@ -163,7 +174,7 @@ const workingTier: Record<Sport, number> = { football: 0, nba: 0 };
 const isSchemaValidationError = (e: unknown): boolean => {
   const msg = e instanceof Error ? e.message : String(e);
   return msg.startsWith("HTTP 422:") &&
-    /cannot query field|unknown argument|unknown field|unknown type|not defined|doesn.t exist|is not a field|undefinedfield|argument .* is required/i.test(msg);
+    /cannot query field|unknown argument|unknown field|unknown type|not defined|doesn.t exist|is not a field|undefinedfield|argument .* is required|complexity|depth limit/i.test(msg);
 };
 
 async function fetchFirstPage(sport: Sport, club: Club): Promise<{players: Player[]; tier: number}> {
@@ -191,7 +202,7 @@ export async function getTeamRoster(sport: Sport, club: Club): Promise<RosterRes
   const {players: firstPage, tier} = await fetchFirstPage(sport, club);
   const scoringFieldsUnavailable = tier === TIERS[sport].length - 1;
   // A page shorter than the requested size is exhausted. Most teams are here.
-  if (firstPage.length < 100) return {players:firstPage, complete:true, scoringFieldsUnavailable};
+  if (firstPage.length < rosterPageSize(sport)) return {players:firstPage, complete:true, scoringFieldsUnavailable};
 
   // Retrieve pagination metadata separately with *minimal* selected fields.
   // This avoids the V1.4 regression: score fetches must never depend on pageInfo.
