@@ -16,6 +16,7 @@ export type Player = {
   injuries: number;
   hasGame: boolean | null;
   nextGame?: string;
+  opponent?: string;   // nächster Gegner, wenn Sorare ein Fixture liefert
 };
 
 export type Forecast = Player & {

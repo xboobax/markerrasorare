@@ -4,11 +4,17 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { Forecast, Sport } from "@/lib/model";
 import type { Strategy } from "@/lib/arcade";
+import { enrichForecast, matchupLabel, validDefenseRating, type OpponentRatings } from "@/lib/matchups";
 import { optimizeArcadeLineups, isValidNbaStars, type CardInput } from "@/lib/arcade";
 import { ARCADE } from "@/config/divination";
 import type { Club } from "@/lib/sorare";
 
-type CardSettings = { owned?: boolean; stars?: number | null; bonusPercent?: number; locked?: boolean; excluded?: boolean };
+type CardSettings = {
+  owned?: boolean; stars?: number | null; bonusPercent?: number;
+  locked?: boolean; excluded?: boolean;
+  expectedMinutes?: number | null; typicalMinutes?: number | null;
+  xg?: number | null; xa?: number | null;
+};
 type CardStore = Record<string, CardSettings>;
 type Props = {
   sport: Sport;
@@ -46,7 +52,7 @@ function PlayerAvatar({player, small = false}: {player: Forecast; small?: boolea
   </span>;
 }
 
-export default function ArcadeDashboard({sport, league, leagues, team, clubs, players, info, error}: Props) {
+export default function ArcadeDashboard({sport, league, leagues, team, clubs, players: basePlayers, info, error}: Props) {
   const [search, setSearch] = useState("");
   const [position, setPosition] = useState("all");
   const [sortBy, setSortBy] = useState("weighted");
@@ -54,6 +60,8 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const [ownedOnly, setOwnedOnly] = useState(false);
   const [hideUnavailable, setHideUnavailable] = useState(false);
   const [cardStore, setCardStore] = useState<CardStore>({});
+  const [opponentRatings, setOpponentRatings] = useState<OpponentRatings>({});
+  const [loadedRatingSport, setLoadedRatingSport] = useState<Sport | null>(null);
   const [loadedSport, setLoadedSport] = useState<Sport | null>(null);
   const [activeResult, setActiveResult] = useState(0);
   const [strategy, setStrategy] = useState<Strategy>("balanced");
@@ -79,6 +87,25 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
     }
   }, [sport, cardStore, loadedSport]);
   useEffect(() => {
+    setLoadedRatingSport(null);
+    try {
+      const raw = window.localStorage.getItem(`markerras.sorare.opponent-ratings.v1.${sport}`);
+      const parsed: unknown = raw ? JSON.parse(raw) : {};
+      const clean: OpponentRatings = {};
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        for (const [key, value] of Object.entries(parsed)) if (validDefenseRating(value)) clean[key] = value;
+      }
+      setOpponentRatings(clean);
+    } catch { setOpponentRatings({}); }
+    setLoadedRatingSport(sport);
+  }, [sport]);
+  useEffect(() => {
+    if (loadedRatingSport === sport) {
+      try { window.localStorage.setItem(`markerras.sorare.opponent-ratings.v1.${sport}`, JSON.stringify(opponentRatings)); }
+      catch { /* Browser storage disabled */ }
+    }
+  }, [sport, loadedRatingSport, opponentRatings]);
+  useEffect(() => {
     setSearch(""); setPosition("all"); setShowCount(70); setActiveResult(0);
     setTarget(sport === "football" ? "180" : "");
   }, [sport]);
@@ -86,6 +113,22 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const updateCard = (id: string, patch: CardSettings) =>
     setCardStore(s => ({...s, [id]: {...(s[id] ?? {}), ...patch}}));
 
+  // Recalculate on the client when independently entered scouting data changes.
+  // Missing ratings remain neutral; no opponent statistics are fabricated.
+  const players = useMemo(() => basePlayers.map(p => enrichForecast(p, sport, opponentRatings, {
+    expectedMinutes: cardStore[p.id]?.expectedMinutes,
+    typicalMinutes: cardStore[p.id]?.typicalMinutes,
+    xg: cardStore[p.id]?.xg,
+    xa: cardStore[p.id]?.xa,
+  })), [basePlayers, sport, opponentRatings, cardStore]);
+  const opponents = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const p of players) if (p.opponent && p.hasGame !== false) counts.set(p.opponent, (counts.get(p.opponent) ?? 0) + 1);
+    return [...counts.entries()].sort((a,b)=>a[0].localeCompare(b[0], "de"));
+  }, [players]);
+  const ratedOpponents = opponents.filter(([name]) => validDefenseRating(opponentRatings[name])).length;
+  const matchupPicks = players.filter(p => p.opponentRating !== null && p.hasGame !== false && p.weighted > 0)
+    .sort((a,b) => b.matchupAdjustmentPct - a.matchupAdjustmentPct || b.weighted - a.weighted).slice(0, 8);
   const lockedIds = useMemo(() => players.filter(p => cardStore[p.id]?.locked).map(p => p.id), [players, cardStore]);
   const excludedIds = useMemo(() => players.filter(p => cardStore[p.id]?.excluded).map(p => p.id), [players, cardStore]);
   const eligibleCards: CardInput[] = useMemo(() => players.map((p) => ({
@@ -99,13 +142,13 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const ratedCount = players.filter(p => isValidNbaStars(cardStore[p.id]?.stars)).length;
   const hasGameCount = players.filter(p => p.hasGame !== false && p.weighted > 0).length;
   const imageCount = players.filter(p => Boolean(p.imageUrl)).length;
-  const lineups = useMemo(() => optimizeArcadeLineups(eligibleCards, {
-    sport, ownedOnly, limit: 3, beamWidth: 320, maxCandidatesPerSlot: 150,
-    strategy, lockedPlayerIds: lockedIds, excludedPlayerIds: excludedIds,
-  }), [eligibleCards, sport, ownedOnly, strategy, lockedIds, excludedIds]);
-  const chosen = lineups[Math.min(activeResult, lineups.length - 1)] ?? null;
   const totalTarget = Number(target);
   const validTarget = target.trim() !== "" && Number.isFinite(totalTarget) && totalTarget > 0;
+  const lineups = useMemo(() => optimizeArcadeLineups(eligibleCards, {
+    sport, ownedOnly, limit: 3, beamWidth: 320, maxCandidatesPerSlot: 150,
+    strategy, targetScore: validTarget ? totalTarget : null, lockedPlayerIds: lockedIds, excludedPlayerIds: excludedIds,
+  }), [eligibleCards, sport, ownedOnly, strategy, validTarget, totalTarget, lockedIds, excludedIds]);
+  const chosen = lineups[Math.min(activeResult, lineups.length - 1)] ?? null;
   const progress = chosen && validTarget ? Math.min(100, chosen.projectedScore / totalTarget * 100) : 0;
 
   const filtered = useMemo(() => {
@@ -125,6 +168,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
         case "upside": return (b.ceiling*b.playProb) - (a.ceiling*a.playProb);
         case "team": return a.team.localeCompare(b.team, "de");
         case "risk": return b.playProb - a.playProb;
+        case "matchup": return (b.opponentRating ? b.matchupAdjustmentPct : -999) - (a.opponentRating ? a.matchupAdjustmentPct : -999) || b.weighted - a.weighted;
         default: return b.weighted - a.weighted;
       }
     });
@@ -185,17 +229,42 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
           )}
         </section>
 
+        <section className="panel matchup-panel" id="matchups">
+          <div className="section-top"><div><span className="section-kicker">02 / MATCHUP INTELLIGENCE</span><h2>Gegneranalyse & Top-Matchups</h2></div><span className="record-count">{ratedOpponents} von {opponents.length} Gegnern bewertet</span></div>
+          <p className="matchup-disclaimer">Die kommenden Gegner stammen aus Sorare-Fixtures, soweit verfügbar. <strong>Die Defensivstärke ist noch kein Live-Statistikfeed:</strong> Du kannst Gegner selbst von 1 (schwache Abwehr, günstiges Matchup) bis 5 (starke Abwehr) einschätzen. Ohne Angabe erfolgt <strong>keine</strong> Anpassung. Bewertungen werden nur in diesem Browser gespeichert.</p>
+          <div className="opponent-grid">
+            {opponents.map(([name, amount]) => <label className="opponent-rating" key={name}>
+              <span><strong>{name}</strong><small>{amount} Spieler mit Fixture im geladenen Bereich</small></span>
+              <select aria-label={`Gegnerstärke ${name}`} value={opponentRatings[name] ?? ""} onChange={e=>setOpponentRatings(prev=>{
+                const next={...prev}; if (!e.target.value) delete next[name]; else next[name]=Number(e.target.value); return next;
+              })}>
+                <option value="">Unbewertet</option><option value="1">1 · sehr günstig</option><option value="2">2 · günstig</option><option value="3">3 · neutral</option><option value="4">4 · schwierig</option><option value="5">5 · sehr schwierig</option>
+              </select>
+            </label>)}
+          </div>
+          {!opponents.length && <div className="empty-state">Keine identifizierbaren Gegner in den geladenen Sorare-Fixtures. Die Spielerprognosen bleiben unverändert.</div>}
+          <div className="section-top matchup-subtitle"><div><span className="section-kicker">MATCHUP RANKING</span><h3>Attraktivste bewertete Matchups</h3></div></div>
+          {matchupPicks.length ? <div className="matchup-ranking">
+            {matchupPicks.map((p, index) => <div key={p.id} className="matchup-pick">
+              <span className="pick-rank">{String(index + 1).padStart(2,"0")}</span><PlayerAvatar player={p} small/>
+              <span className="matchup-player"><strong>{p.name}</strong><small>{p.team} · gegen {p.opponent}</small></span>
+              <span className="matchup-tier">{matchupLabel(p.opponentRating)}<small>{p.matchupAdjustmentPct > 0 ? "+" : ""}{fmt(p.matchupAdjustmentPct)} % Modellfaktor</small></span>
+              <strong className="matchup-projection">{fmt(p.weighted)} Pkt.</strong>
+            </div>)}
+          </div> : <p className="matchup-disclaimer">Bewerte mindestens einen Gegner, um ein transparentes Matchup-Ranking zu erhalten. Ohne belastbare Defensivdaten gibt es bewusst keine erfundenen Top-10-Matchups.</p>}
+        </section>
+
         <section className="two-column">
           <div className="panel builder-panel" id="lineup-builder">
-            <div className="section-top"><div><span className="section-kicker">02 / LINEUP STUDIO</span><h2>Arcade Lineup Builder</h2></div><span className="live-pill">5 POSITIONEN</span></div>
+            <div className="section-top"><div><span className="section-kicker">03 / LINEUP STUDIO</span><h2>Arcade Lineup Builder</h2></div><span className="live-pill">5 POSITIONEN</span></div>
             <div className="mode-switch" role="group" aria-label="Spielerauswahl">
               <button type="button" className={!ownedOnly ? "active" : ""} onClick={() => {setOwnedOnly(false); setActiveResult(0);}}>Alle Spieler · theoretisch</button>
               <button type="button" className={ownedOnly ? "active" : ""} onClick={() => {setOwnedOnly(true); setActiveResult(0);}}>Nur meine Karten</button>
             </div>
             <div className="strategy-bar">
-              <div className="strategy-title"><strong>Optimierung</strong><small>Ausgewogen = Erwartungswert · Sicher = Floor · Offensiv = Ceiling</small></div>
+              <div className="strategy-title"><strong>Optimierung</strong><small>Ausgewogen = Erwartungswert · Sicher = Floor · Offensiv = Ceiling · Zielchance = geschätzte Zielerreichung</small></div>
               <div className="strategy-options" role="group" aria-label="Lineup-Strategie">
-                {(["balanced","safe","upside"] as Strategy[]).map(value => <button type="button" key={value} className={strategy === value ? "active" : ""} onClick={() => {setStrategy(value);setActiveResult(0);}}>{({balanced:"Ausgewogen",safe:"Sicher",upside:"Offensiv"} as Record<Strategy,string>)[value]}</button>)}
+                {(["balanced","safe","upside","target"] as Strategy[]).map(value => <button type="button" key={value} disabled={value === "target" && !validTarget} title={value === "target" && !validTarget ? "Bitte zuerst unten ein Score-Ziel eingeben" : undefined} className={strategy === value ? "active" : ""} onClick={() => {setStrategy(value);setActiveResult(0);}}>{({balanced:"Ausgewogen",safe:"Sicher",upside:"Offensiv",target:"Zielchance"} as Record<Strategy,string>)[value]}</button>)}
               </div>
             </div>
             <div className="lock-info"><span>🔒 {lockedIds.length} Spieler fixiert · 🚫 {excludedIds.length} ausgeschlossen</span><button type="button" onClick={() => setCardStore(store => Object.fromEntries(Object.entries(store).map(([id,v])=>[id,{...v,locked:false,excluded:false}]))) }>Auswahl zurücksetzen</button></div>
@@ -225,31 +294,32 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
               <div className="target-input"><label htmlFor="target">Score-Ziel (frei einstellbar)</label><input id="target" type="number" min="1" step="1" inputMode="numeric" value={target} placeholder="z. B. 360" onChange={e=>setTarget(e.target.value)} /></div>
             </div>
             {chosen && <div className="lineup-range"><span>Floor (heuristisch): <strong>{fmt(chosen.floorScore)}</strong></span><span>Ceiling (heuristisch): <strong>{fmt(chosen.ceilingScore)}</strong></span></div>}
+            {chosen && validTarget && chosen.targetProbability !== null && <div className="target-chance" role="status"><div><span>GESCHÄTZTE ZIELCHANCE</span><strong>{Math.round(chosen.targetProbability * 100)} %</strong></div><small>Modellschätzung mit Formstreuung, DNP-Risiko und angenommener Team-Korrelation. Nicht kalibriert, keine garantierte Gewinnchance.</small></div>}
             {chosen && validTarget && (
               <div className="target-progress"><div className="target-track"><div style={{width: `${progress}%`}}/></div><p>Modellprognose {fmt(chosen.projectedScore)} / {fmt(totalTarget)} · <strong>{chosen.projectedScore >= totalTarget ? "Prognose über Ziel" : `${fmt(Math.max(0,totalTarget - chosen.projectedScore))} Punkte unter Ziel`}</strong></p></div>
             )}
             <p className="model-note">Mit „Fixieren“ zwingst du Spieler ins Lineup, mit „Sperren“ entfernst du sie aus der Auswahl. Verwende nur selbst geprüfte Sterne und Boni. {ownedOnly ? "Aufstellung nur aus markierten Karten." : "Theoretische Bestbesetzung aus dem geladenen Spielerpool – dein Kartenbesitz ist nicht geprüft."} NBA-Sterne und Boni müssen aktuell manuell eingetragen werden. Prognosen sind keine garantierten Ergebnisse.</p>
-            {lineups.length > 1 && <div className="variants" role="group" aria-label="Aufstellungen vergleichen">{lineups.map((l, i) => <button key={i} className={Math.min(activeResult,lineups.length-1) === i ? "active" : ""} onClick={()=>setActiveResult(i)}>Lineup {i+1} <strong>{fmt(l.projectedScore)}</strong></button>)}</div>}
+            {lineups.length > 1 && <div className="variants" role="group" aria-label="Aufstellungen vergleichen">{lineups.map((l, i) => <button key={i} className={Math.min(activeResult,lineups.length-1) === i ? "active" : ""} onClick={()=>setActiveResult(i)}>Lineup {i+1} <strong>{validTarget && l.targetProbability !== null ? `${Math.round(l.targetProbability * 100)} % Zielchance` : `${fmt(l.projectedScore)} Pkt.`}</strong></button>)}</div>}
             {!chosen && <div className="empty-state"><strong>Für dieses Regelset fehlt eine vollständige gültige Aufstellung.</strong><p>{sport === "nba" ? "Vergib im Spielertableau zunächst echte Sterne (1–5 in 0,5-Schritten) für mindestens fünf geeignete Karten. Zusammen dürfen sie höchstens 16 Sterne haben." : "Es werden je ein TW, VER, MF, FWD sowie ein zusätzlicher Feldspieler benötigt."}{ownedOnly ? " Markiere die Karten zusätzlich als in deinem Besitz." : ""} Fixierungen müssen zum Regelset passen; NBA zusammen höchstens 16 Sterne.</p></div>}
           </div>
 
           <aside className="insights-column">
-            <div className="panel insight-panel"><span className="section-kicker">03 / PLAYER INTELLIGENCE</span><h2>Top-Prognosen</h2><p className="caption-small">Sorare-Projektion, L5/L10 und Einsatzrisiko – keine verifizierte Gegneranalyse.</p>
+            <div className="panel insight-panel"><span className="section-kicker">04 / PLAYER INTELLIGENCE</span><h2>Top-Prognosen</h2><p className="caption-small">Sorare-Projektion, L5/L10 und Einsatzrisiko; optionale manuelle Matchup- und Minutenanpassungen.</p>
               <div className="top-picks">{topPicks.map((p,i) => <div className="pick-row" key={p.id}><span className="pick-rank">{String(i+1).padStart(2,"0")}</span><PlayerAvatar player={p}/><span className="pick-name"><strong>{p.name}</strong><small>{p.team}</small></span><span className="pick-score">{fmt(p.weighted)}<small>L5: {p.last5Avg === null ? "—" : fmt(p.last5Avg)}</small></span></div>)}</div>
             </div>
-            <div className="panel tip-panel"><span className="section-kicker">WICHTIG ZUM MODELL</span><h3>Was noch fehlt</h3><p>Die aktuellen Sorare-API-Spielerdaten enthalten hier keine verifizierten Arcade-Sterne und keine persönliche Kartensammlung. Deshalb erfassen wir diese vorerst manuell.</p><p>Die neue Floor-/Ceiling-Spanne ist eine heuristische Bandbreite aus Formschwankungen, keine statistisch validierte Garantie. Gegner-Defense und aktuelle Minutenprognosen sind noch nicht angebunden.</p></div>
+            <div className="panel tip-panel"><span className="section-kicker">WICHTIG ZUM MODELL</span><h3>Was noch fehlt</h3><p>Die aktuellen Sorare-API-Spielerdaten enthalten hier keine verifizierten Arcade-Sterne und keine persönliche Kartensammlung. Deshalb erfassen wir diese vorerst manuell.</p><p>Floor, Ceiling und Zielchance sind heuristische Modellwerte, keine statistisch validierte Vorhersage. Gegnerstärke und Minuten werden nur angepasst, wenn du eigene Werte hinterlegst. Ein automatischer NBA-Defensivfeed und Fußball-xG/xA-Feed sind noch nicht angebunden.</p></div>
           </aside>
         </section>
 
         <section className="panel explorer-panel" id="spieler">
-          <div className="section-top"><div><span className="section-kicker">04 / SPIELER EXPLORER</span><h2>Spieler suchen & bewerten</h2></div><span className="record-count">{filtered.length.toLocaleString("de-DE")} Ergebnisse</span></div>
+          <div className="section-top"><div><span className="section-kicker">05 / SPIELER EXPLORER</span><h2>Spieler suchen & bewerten</h2></div><span className="record-count">{filtered.length.toLocaleString("de-DE")} Ergebnisse</span></div>
           <div className="search-controls">
             <label className="searchbox"><span>⌕</span><input placeholder="Spieler, Verein oder Position suchen …" value={search} onChange={e=>{setSearch(e.target.value);setShowCount(70);}} aria-label="Spieler suchen"/><kbd>SEARCH</kbd></label>
             <select aria-label="Nach Position filtern" value={position} onChange={e=>{setPosition(e.target.value);setShowCount(70);}}><option value="all">Alle Positionen</option>{positions.map(p=><option key={p} value={p}>{POS_LABEL[p] ?? p}</option>)}</select>
-            <select aria-label="Sortierung" value={sortBy} onChange={e=>setSortBy(e.target.value)}><option value="weighted">Beste Prognose</option><option value="avg">Höchster Ø-Score</option><option value="last5">Beste L5-Form</option><option value="upside">Höchstes Ceiling</option><option value="risk">Höchste Einsatzchance</option><option value="name">Name A–Z</option><option value="team">Team A–Z</option></select>
+            <select aria-label="Sortierung" value={sortBy} onChange={e=>setSortBy(e.target.value)}><option value="weighted">Beste Prognose</option><option value="avg">Höchster Ø-Score</option><option value="last5">Beste L5-Form</option><option value="upside">Höchstes Ceiling</option><option value="risk">Höchste Einsatzchance</option><option value="matchup">Bester bewerteter Gegner</option><option value="name">Name A–Z</option><option value="team">Team A–Z</option></select>
           </div>
           <div className="filter-checkbox"><label><input type="checkbox" checked={hideUnavailable} onChange={e=>setHideUnavailable(e.target.checked)}/> Spieler mit fehlendem Spiel oder geringerer Einsatzchance ausblenden</label></div>
-          <div className="table-scroll"><table className="players-table"><thead><tr><th>Spieler / Team</th><th>Pos.</th><th>Ø Score</th><th>L5</th><th>Floor – Ceiling</th><th>Daten</th><th>Einsatz</th><th>Prognose</th><th>Builder</th><th>Mein Bestand</th>{sport === "nba" && <th>Sterne ★</th>}<th>Kartenbonus</th></tr></thead>
+          <div className="table-scroll"><table className="players-table"><thead><tr><th>Spieler / Team</th><th>Pos.</th><th>Ø Score</th><th>L5</th><th>Gegner</th><th>Floor – Ceiling</th><th>Daten</th><th>Einsatz</th><th>Prognose</th><th>Scouting (manuell)</th><th>Builder</th><th>Mein Bestand</th>{sport === "nba" && <th>Sterne ★</th>}<th>Kartenbonus</th></tr></thead>
             <tbody>{filtered.slice(0,showCount).map(p => {
               const card = cardStore[p.id] ?? {};
               return <tr key={p.id}>
@@ -257,10 +327,19 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
                 <td><span className="position-pill">{p.position}</span></td>
                 <td className="numeric-cell">{p.avg === null ? "—" : fmt(p.avg)}</td>
                 <td className="numeric-cell">{p.last5Avg === null ? "—" : fmt(p.last5Avg)}</td>
+                <td><span className="opponent-cell"><strong>{p.opponent ?? "—"}</strong><small>{matchupLabel(p.opponentRating)}{p.opponentRating !== null ? ` (${fmt(p.matchupAdjustmentPct)} %)` : ""}</small></span></td>
                 <td className="numeric-cell range-cell">{fmt(p.floor)} – {fmt(p.ceiling)}</td>
                 <td><span className={`confidence-tag confidence-${p.confidence}`} title={`${p.sampleSize} Scores; Datenabdeckung, keine statistische Konfidenz`}>{p.confidence}</span></td>
                 <td><div className="prob-meter"><div style={{width:`${Math.round(p.playProb * 100)}%`}}/></div><small>{Math.round(p.playProb * 100)} %</small></td>
                 <td className="numeric-cell score-cell" title={`Bei Einsatz: ${fmt(p.expected)} · Einsatzchance: ${Math.round(p.playProb*100)} %`}>{fmt(p.weighted)}</td>
+                <td><div className="scout-inputs">
+                  <label>Ø Min.<input type="number" min="1" max={sport === "nba" ? 60 : 130} placeholder="üblich" value={card.typicalMinutes ?? ""} onChange={e=>updateCard(p.id,{typicalMinutes: e.target.value ? Number(e.target.value) : null})}/></label>
+                  <label>Erw. Min.<input type="number" min="1" max={sport === "nba" ? 60 : 130} placeholder="erwartet" value={card.expectedMinutes ?? ""} onChange={e=>updateCard(p.id,{expectedMinutes: e.target.value ? Number(e.target.value) : null})}/></label>
+                  {sport === "football" && <>
+                    <label>xG<input type="number" min="0" max="10" step="0.05" placeholder="—" value={card.xg ?? ""} onChange={e=>updateCard(p.id,{xg:e.target.value ? Number(e.target.value) : null})}/></label>
+                    <label>xA<input type="number" min="0" max="10" step="0.05" placeholder="—" value={card.xa ?? ""} onChange={e=>updateCard(p.id,{xa:e.target.value ? Number(e.target.value) : null})}/></label>
+                  </>}
+                </div></td>
                 <td><div className="builder-actions">
                   <button type="button" aria-pressed={card.locked === true} className={card.locked ? "active" : ""} title="Spieler fest ins Lineup aufnehmen" onClick={()=>updateCard(p.id,{locked:!card.locked,excluded:false})}>🔒 {card.locked ? "Fixiert" : "Fixieren"}</button>
                   <button type="button" aria-pressed={card.excluded === true} className={card.excluded ? "excluded" : ""} title="Spieler aus Lineups ausschließen" onClick={()=>updateCard(p.id,{excluded:!card.excluded,locked:false})}>🚫</button>
@@ -272,7 +351,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
             })}</tbody></table></div>
           {!filtered.length && <div className="empty-state">Keine passenden Spieler im geladenen Datenbereich.</div>}
           {showCount < filtered.length && <button className="load-more" onClick={()=>setShowCount(n=>n+70)}>Weitere Spieler anzeigen ({Math.min(70,filtered.length-showCount)}) ↓</button>}
-          <div className="footnote">Tipp: Mit „Meine Karte“ markierst du deinen Bestand. Sterne und Bonus stammen derzeit aus deinen Eingaben und bleiben nur in diesem Browser gespeichert. Spielerbilder stammen soweit vorhanden aus der Sorare-API; fehlt ein Foto oder lässt es sich nicht laden, werden Initialen gezeigt. Die Spannen sind heuristisch und noch nicht gegen echte Spieltagsergebnisse kalibriert.</div>
+          <div className="footnote">Tipp: Mit „Meine Karte“ markierst du deinen Bestand. Sterne und Bonus stammen derzeit aus deinen Eingaben und bleiben nur in diesem Browser gespeichert. Spielerbilder stammen soweit vorhanden aus der Sorare-API; fehlt ein Foto oder lässt es sich nicht laden, werden Initialen gezeigt. Die Spannen und Zielchancen sind heuristisch und noch nicht gegen echte Spieltagsergebnisse kalibriert. xG/xA sind vorerst nur Informationsfelder (ohne rechnerischen Einfluss); für die Minutenkorrektur musst du übliche UND erwartete Minuten eingeben. Gegnerbewertungen sind subjektiv, bis ein verlässlicher Datenfeed angebunden ist.</div>
         </section>
         <footer className="app-footer"><strong>MARKERRAS SORARE HELPER</strong><span>Independent Sorare companion · Nicht mit Sorare verbunden · Kein automatisches Einreichen von Lineups</span></footer>
       </main>

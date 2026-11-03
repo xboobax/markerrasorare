@@ -1,7 +1,8 @@
 import type {Forecast, Sport} from "./model";
 import {ARCADE} from "../config/divination";
+import {estimateTargetChance} from "./target-probability";
 
-export type Strategy = "balanced" | "safe" | "upside";
+export type Strategy = "balanced" | "safe" | "upside" | "target";
 export type CardInput = {
   player: Forecast;
   stars?: number | null;
@@ -24,6 +25,7 @@ export type OptimizedLineup = {
   floorScore: number;
   ceilingScore: number;
   starsUsed: number;
+  targetProbability: number | null; // Schätzung, nicht statistisch kalibriert
 };
 export type OptimizeOptions = {
   sport: Sport;
@@ -32,6 +34,7 @@ export type OptimizeOptions = {
   beamWidth?: number;
   maxCandidatesPerSlot?: number;
   strategy?: Strategy;
+  targetScore?: number | null;
   lockedPlayerIds?: string[];
   excludedPlayerIds?: string[];
 };
@@ -62,12 +65,14 @@ function result(picks: LineupPick[]): OptimizedLineup {
     floorScore: picks.reduce((n,p)=>n+p.floorScore,0),
     ceilingScore: picks.reduce((n,p)=>n+p.ceilingScore,0),
     starsUsed: picks.reduce((n,p)=>n+(p.stars??0),0),
+    targetProbability: null,
   };
 }
-function dedupe(lineups: OptimizedLineup[], limit: number, strategy: Strategy) {
+function dedupe(lineups: OptimizedLineup[], limit: number, strategy: Strategy, target?: number | null) {
+  const withChance = lineups.map(l=>({...l, targetProbability: target && target > 0 ? estimateTargetChance(l.picks, target) : null}));
   const byPlayers = new Map<string,OptimizedLineup>();
-  const metric = (l:OptimizedLineup) => strategy === "safe" ? l.floorScore : strategy === "upside" ? l.ceilingScore : l.projectedScore;
-  for (const line of lineups) {
+  const metric = (l:OptimizedLineup) => strategy === "safe" ? l.floorScore : strategy === "upside" ? l.ceilingScore : strategy === "target" ? (l.targetProbability ?? -1) : l.projectedScore;
+  for (const line of withChance) {
     const key = line.picks.map(p=>p.player.id).sort().join("|");
     const prev = byPlayers.get(key);
     if (!prev || metric(line)>metric(prev)) byPlayers.set(key,line);
@@ -86,6 +91,15 @@ export function optimizeArcadeLineups(cards: CardInput[], opts: OptimizeOptions)
   const limit = Math.max(1,Math.min(20,Math.floor(opts.limit??3)));
   const beamWidth = Math.max(5,Math.min(1000,Math.floor(opts.beamWidth??250)));
   const perSlot = Math.max(5,Math.min(500,Math.floor(opts.maxCandidatesPerSlot??100)));
+  // Goal optimization is a non-additive objective. Gather diverse feasible
+  // candidates with three additive searches, then rank by probability.
+  // This is a bounded candidate search, not a global proof of optimality.
+  if (strategy === "target") {
+    if (!(typeof opts.targetScore === "number" && Number.isFinite(opts.targetScore) && opts.targetScore > 0)) return [];
+    const pool = (["balanced", "safe", "upside"] as const).flatMap(objective =>
+      optimizeArcadeLineups(cards, {...opts, strategy: objective, limit: 20}));
+    return dedupe(pool, limit, "target", opts.targetScore);
+  }
   const lockedIds = new Set(opts.lockedPlayerIds??[]);
   const excludedIds = new Set(opts.excludedPlayerIds??[]);
   if (lockedIds.size > 5 || [...lockedIds].some(id=>excludedIds.has(id))) return [];
@@ -131,7 +145,7 @@ export function optimizeArcadeLineups(cards: CardInput[], opts: OptimizeOptions)
         }
       }
     }
-    return dedupe(dp[5].flat().map(s=>result(s.picks)),limit,strategy);
+    return dedupe(dp[5].flat().map(s=>result(s.picks)),limit,strategy,opts.targetScore);
   }
 
   // Enumerate legal assignments for locked players, including a possible FLEX pick.
@@ -176,5 +190,5 @@ export function optimizeArcadeLineups(cards: CardInput[], opts: OptimizeOptions)
       candidates.push(result([...state.picks].sort((a,b)=>footballSlots.indexOf(a.slot)-footballSlots.indexOf(b.slot))));
     }
   }
-  return dedupe(candidates,limit,strategy);
+  return dedupe(candidates,limit,strategy,opts.targetScore);
 }

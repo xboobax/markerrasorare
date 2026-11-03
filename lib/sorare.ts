@@ -78,6 +78,17 @@ export function safeImageUrl(value: unknown): string | null {
   } catch { return null; }
 }
 
+function opponentFromFixture(team: string, home: unknown, away: unknown): string | undefined {
+  const normalize = (s: string) => s.toLocaleLowerCase("de-DE").normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
+  const t = normalize(team);
+  const h = typeof home === "string" ? normalize(home) : "";
+  const a = typeof away === "string" ? normalize(away) : "";
+  if (t && h && (t === h || (t.length >= 6 && h.includes(t)))) return typeof away === "string" ? away : undefined;
+  if (t && a && (t === a || (t.length >= 6 && a.includes(t)))) return typeof home === "string" ? home : undefined;
+  return undefined; // unknown team mapping: never silently guess opponent
+}
+
 function toPlayer(n: any, club: Club, sport: Sport): Player {
   const g = n.nextGame;
   const o = n.nextClassicFixturePlayingStatusOdds;
@@ -104,6 +115,7 @@ function toPlayer(n: any, club: Club, sport: Sport): Player {
     injuries: Array.isArray(n.activeInjuries) ? n.activeInjuries.length : 0,
     hasGame: g === undefined ? null : g !== null,
     nextGame: g ? `${String(g.date).slice(0, 10)} ${g.homeTeam?.name ?? "?"} - ${g.awayTeam?.name ?? "?"}` : undefined,
+    opponent: g ? opponentFromFixture(club.name, g.homeTeam?.name, g.awayTeam?.name) : undefined,
   };
 }
 

@@ -59,6 +59,11 @@ GitHub: https://github.com/xboobax/markerrasorare
 Vercel: https://markerrasorarev1.vercel.app/
 Siehe `DEPLOYMENT_DE.md`. Die ZIP-Datei ist ein Projekt-Update, kein automatisch ausgeführtes Deployment.
 
-## Update V1.2
+## Update V1.3
 
 Spielerbilder, L5-/L10-basierte Prognosespanne und verbesserter Lineup Builder mit drei Strategien sowie Fixieren/Sperren. Details und Vorsichtsmaßnahmen siehe `UPDATE_V1_2_DE.md`.
+
+
+## Version 1.3
+
+Neue Matchup-Szenarien, optionales Spielminuten-Scouting und das Zielchance-Ranking im Arcade Lineup Builder. Die Gegnerstärke wird **manuell** eingetragen, bis eine verifizierte Verteidigungsstatistik-Quelle angeschlossen ist. xG/xA werden gespeichert, aber nicht unkalibriert in Sorare-Punkte umgerechnet. Details in [`UPDATE_V1_3_DE.md`](UPDATE_V1_3_DE.md).
