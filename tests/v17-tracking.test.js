@@ -40,7 +40,7 @@ assert.equal(parseTrackingBackup([old], 'nba')[0].actual,10);
 assert.equal(parseTrackingBackup([old],'football').length,0);
 assert.equal(parseTrackingBackup({items:[old]},'nba').length,1);
 assert.equal(parseTrackingBackup({items:[{...old,playerId:'<script>javascript</script>'}]},'nba').length,0);
-assert.equal(parseTrackingBackup({items:Array.from({length:301},()=>old)},'nba').length,0);
+assert.equal(parseTrackingBackup({items:Array.from({length:1501},()=>old)},'nba').length,0);
 const sample=Array.from({length:20},(_,i)=>({...item,key:'nba:player-1:'+i,fixture:`2026-11-${String(1+Math.floor(i/4)).padStart(2,'0')} Game`,actual:40}));
 assert.equal(calibrationSuggestion(sample).count,20);
 assert.equal(calibrationSuggestion(sample.slice(0,19)),null);

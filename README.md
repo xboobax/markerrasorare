@@ -1,3 +1,11 @@
+# Markerras Sorare Helper V1.8 – Forecast Lab
+
+**Stabile Basis:** Sorare-Adapter aus V1.7.2 ist unverändert. **Neue Module:** `lib/forecast-v18.ts`, `lib/backtesting.ts`, `lib/prediction-db.ts`, `lib/snapshot-policy.ts`. **Anleitung:** [`UPDATE_V1_8_DE.md`](UPDATE_V1_8_DE.md).
+
+V1.8 vergleicht eine vorsichtige experimentelle Vorhersage mit dem bisherigen Modell und speichert zukünftige Prognosen vor dem Spiel im lokalen Browserarchiv (IndexedDB). Das neue Modell ist nicht als nachweislich besser ausgewiesen; es bleibt bis zur Validierung optional. Ohne Browserbesuch werden keine Snapshots gespeichert. Keine Cloud-Datenbank und kein Hintergrund-Cron.
+
+---
+
 > **V1.7 (auf Basis der stabilen V1.6.2):** Automatischer Abgleich gespeicherter Prognosen mit eindeutig zuordenbaren FINAL-Spielerscores beim Öffnen der App, manuelle Ergebnisprüfung, JSON-Backup und Kalibrierungs-Hinweise. Keine Hintergrundprüfung, keine Cloud-Datenbank und keine Änderung am funktionierenden Sorare-Kaderabruf. Siehe [UPDATE_V1_7_DE.md](UPDATE_V1_7_DE.md).
 
 > **V1.6.1:** Spielerfoto-Fix: `avatarPictureUrl` für NBA und Fußball in allen Sorare-Abfragestufen. Siehe `UPDATE_V1_6_1_FOTOS_DE.md`.

@@ -3,6 +3,15 @@ import type { AutomaticResult } from "./tracking-auto";
 
 /** Snapshots stay in the browser. The predicted value is never recalculated
  * retroactively when today's model or player metadata changes. */
+export type TrackingModelSnapshot = {
+  baselinePredicted: number;
+  advancedPredicted: number;
+  intervalP10: number;
+  intervalP90: number;
+  modelVersion: "1.8.0";
+  selectedMode: "classic" | "v18";
+};
+
 export type TrackedPrediction = {
   key: string;
   sport: Sport;
@@ -16,20 +25,31 @@ export type TrackedPrediction = {
   actual: number | null;
   actualSource?: "manual" | "sorare";
   actualGameDate?: string;
+  baselinePredicted?: number; // original V1.7 model at snapshot time
+  advancedPredicted?: number; // V1.8 challenger, frozen before game
+  intervalP10?: number;
+  intervalP90?: number;
+  modelVersion?: "1.8.0";
+  selectedMode?: "classic" | "v18";
 };
 
-export function createTrackedPrediction(p: Forecast, sport: Sport, now = new Date()): TrackedPrediction {
+export function createTrackedPrediction(p: Forecast, sport: Sport, now = new Date(), comparison?: TrackingModelSnapshot): TrackedPrediction {
   const fixture = p.nextGame ?? null;
   return {
     key: `${sport}:${p.id}:${fixture ?? now.toISOString().slice(0,10)}`,
     sport, playerId: p.id, playerName: p.name, team: p.team,
     fixture, savedAt: now.toISOString(), predicted: Math.round(p.weighted * 10)/10,
     playProbability: p.playProb, actual: null,
+    ...(comparison ? {baselinePredicted:Math.round(comparison.baselinePredicted*10)/10,
+      advancedPredicted:Math.round(comparison.advancedPredicted*10)/10,
+      intervalP10:Math.round(comparison.intervalP10*10)/10,
+      intervalP90:Math.round(comparison.intervalP90*10)/10,
+      modelVersion:comparison.modelVersion, selectedMode:comparison.selectedMode} : {}),
   };
 }
 export function upsertTracked(items: TrackedPrediction[], entry: TrackedPrediction): TrackedPrediction[] {
   if (items.some(item => item.key === entry.key)) return items;
-  return [entry, ...items].slice(0, 200);
+  return [entry, ...items].slice(0, 1500);
 }
 export function setActual(items: TrackedPrediction[], key: string, actual: number | null): TrackedPrediction[] {
   if (actual !== null && (!Number.isFinite(actual) || actual < 0 || actual > 500)) return items;
@@ -53,7 +73,7 @@ export function applyOfficialResults(items: TrackedPrediction[], results: Automa
 /** Defensive schema for local backups; never import executable or unknown fields. */
 export function parseTrackingBackup(raw: unknown, sport: Sport): TrackedPrediction[] {
   const value = Array.isArray(raw) ? raw : (raw && typeof raw === "object" && "items" in raw ? (raw as any).items : null);
-  if (!Array.isArray(value) || value.length > 300) return [];
+  if (!Array.isArray(value) || value.length > 1500) return [];
   const used = new Set<string>();
   const out: TrackedPrediction[] = [];
   for (const r of value) {
@@ -70,11 +90,17 @@ export function parseTrackingBackup(raw: unknown, sport: Sport): TrackedPredicti
       r.playProbability < 0 || r.playProbability > 1 ||
       (r.actual !== null && (typeof r.actual !== "number" || !Number.isFinite(r.actual) || r.actual < 0 || r.actual > 500))) continue;
     used.add(r.key);
+    const validModel = r.modelVersion === "1.8.0" &&
+      [r.baselinePredicted,r.advancedPredicted,r.intervalP10,r.intervalP90].every(x =>
+        typeof x === "number" && Number.isFinite(x) && x >= 0 && x <= 500) &&
+      r.intervalP10 <= r.intervalP90 && (r.selectedMode === "classic" || r.selectedMode === "v18");
     out.push({key:r.key,sport:r.sport,playerId:r.playerId,playerName:r.playerName,team:r.team,
       fixture:r.fixture ?? null,savedAt:r.savedAt,predicted:r.predicted,playProbability:r.playProbability,
       actual:r.actual, actualSource:r.actualSource === "sorare" || r.actualSource === "manual" ? r.actualSource : undefined,
-      actualGameDate:typeof r.actualGameDate === "string" && Number.isFinite(Date.parse(r.actualGameDate)) ? r.actualGameDate : undefined});
-    if (out.length >= 200) break;
+      actualGameDate:typeof r.actualGameDate === "string" && Number.isFinite(Date.parse(r.actualGameDate)) ? r.actualGameDate : undefined,
+      ...(validModel ? {baselinePredicted:r.baselinePredicted,advancedPredicted:r.advancedPredicted,
+        intervalP10:r.intervalP10,intervalP90:r.intervalP90,modelVersion:r.modelVersion,selectedMode:r.selectedMode} : {})});
+    if (out.length >= 1500) break;
   }
   return out;
 }

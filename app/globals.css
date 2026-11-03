@@ -414,3 +414,58 @@ input[type="checkbox"] { accent-color:#9a76ee; }
 .tracking-calibration strong {display:block;color:#e4d7ff;font-size:12px;}
 .tracking-calibration p {color:#b0bfd6;font-size:12px;line-height:1.6;margin:7px 0 0;}
 .tracking-source {display:block;font-size:10px;color:#93d0be;margin-top:4px;}
+
+/* ================================================================
+   V1.8 | Forecast Lab: progressively enhanced, accessible dark UI
+   ================================================================ */
+.forecast-lab {margin-top:22px;position:relative;overflow:hidden;background:radial-gradient(circle at 100% 0%,rgba(121,86,191,.17),transparent 42%),linear-gradient(130deg,#182035,#17192b 70%);border-color:#535077;}
+.forecast-lab::before {content:"";height:3px;position:absolute;left:0;right:0;top:0;background:linear-gradient(90deg,#9273d4,#66a9b6 50%,transparent);}
+.lab-stage {white-space:nowrap;border:1px solid #6d6093;background:#302b4c;color:#dbc9ff;border-radius:99px;padding:7px 11px;font-size:10px;font-weight:800;letter-spacing:.10em;}
+.lab-intro {color:#b8c8dc;font-size:13px;line-height:1.8;max-width:900px;margin:8px 0 20px;}
+.lab-intro strong {color:#eee0ff;}
+.lab-model-switch {display:flex;gap:10px;flex-wrap:wrap;margin:15px 0 18px;}
+.lab-model-switch button {flex:1 1 230px;text-align:center;border:1px solid #505974;background:#252b40;color:#b6c5d9;border-radius:10px;padding:13px 17px;cursor:pointer;font-size:12px;font-weight:800;transition:background .15s,border-color .15s;}
+.lab-model-switch button:hover {background:#343452;}
+.lab-model-switch button.active,.lab-model-switch button[aria-pressed="true"] {background:#493866;border-color:#a88ce2;color:#fff;box-shadow:inset 0 0 0 1px rgba(216,192,255,.18);}
+.lab-kpis {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px;}
+.lab-kpis>div {display:flex;flex-direction:column;gap:7px;min-height:117px;padding:17px 18px;border:1px solid #374b63;border-radius:12px;background:rgba(16,26,43,.65);}
+.lab-kpis small {color:#c1cde2;font-size:11px;line-height:1.4;}
+.lab-kpis strong {color:#ecdcff;font-weight:850;font-size:26px;font-variant-numeric:tabular-nums;}
+.lab-kpis span {font-size:10px;line-height:1.45;color:#8095b2;}
+.lab-caution {color:#9cacc6;font-size:11px;line-height:1.65;border-top:1px solid #38465a;margin:18px 0 0;padding-top:14px;}
+.lab-caution strong {color:#ecdcff;}
+.archive-banner {display:flex;gap:18px;align-items:center;justify-content:space-between;padding:15px 17px;margin-top:14px;background:#1b2839;border:1px solid #436075;border-radius:12px;flex-wrap:wrap;}
+.archive-banner>div {display:flex;flex-direction:column;gap:5px;}
+.archive-banner strong {font-size:13px;color:#e9ecff;}
+.archive-banner small {font-size:11px;line-height:1.5;color:#97b5ca;}
+.auto-archive-toggle {display:flex;gap:9px;align-items:center;color:#e7d5ff;font-size:12px;cursor:pointer;font-weight:750;max-width:300px;line-height:1.4;}
+.auto-archive-toggle input {height:17px;width:17px;accent-color:#9f84dd;flex-shrink:0;}
+.backtest-panel {background:radial-gradient(circle at 90% 0%,rgba(88,165,161,.09),transparent 45%),#121f31;border:1px solid #405a68;border-radius:13px;padding:19px;margin:20px 0;}
+.backtest-head {display:flex;justify-content:space-between;gap:13px;align-items:flex-start;flex-wrap:wrap;}
+.backtest-head h3 {margin:6px 0 0;font-size:17px;color:#f5efff;}
+.backtest-state {border:1px solid #506980;background:#22334a;color:#a9cde1;border-radius:99px;font-size:10px;font-weight:750;padding:6px 10px;}
+.backtest-metrics {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin:16px 0;}
+.backtest-metrics>div {display:flex;flex-direction:column;gap:8px;border:1px solid #334d63;border-radius:10px;background:#1a2941;padding:12px;}
+.backtest-metrics small {font-size:10px;line-height:1.4;color:#aac6d9;}
+.backtest-metrics strong {font-size:19px;font-variant-numeric:tabular-nums;color:#eee2ff;}
+.backtest-foot {font-size:11px;line-height:1.75;color:#a0b5cc;}
+.backtest-foot strong {color:#f1dfff;}
+.v18-profile-card {border:1px solid #536180;background:linear-gradient(135deg,#25213b,#172a3c);border-radius:14px;padding:16px;margin:16px 0;}
+.v18-profile-title {display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;font-size:11px;letter-spacing:.05em;color:#cdb9ff;}
+.v18-profile-title span {font-size:10px;letter-spacing:0;border:1px solid #52637a;border-radius:99px;color:#acd2da;padding:5px 9px;}
+.v18-compare {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:15px 0;}
+.v18-compare>div {display:flex;flex-direction:column;gap:7px;background:#151f33;border:1px solid #34465d;border-radius:9px;padding:11px;}
+.v18-compare small {color:#a4b6d0;font-size:10px;line-height:1.3;}
+.v18-compare strong {font-size:21px;color:#ebddff;font-variant-numeric:tabular-nums;}
+.v18-distribution {display:flex;gap:7px;flex-direction:column;padding:12px 2px;border-top:1px solid #3c4563;border-bottom:1px solid #3c4563;font-size:11px;color:#b3c7dd;line-height:1.5;}
+.v18-distribution strong {color:#f3eaff;}
+.v18-prob-list {display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:14px 0;}
+.v18-prob-list>div {display:grid;grid-template-columns:1fr auto;gap:9px;align-items:center;}
+.v18-prob-list>div>span {font-size:10px;color:#a6bdd6;line-height:1.4;}
+.v18-prob-list>div>strong {font-size:13px;color:#c3f0e1;}
+.v18-prob-list>div>div {grid-column:span 2;overflow:hidden;height:6px;background:#26394c;border-radius:99px;}
+.v18-prob-list>div>div>span {display:block;height:100%;background:linear-gradient(90deg,#785eb4,#70bbbe);border-radius:99px;}
+.v18-profile-card ul {margin:13px 0;padding-left:20px;display:grid;gap:5px;font-size:11px;color:#c6cee6;line-height:1.55;}
+.v18-profile-card p {font-size:10px;line-height:1.6;color:#9aaec8;margin:10px 0 0;}
+@media(max-width:800px){.lab-kpis{grid-template-columns:1fr 1fr}.lab-kpis>div:last-child{grid-column:span 2}.backtest-metrics{grid-template-columns:1fr 1fr;}}
+@media(max-width:560px){.lab-kpis{grid-template-columns:1fr}.lab-kpis>div:last-child{grid-column:auto}.lab-stage{display:none}.backtest-metrics{grid-template-columns:1fr 1fr}.v18-compare{grid-template-columns:1fr 1fr}.v18-compare>div:last-child{grid-column:span 2}.v18-prob-list{grid-template-columns:1fr}}
