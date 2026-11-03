@@ -8,16 +8,22 @@ const {forecast}=require('../.test-build/lib/model.js');
  const prev=global.fetch;
  try {
   let calls=0;
-  const athlete=(slug)=>({slug,displayName:slug,position:'Defender',playingStatus:'STARTER'});
+  const athlete=(slug)=>({slug,displayName:slug,position:'Defender',playingStatus:'STARTER',
+    rawPlayerGameScores:[52,49,61],nextClassicFixtureProjectedScore:55,lastFiveSo5Appearances:5});
+  const firstBatch=Array.from({length:100},(_,i)=>athlete(`athlete-${i}`));
+  let rejectPagination=false;
   global.fetch=async(_url,init)=>{
     const query=JSON.parse(init.body).query;
     calls++;
     if(query.includes('clubsReady')) throw Error('unexpected');
     if(query.includes('club(')) {
-      const second=query.includes('after: "cursor-1"');
+      if(query.includes('pageInfo') && rejectPagination)
+        return {ok:true,text:async()=>JSON.stringify({errors:[{message:'Cannot query field "pageInfo" on type "PlayerConnection".'}]})};
+      const after=query.includes('after: "cursor-1"');
+      const nodes=after?[athlete('extra')]:firstBatch;
       return {ok:true,text:async()=>JSON.stringify({data:{football:{club:{activePlayers:{
-        nodes:second?[athlete('b'),athlete('c')]:[athlete('a'),athlete('b')],
-        pageInfo:{hasNextPage:!second,endCursor:second?'cursor-2':'cursor-1'}
+        nodes,
+        pageInfo:{hasNextPage:!after,endCursor:after?'cursor-2':'cursor-1'}
       }}}}})};
     }
     throw Error('Unexpected '+query);
@@ -25,12 +31,24 @@ const {forecast}=require('../.test-build/lib/model.js');
   const club={slug:'club',name:'Club',league:'Bundesliga'};
   const data=await getTeamRoster('football',club);
   assert.equal(data.complete,true);
-  assert.deepEqual(data.players.map(p=>p.id),['a','b','c']);
-  assert.equal(calls,2);
+  assert.equal(data.players.length,101);
+  assert.deepEqual(data.players[0].recentScores,[52,49,61]);
+  assert.equal(data.players[100].id,'extra');
+  assert.equal(calls,3); // stats page, separate metadata, next stats page
   const more=await getPlayers('football',[club]);
   assert.equal(more.incomplete,0);
   assert.equal(more.failed,0);
-  assert.equal(more.players.length,3);
+  assert.equal(more.players.length,101);
+  assert.equal(more.noScoreFields,0);
+
+  // Regression: pageInfo not available. Score data MUST survive.
+  rejectPagination=true;
+  const fallback=await getTeamRoster('football',club);
+  assert.equal(fallback.complete,false);
+  assert.equal(fallback.players.length,100);
+  assert.deepEqual(fallback.players[0].recentScores,[52,49,61]);
+  assert.equal(fallback.players[0].proj,55);
+  rejectPagination=false;
   const rating=mapDefenseToRatings([
     {name:'Manchester City',concededPerGame:.4,games:10},
     {name:'Arsenal FC',concededPerGame:.6,games:9},

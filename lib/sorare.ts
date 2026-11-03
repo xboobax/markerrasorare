@@ -47,14 +47,31 @@ const FOOT_CORE = "slug displayName position playingStatus";
 const FOOT_IMAGE = 'pictureUrl(derivative: "avatar")';
 // NBA photo availability depends on the current API schema. A field error
 // falls back to identical stats without the photo field.
-const FOOT_STATS = "rawPlayerGameScores(last: 10) lastFiveSo5Appearances nextClassicFixtureProjectedScore";
+// Aggregated scores below are documented Sorare player fields (including NBA).
+// Legacy rawPlayerGameScores is tried first but MUST NOT be required for the
+// working player score. If that field is absent, retain last-5 / last-10 averages.
 const FOOT_ODDS = "nextClassicFixturePlayingStatusOdds { starterOddsBasisPoints substituteOddsBasisPoints nonPlayingOddsBasisPoints }";
 const NBA_CORE = "slug displayName anyPositions";
 const NBA_IMAGE = "pictureUrl";
-const NBA_STATS = "rawPlayerGameScores(last: 10) lastFiveSo5Appearances nextClassicFixtureProjectedScore nextDailyFixtureProjectedScore";
+const FOOT_AVERAGES = "lastFiveSo5AverageScore lastTenPlayedSo5AverageScore lastFiveSo5Appearances nextClassicFixtureProjectedScore";
+const NBA_AVERAGES = "lastFiveSo5AverageScore lastTenPlayedSo5AverageScore lastFiveSo5Appearances nextClassicFixtureProjectedScore nextDailyFixtureProjectedScore";
 const TIERS: Record<Sport, string[]> = {
-  football: [`${FOOT_CORE} ${FOOT_IMAGE} ${FOOT_STATS} ${GAME} ${FOOT_ODDS}`, `${FOOT_CORE} ${FOOT_STATS} ${GAME} ${FOOT_ODDS}`, `${FOOT_CORE} ${FOOT_STATS}`, FOOT_CORE],
-  nba: [`${NBA_CORE} ${NBA_IMAGE} ${NBA_STATS} ${GAME}`, `${NBA_CORE} ${NBA_STATS} ${GAME}`, `${NBA_CORE} ${NBA_STATS}`, NBA_CORE],
+  football: [
+    `${FOOT_CORE} ${FOOT_IMAGE} rawPlayerGameScores(last: 10) ${FOOT_AVERAGES} ${GAME} ${FOOT_ODDS}`,
+    `${FOOT_CORE} ${FOOT_IMAGE} ${FOOT_AVERAGES} ${GAME} ${FOOT_ODDS}`,
+    `${FOOT_CORE} ${FOOT_AVERAGES} ${GAME} ${FOOT_ODDS}`,
+    `${FOOT_CORE} ${FOOT_AVERAGES}`,
+    `${FOOT_CORE} nextClassicFixtureProjectedScore`,
+    FOOT_CORE,
+  ],
+  nba: [
+    `${NBA_CORE} ${NBA_IMAGE} rawPlayerGameScores(last: 10) ${NBA_AVERAGES} ${GAME}`,
+    `${NBA_CORE} ${NBA_IMAGE} ${NBA_AVERAGES} ${GAME}`,
+    `${NBA_CORE} ${NBA_AVERAGES} ${GAME}`,
+    `${NBA_CORE} ${NBA_AVERAGES}`,
+    `${NBA_CORE} nextClassicFixtureProjectedScore nextDailyFixtureProjectedScore`,
+    NBA_CORE,
+  ],
 };
 
 const FOOT_POS: Record<string, string> = { Goalkeeper: "GK", Defender: "DEF", Midfielder: "MID", Forward: "FWD" };
@@ -95,7 +112,8 @@ function toPlayer(n: any, club: Club, sport: Sport): Player {
   const raw: number[] = Array.isArray(n.rawPlayerGameScores)
     ? n.rawPlayerGameScores.filter((x: unknown): x is number => typeof x === "number" && isFinite(x))
     : [];
-  const avg = raw.length ? raw.reduce((a, b) => a + b, 0) / raw.length : null;
+  const avg = raw.length ? raw.reduce((a, b) => a + b, 0) / raw.length :
+    num(n.lastTenPlayedSo5AverageScore) ?? num(n.lastFiveSo5AverageScore);
   const playOdds = o
     ? Math.max(0, Math.min(1, (Number(o.starterOddsBasisPoints) + 0.6 * Number(o.substituteOddsBasisPoints)) / 10000))
     : null;
@@ -108,6 +126,8 @@ function toPlayer(n: any, club: Club, sport: Sport): Player {
     recentScores: raw,
     position: mapPosition(sport, n),
     avg,
+    averageL5: num(n.lastFiveSo5AverageScore),
+    averageL10: num(n.lastTenPlayedSo5AverageScore),
     proj: num(n.nextDailyFixtureProjectedScore) ?? num(n.nextClassicFixtureProjectedScore),
     last5Apps: num(n.lastFiveSo5Appearances),
     status: String(n.playingStatus ?? ""),
@@ -133,50 +153,82 @@ function teamQuery(sport: Sport, slug: string, fields: string, after?: string, l
     : `{ team(slug: ${JSON.stringify(slug)}) { anyActivePlayers(first: 100${cursor}) { ${selection} } } }`;
 }
 
-export type RosterResult = { players: Player[]; complete: boolean };
+/**
+ * V1.4.1 hotfix: score fields are loaded with the SAME compact query as V1.3.
+ * Optional pagination is checked afterwards, independently. A pageInfo schema
+ * rejection can NEVER cause us to throw away otherwise valid score data.
+ */
+export type RosterResult = { players: Player[]; complete: boolean; scoringFieldsUnavailable?: boolean };
 
-export async function getTeamRoster(sport: Sport, club: Club): Promise<RosterResult> {
-  for (let fieldTier = 0; fieldTier < TIERS[sport].length; fieldTier++) {
-    const fields = TIERS[sport][fieldTier];
+// Cache only real schema-validation downgrades across teams, as V1.3 did.
+const workingTier: Record<Sport, number> = { football: 0, nba: 0 };
+const isSchemaValidationError = (e: unknown): boolean => {
+  const msg = e instanceof Error ? e.message : String(e);
+  return msg.startsWith("HTTP 422:") &&
+    /cannot query field|unknown argument|unknown field|unknown type|not defined|doesn.t exist|is not a field|undefinedfield|argument .* is required/i.test(msg);
+};
+
+async function fetchFirstPage(sport: Sport, club: Club): Promise<{players: Player[]; tier: number}> {
+  let lastValidationError: unknown;
+  for (let tier = workingTier[sport]; tier < TIERS[sport].length; tier++) {
     try {
-      let after: string | undefined;
-      const seen = new Set<string>();
-      const players: Player[] = [];
-      let complete = false;
-      // Safety cap guards against broken / circular cursors.
-      for (let page = 0; page < 25; page++) {
-        const d = await gql(teamQuery(sport, club.slug, fields, after), 900);
-        const connection = sport === "football" ? d.football?.club?.activePlayers : d.team?.anyActivePlayers;
-        if (!connection) throw new Error(`Kein Spieler-Kader für ${club.name}`);
-        for (const n of connection.nodes ?? []) {
-          if (typeof n?.slug !== "string" || seen.has(n.slug)) continue;
-          seen.add(n.slug);
-          players.push(toPlayer(n, club, sport));
-        }
-        const info = connection.pageInfo;
-        if (!info?.hasNextPage) { complete = true; break; }
-        if (!info.endCursor || info.endCursor === after) break;
-        after = info.endCursor;
-      }
-      return {players, complete};
+      // Do not include pageInfo here: the original V1.3 query worked without it.
+      const d = await gql(teamQuery(sport, club.slug, TIERS[sport][tier], undefined, true), 900);
+      const connection = sport === "football" ? d.football?.club?.activePlayers : d.team?.anyActivePlayers;
+      if (!connection || !Array.isArray(connection.nodes)) throw new Error(`Kein Spieler-Kader für ${club.name}`);
+      workingTier[sport] = tier;
+      return {players: connection.nodes.filter((n: any) => typeof n?.slug === "string").map((n: any) => toPlayer(n, club, sport)), tier};
     } catch (e) {
-      // If pagination isn't exposed in the current Sorare schema, the older
-      // one-page path can still show data; make incompleteness explicit.
-      const msg = (e as Error).message;
-      if (!msg.startsWith("HTTP 422")) throw e;
-      if (/pageInfo|hasNextPage|endCursor|after/i.test(msg)) {
-        try {
-          const d = await gql(teamQuery(sport, club.slug, fields, undefined, true), 900);
-          const conn = sport === "football" ? d.football?.club?.activePlayers : d.team?.anyActivePlayers;
-          if (!conn) throw new Error(`Kein Spieler-Kader für ${club.name}`);
-          return {players: (conn.nodes ?? []).map((n: any) => toPlayer(n, club, sport)), complete: false};
-        } catch (fallbackError) {
-          if (!(fallbackError as Error).message.startsWith("HTTP 422")) throw fallbackError;
-        }
-      }
+      // A 429/timeout/complexity error is NOT proof that a stats field is missing.
+      // Do not silently downgrade those cases to stats-free player records.
+      if (!isSchemaValidationError(e)) throw e;
+      lastValidationError = e;
+      workingTier[sport] = Math.min(tier + 1, TIERS[sport].length - 1);
     }
   }
-  throw new Error(`Sorare liefert kein unterstütztes Kaderschema für ${club.name}`);
+  throw lastValidationError ?? new Error(`Sorare liefert kein unterstütztes Kaderschema für ${club.name}`);
+}
+
+export async function getTeamRoster(sport: Sport, club: Club): Promise<RosterResult> {
+  const {players: firstPage, tier} = await fetchFirstPage(sport, club);
+  const scoringFieldsUnavailable = tier === TIERS[sport].length - 1;
+  // A page shorter than the requested size is exhausted. Most teams are here.
+  if (firstPage.length < 100) return {players:firstPage, complete:true, scoringFieldsUnavailable};
+
+  // Retrieve pagination metadata separately with *minimal* selected fields.
+  // This avoids the V1.4 regression: score fetches must never depend on pageInfo.
+  try {
+    const metadata = await gql(teamQuery(sport, club.slug, "slug"), 900);
+    const connection = sport === "football" ? metadata.football?.club?.activePlayers : metadata.team?.anyActivePlayers;
+    const initial = connection?.pageInfo;
+    if (!initial || typeof initial.hasNextPage !== "boolean")
+      return {players:firstPage, complete:false, scoringFieldsUnavailable};
+    if (!initial.hasNextPage) return {players:firstPage, complete:true, scoringFieldsUnavailable};
+
+    const players = [...firstPage];
+    const seen = new Set(players.map(p=>p.id));
+    let cursor: string | undefined = initial.endCursor;
+    let complete = false;
+    const usedCursors = new Set<string>();
+    for (let i=1; i<25 && cursor && !usedCursors.has(cursor); i++) {
+      usedCursors.add(cursor);
+      const d = await gql(teamQuery(sport, club.slug, TIERS[sport][tier], cursor, false), 900);
+      const conn = sport === "football" ? d.football?.club?.activePlayers : d.team?.anyActivePlayers;
+      if (!conn || !Array.isArray(conn.nodes)) break;
+      for (const n of conn.nodes) {
+        if (typeof n?.slug !== "string" || seen.has(n.slug)) continue;
+        seen.add(n.slug);
+        players.push(toPlayer(n, club, sport));
+      }
+      if (!conn.pageInfo?.hasNextPage) { complete=true; break; }
+      cursor = conn.pageInfo.endCursor;
+    }
+    return {players, complete, scoringFieldsUnavailable};
+  } catch {
+    // Keep the already fetched REAL scores even if pagination fails.
+    // Explicitly mark the roster incomplete rather than reporting it as full.
+    return {players:firstPage, complete:false, scoringFieldsUnavailable};
+  }
 }
 
 /** Backwards-compatible array return type for existing tests/components. */
@@ -184,16 +236,18 @@ export async function getTeamPlayers(sport: Sport, club: Club): Promise<Player[]
   return (await getTeamRoster(sport, club)).players;
 }
 
-export async function getPlayers(sport: Sport, clubs: Club[]): Promise<{ players: Player[]; failed: number; incomplete: number }> {
+export async function getPlayers(sport: Sport, clubs: Club[]): Promise<{ players: Player[]; failed: number; incomplete: number; noScoreFields: number }> {
   const players: Player[] = [];
   let failed = 0;
   let incomplete = 0;
+  let noScoreFields = 0;
   const unique = new Set<string>();
   const run = async (batch: Club[]) => {
     const res = await Promise.all(batch.map(c => getTeamRoster(sport,c).catch(() => null)));
     for (const r of res) {
       if (!r) { failed++; continue; }
       if (!r.complete) incomplete++;
+      if (r.scoringFieldsUnavailable) noScoreFields++;
       for (const player of r.players) {
         if (unique.has(player.id)) continue;
         unique.add(player.id);
@@ -205,5 +259,5 @@ export async function getPlayers(sport: Sport, clubs: Club[]): Promise<{ players
   const queue = [...clubs];
   const concurrency = process.env.SORARE_API_KEY ? 6 : 2;
   while (queue.length) await run(queue.splice(0, concurrency));
-  return {players, failed, incomplete};
+  return {players, failed, incomplete, noScoreFields};
 }

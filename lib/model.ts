@@ -8,6 +8,8 @@ export type Player = {
   position: string;            // football: GK/DEF/MID/FWD; nba: G/F/C
   imageUrl?: string | null;    // Bild-URL vom Datenanbieter, nie aus Namen geraten
   avg: number | null;
+  averageL5?: number | null;
+  averageL10?: number | null;
   proj: number | null;
   recentScores?: number[];     // bis zu 10 historische Sorare-Scores
   last5Apps: number | null;
@@ -62,8 +64,8 @@ export function forecast(p: Player): Forecast {
   const scores = (p.recentScores ?? []).filter((s): s is number =>
     typeof s === "number" && Number.isFinite(s) && s >= 0).slice(0, 10);
   const l5 = scores.slice(0, 5);
-  const last5Avg = l5.length ? mean(l5) : null;
-  const last10Avg = scores.length ? mean(scores) : p.avg;
+  const last5Avg = l5.length ? mean(l5) : (p.averageL5 ?? null);
+  const last10Avg = scores.length ? mean(scores) : (p.averageL10 ?? p.avg);
   const entries: {value: number; weight: number}[] = [];
   if (p.proj !== null && Number.isFinite(p.proj) && p.proj >= 0) entries.push({value: p.proj, weight: 0.5});
   if (last5Avg !== null) entries.push({value: last5Avg, weight: 0.3});
@@ -78,7 +80,7 @@ export function forecast(p: Player): Forecast {
   const ceiling = expected + 1.15 * variability;
   const playProb = playProbability(p);
   const confidence = sampleSize >= 8 && p.proj !== null ? "hoch"
-    : sampleSize >= 4 || p.proj !== null ? "mittel" : "gering";
+    : sampleSize >= 4 || p.proj !== null || last5Avg !== null || last10Avg !== null ? "mittel" : "gering";
   return {...p, expected, playProb, weighted: expected * playProb,
     last5Avg, last10Avg, floor, ceiling, variability, sampleSize, confidence};
 }

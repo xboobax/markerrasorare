@@ -71,3 +71,7 @@ Neue Matchup-Szenarien, optionales Spielminuten-Scouting und das Zielchance-Rank
 ## Version 1.4
 
 Erweiterte Kader-Pagination, anklickbare Detailprofile, akzentunabhängige Suche, optionale automatische Defensivdaten aus externen Anbietern, 5-Lineup-Vergleich und lokales Prognose-Tracking. Die Datenvollständigkeit wird **nicht** über die tatsächlich gelieferten aktiven Kader hinaus versprochen. Siehe [UPDATE_V1_4_DE.md](UPDATE_V1_4_DE.md) für Einrichtung und Einschränkungen.
+
+## Version 1.5 – Eigener Lineup Builder
+
+Du kannst fünf Spieler jetzt selbst für die vorgesehenen Positionen aufstellen, austauschen und drei manuelle Lineups im Browser speichern. NBA-Sternelimit und Fußball-Positionen werden überprüft. Der bisherige automatische Optimizer bleibt als eigener Reiter erhalten. Details: [UPDATE_V1_5_DE.md](UPDATE_V1_5_DE.md).

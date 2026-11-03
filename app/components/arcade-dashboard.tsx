@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import ManualLineup from "@/app/components/manual-lineup";
 import { useEffect, useMemo, useState } from "react";
 import type { Forecast, Sport } from "@/lib/model";
 import type { Strategy } from "@/lib/arcade";
@@ -58,6 +59,9 @@ function PlayerAvatar({player, small = false}: {player: Forecast; small?: boolea
 export default function ArcadeDashboard({sport, league, leagues, team, clubs, players: basePlayers, info, error, automaticMatchups}: Props) {
   const [search, setSearch] = useState("");
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
+  const [profileHistories, setProfileHistories] = useState<Record<string, number[]>>({});
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState(false);
   const [tracked, setTracked] = useState<TrackedPrediction[]>([]);
   const [loadedTrackingSport, setLoadedTrackingSport] = useState<Sport | null>(null);
   const [position, setPosition] = useState("all");
@@ -70,6 +74,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const [loadedRatingSport, setLoadedRatingSport] = useState<Sport | null>(null);
   const [loadedSport, setLoadedSport] = useState<Sport | null>(null);
   const [activeResult, setActiveResult] = useState(0);
+  const [builderMode, setBuilderMode] = useState<"automatic" | "manual">("manual");
   const [strategy, setStrategy] = useState<Strategy>("balanced");
   const [target, setTarget] = useState(sport === "football" ? "180" : "");
 
@@ -139,6 +144,24 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
     return () => document.removeEventListener("keydown", escape);
   }, [selectedPlayerId]);
 
+  // Optional per-player history, fetched only on click. Main list still uses
+  // Sorare's inexpensive L5/L10 aggregates and stays fast for thousands of players.
+  useEffect(() => {
+    if (!selectedPlayerId) return;
+    const player = basePlayers.find(p => p.id === selectedPlayerId);
+    if (!player || (player.recentScores?.length ?? 0) > 0 ||
+        Object.prototype.hasOwnProperty.call(profileHistories, selectedPlayerId)) return;
+    let active = true;
+    setHistoryLoading(true); setHistoryError(false);
+    fetch(`/api/player-scores?slug=${encodeURIComponent(selectedPlayerId)}`)
+      .then(async r => {if (!r.ok) throw new Error("History unavailable"); return r.json();})
+      .then(data => {if (active) setProfileHistories(state => ({...state,[selectedPlayerId]:
+        Array.isArray(data.scores) ? data.scores.filter((v: unknown): v is number => typeof v === "number" && Number.isFinite(v)) : []}));})
+      .catch(() => {if (active) {setProfileHistories(state=>({...state,[selectedPlayerId]:[]}));setHistoryError(true);}})
+      .finally(() => {if (active) setHistoryLoading(false);});
+    return () => {active=false;};
+  }, [selectedPlayerId, basePlayers, profileHistories]);
+
   const updateCard = (id: string, patch: CardSettings) =>
     setCardStore(s => ({...s, [id]: {...(s[id] ?? {}), ...patch}}));
 
@@ -183,6 +206,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const chosen = lineups[Math.min(activeResult, lineups.length - 1)] ?? null;
   const selectedPlayer = players.find(p => p.id === selectedPlayerId) ?? null;
   const selectedCard = selectedPlayer ? cardStore[selectedPlayer.id] ?? {} : {};
+  const profileScores = selectedPlayer ? ((selectedPlayer.recentScores?.length ?? 0) > 0 ? selectedPlayer.recentScores! : profileHistories[selectedPlayer.id] ?? []) : [];
   const metrics = trackingMetrics(tracked);
   const saveTracked = (p: Forecast) => setTracked(items => upsertTracked(items, createTrackedPrediction(p, sport)));
   const progress = chosen && validTarget ? Math.min(100, chosen.projectedScore / totalTarget * 100) : 0;
@@ -296,6 +320,19 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
         <section className="two-column">
           <div className="panel builder-panel" id="lineup-builder">
             <div className="section-top"><div><span className="section-kicker">03 / LINEUP STUDIO</span><h2>Arcade Lineup Builder</h2></div><span className="live-pill">5 POSITIONEN</span></div>
+            <div className="builder-mode-tabs" role="group" aria-label="Lineup Builder Modus">
+              <button type="button" className={builderMode === "manual" ? "active" : ""} aria-pressed={builderMode === "manual"} onClick={() => setBuilderMode("manual")}>✋ Selbst aufstellen</button>
+              <button type="button" className={builderMode === "automatic" ? "active" : ""} aria-pressed={builderMode === "automatic"} onClick={() => setBuilderMode("automatic")}>✦ Automatisch optimieren</button>
+            </div>
+            {builderMode === "manual" && <div className="manual-target-controls">
+              <label htmlFor="manual-target">Score-Ziel (optional)</label>
+              <input id="manual-target" type="number" min="1" step="1" inputMode="numeric" value={target} placeholder="Score-Ziel eingeben" onChange={e=>setTarget(e.target.value)}/>
+              {sport === "football" && <><button type="button" onClick={()=>setTarget("180")}>180 Pkt.</button><button type="button" onClick={()=>setTarget("360")}>360 Pkt.</button></>}
+            </div>}
+            {builderMode === "manual" ? <ManualLineup sport={sport} players={players} cardStore={cardStore}
+              updateCard={updateCard} targetScore={validTarget ? totalTarget : null}
+              onOpenProfile={setSelectedPlayerId}
+              onSavePredictions={items => items.forEach(saveTracked)}/> : <>
             <div className="mode-switch" role="group" aria-label="Spielerauswahl">
               <button type="button" className={!ownedOnly ? "active" : ""} onClick={() => {setOwnedOnly(false); setActiveResult(0);}}>Alle Spieler · theoretisch</button>
               <button type="button" className={ownedOnly ? "active" : ""} onClick={() => {setOwnedOnly(true); setActiveResult(0);}}>Nur meine Karten</button>
@@ -341,6 +378,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
             {lineups.length > 1 && <div className="variants" role="group" aria-label="Aufstellungen vergleichen">{lineups.map((l, i) => <button key={i} className={Math.min(activeResult,lineups.length-1) === i ? "active" : ""} onClick={()=>setActiveResult(i)}>Lineup {i+1} <strong>{validTarget && l.targetProbability !== null ? `${Math.round(l.targetProbability * 100)} % Zielchance` : `${fmt(l.projectedScore)} Pkt.`}</strong></button>)}</div>}
             {lineups.length > 1 && <div className="lineup-compare"><h3>Lineups im direkten Vergleich</h3><div className="tracking-scroll"><table className="tracking-table"><thead><tr><th>Lineup</th><th>Prognose</th><th>Floor</th><th>Ceiling</th>{sport === "nba" && <th>Sterne</th>}{validTarget && <th>Zielchance*</th>}</tr></thead><tbody>{lineups.map((l,i) => <tr key={i} className={Math.min(activeResult,lineups.length-1)===i ? "compare-selected" : ""} onClick={() => setActiveResult(i)}><td><button type="button" onClick={() => setActiveResult(i)}>#{i+1} wählen</button></td><td>{fmt(l.projectedScore)}</td><td>{fmt(l.floorScore)}</td><td>{fmt(l.ceilingScore)}</td>{sport === "nba" && <td>{fmt(l.starsUsed)} ★</td>}{validTarget && <td>{l.targetProbability===null ? "—" : `${Math.round(l.targetProbability*100)} %`}</td>}</tr>)}</tbody></table></div><p className="profile-muted">* Zielchance: nicht kalibrierte Modellschätzung. Lineups sind nicht automatisch offiziell spielberechtigt; Kartenbesitz und aktuelle Set-Regeln prüfen.</p></div>}
             {!chosen && <div className="empty-state"><strong>Für dieses Regelset fehlt eine vollständige gültige Aufstellung.</strong><p>{sport === "nba" ? "Vergib im Spielertableau zunächst echte Sterne (1–5 in 0,5-Schritten) für mindestens fünf geeignete Karten. Zusammen dürfen sie höchstens 16 Sterne haben." : "Es werden je ein TW, VER, MF, FWD sowie ein zusätzlicher Feldspieler benötigt."}{ownedOnly ? " Markiere die Karten zusätzlich als in deinem Besitz." : ""} Fixierungen müssen zum Regelset passen; NBA zusammen höchstens 16 Sterne.</p></div>}
+            </>}
           </div>
 
           <aside className="insights-column">
@@ -412,14 +450,14 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
             <button className="profile-close" type="button" autoFocus onClick={() => setSelectedPlayerId(null)} aria-label="Profil schließen">×</button>
             <div className="profile-head"><PlayerAvatar player={selectedPlayer}/><div><span className="section-kicker">SPIELERPROFIL · {sport === "nba" ? "NBA" : league === "__all" ? "FUẞBALL" : league}</span><h2>{selectedPlayer.name}</h2><p>{selectedPlayer.team} · {POS_LABEL[selectedPlayer.position] ?? selectedPlayer.position}</p></div></div>
             <div className="profile-stats">
-              <div><small>Erwarteter Score inkl. Einsatzrisiko</small><strong>{fmt(selectedPlayer.weighted)}</strong></div>
-              <div><small>Bei Einsatz</small><strong>{fmt(selectedPlayer.expected)}</strong></div>
+              <div><small>Erwarteter Score inkl. Einsatzrisiko</small><strong>{((selectedPlayer.sampleSize > 0 || selectedPlayer.proj !== null || selectedPlayer.avg !== null) ? fmt(selectedPlayer.weighted) : "—")}</strong></div>
+              <div><small>Bei Einsatz</small><strong>{((selectedPlayer.sampleSize > 0 || selectedPlayer.proj !== null || selectedPlayer.avg !== null) ? fmt(selectedPlayer.expected) : "—")}</strong></div>
               <div><small>Einsatzwahrscheinlichkeit (Modell)</small><strong>{Math.round(selectedPlayer.playProb*100)} %</strong></div>
-              <div><small>Floor / Ceiling (heuristisch)</small><strong>{fmt(selectedPlayer.floor)} – {fmt(selectedPlayer.ceiling)}</strong></div>
+              <div><small>Floor / Ceiling (heuristisch)</small><strong>{(selectedPlayer.sampleSize > 0 || selectedPlayer.proj !== null || selectedPlayer.avg !== null) ? `${fmt(selectedPlayer.floor)} – ${fmt(selectedPlayer.ceiling)}` : "—"}</strong></div>
             </div>
-            <h3>Formkurve · letzte {selectedPlayer.recentScores?.length ?? 0} Scores</h3>
-            {selectedPlayer.recentScores?.length ? <div className="score-bars">{[...selectedPlayer.recentScores].reverse().map((score,i) => <div key={i} title={`${fmt(score)} Punkte`}><span style={{height:`${Math.min(100, Math.max(4, score / Math.max(1,...(selectedPlayer.recentScores ?? [])) * 100))}%`}}/><small>{fmt(score)}</small></div>)}</div> : <p className="profile-muted">Keine historischen Einzelscores von Sorare verfügbar.</p>}
-            <div className="profile-detail-grid"><p><strong>Nächstes Spiel:</strong> {selectedPlayer.nextGame ?? "Nicht verfügbar"}</p><p><strong>Gegner:</strong> {selectedPlayer.opponent ?? "Nicht verfügbar"}</p><p><strong>Form L5 / L10:</strong> {selectedPlayer.last5Avg === null ? "—" : fmt(selectedPlayer.last5Avg)} / {selectedPlayer.last10Avg === null ? "—" : fmt(selectedPlayer.last10Avg)}</p><p><strong>Datenabdeckung:</strong> {selectedPlayer.confidence} ({selectedPlayer.sampleSize} Scores)</p><p><strong>Bewertung Gegner:</strong> {matchupLabel(selectedPlayer.opponentRating)} {selectedPlayer.opponentRating !== null ? (opponentRatings[selectedPlayer.opponent ?? ""] ? "· manuell" : "· automatisch") : ""}</p><p><strong>Verletzungseinträge:</strong> {selectedPlayer.injuries}</p></div>
+            <h3>Formkurve · letzte {profileScores.length} Scores</h3>
+            {profileScores.length ? <div className="score-bars">{[...profileScores].reverse().map((score,i) => <div key={i} title={`${fmt(score)} Punkte`}><span style={{height:`${Math.min(100, Math.max(4, score / Math.max(1,...profileScores) * 100))}%`}}/><small>{fmt(score)}</small></div>)}</div> : <p className="profile-muted">{historyLoading ? "Historische Scores werden geladen …" : historyError ? "Einzelscores konnten aktuell nicht geladen werden. L5/L10-Durchschnittswerte bleiben nutzbar, sofern Sorare sie liefert." : "Keine historischen Einzelscores von Sorare verfügbar."}</p>}
+            <div className="profile-detail-grid"><p><strong>Nächstes Spiel:</strong> {selectedPlayer.nextGame ?? "Nicht verfügbar"}</p><p><strong>Gegner:</strong> {selectedPlayer.opponent ?? "Nicht verfügbar"}</p><p><strong>Form L5 / L10:</strong> {selectedPlayer.last5Avg === null ? "—" : fmt(selectedPlayer.last5Avg)} / {selectedPlayer.last10Avg === null ? "—" : fmt(selectedPlayer.last10Avg)}</p><p><strong>Datenabdeckung:</strong> {selectedPlayer.confidence} ({profileScores.length} Einzelscores; ggf. separate L5/L10-Mittelwerte)</p><p><strong>Bewertung Gegner:</strong> {matchupLabel(selectedPlayer.opponentRating)} {selectedPlayer.opponentRating !== null ? (opponentRatings[selectedPlayer.opponent ?? ""] ? "· manuell" : "· automatisch") : ""}</p><p><strong>Verletzungseinträge:</strong> {selectedPlayer.injuries}</p></div>
             <div className="profile-actions"><button className="action-primary" type="button" onClick={() => saveTracked(selectedPlayer)}>{tracked.some(t=>t.key===createTrackedPrediction(selectedPlayer,sport).key) ? "Prognose gespeichert ✓" : "Prognose merken"}</button><button type="button" onClick={() => updateCard(selectedPlayer.id,{locked:!selectedCard.locked, excluded:false})}>{selectedCard.locked ? "Fixierung lösen" : "Für Lineup fixieren"}</button><button type="button" onClick={() => updateCard(selectedPlayer.id,{owned:!selectedCard.owned})}>{selectedCard.owned ? "Aus Kartenbestand entfernen" : "Als eigene Karte markieren"}</button></div>
             <p className="profile-muted">Für den Lineup Builder zählen weiterhin die eingetragenen NBA-Sterne und Kartenboni. Für Spieler ohne aktuelle Sorare-Projektion sind Prognosen nicht belastbar.</p>
           </div>

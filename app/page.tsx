@@ -38,11 +38,15 @@ export default async function Page({ searchParams }: Props) {
     const response = await getPlayers(sport, scope);
     players = response.players;
     info = `${players.length} aktive Sorare-Kaderspieler geladen · ${scope.length - response.failed} von ${scope.length} Teams erfolgreich.`;
-    if (response.incomplete) info += ` ${response.incomplete} Kader nur teilweise geladen (API-Pagination nicht vollständig bestätigt).`;
+    if (response.incomplete) info += ` ${response.incomplete} Kader nur teilweise geladen (Pagination nicht vollständig verfügbar).`;
+    if (response.noScoreFields) info += ` Warnung: Bei ${response.noScoreFields} Teams hat Sorare keine unterstützten Score-Felder geliefert. Spielerprofile können dort unvollständig sein.`;
     if (sport === "football" && scope.length === 0) {
       info += " Keine Vereine für diese Liga erkannt. Bitte den Sorare-Ligaabruf prüfen.";
     }
     if (response.failed) info += ` ${response.failed} Teams konnten derzeit nicht geladen werden; angezeigte Ergebnisse sind daher unvollständig.`;
+    if (players.length > 0 && !players.some(p => (p.recentScores?.length ?? 0) > 0 || p.proj !== null || p.avg !== null)) {
+      error = "Spieler-Stammdaten wurden geladen, aber keine Sorare-Scores oder Prognosen. Bitte Sorare-Abfrage/API-Key kontrollieren. Diese 0,0-Werte sind KEINE gültigen Vorhersagen.";
+    }
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
   }
