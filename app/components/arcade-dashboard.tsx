@@ -3,6 +3,9 @@
 import Link from "next/link";
 import ManualLineup from "@/app/components/manual-lineup";
 import GameweekCenter from "@/app/components/gameweek-center";
+import HiddenGems from "@/app/components/hidden-gems";
+import DataHealthCenter from "@/app/components/data-health-center";
+import type {FetchSummary} from "@/lib/data-health";
 import type {ScheduleData} from "@/lib/gameweek-center";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Forecast, Sport } from "@/lib/model";
@@ -39,6 +42,7 @@ type Props = {
   error: string;
   automaticMatchups: AutomaticMatchupData;
   nbaSchedule: ScheduleData;
+  fetchSummary: FetchSummary;
 };
 
 const POS_LABEL: Record<string, string> = {
@@ -66,7 +70,7 @@ function PlayerAvatar({player, small = false}: {player: Forecast; small?: boolea
   </span>;
 }
 
-export default function ArcadeDashboard({sport, league, leagues, team, clubs, players: basePlayers, info, error, automaticMatchups, nbaSchedule}: Props) {
+export default function ArcadeDashboard({sport, league, leagues, team, clubs, players: basePlayers, info, error, automaticMatchups, nbaSchedule, fetchSummary}: Props) {
   const [search, setSearch] = useState("");
   const searchRef = useRef<HTMLInputElement|null>(null);
   const [watchlist, setWatchlist] = useState<string[]>([]);
@@ -425,22 +429,22 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
       <header className="app-topbar">
         <Link href="/?sport=football" className="brand" aria-label="Markerras Sorare Helper Startseite">
           <span className="brand-logo">M<span>◆</span></span>
-          <span className="brand-text"><strong>MARKERRAS SORARE HELPER</strong><small>ARCADE INTELLIGENCE · V2.0</small></span>
+          <span className="brand-text"><strong>MARKERRAS SORARE HELPER</strong><small>ARCADE INTELLIGENCE · V2.1</small></span>
         </Link>
         <nav className="sport-switch" aria-label="Sportart wählen">
           <Link href="/?sport=football" aria-current={sport === "football" ? "page" : undefined}>⚽ Football</Link>
           <Link href="/?sport=nba" aria-current={sport === "nba" ? "page" : undefined}>🏀 NBA</Link>
         </nav>
-        <nav className="quick-nav" aria-label="Schnellnavigation"><a href="#gameweek-center">Gameweek Center</a><a href="#lineup-builder">Lineup Studio</a><a href="#spieler">Spielersuche</a><a href="#forecast-lab">Forecast Lab</a></nav>
+        <nav className="quick-nav" aria-label="Schnellnavigation"><a href="#gameweek-center">Gameweek</a><a href="#hidden-gems">Hidden Gems</a><a href="#data-health">Data Health</a><a href="#lineup-builder">Lineup Studio</a><a href="#spieler">Spielersuche</a><a href="#forecast-lab">Forecast Lab</a></nav>
         <span className="topbar-pill"><span className="status-dot" style={error ? {background: "#d9a06f"} : undefined}/>{error ? "API nicht erreichbar" : players.length ? "Sorare-Daten geladen" : "Sorare Datenadapter"}</span>
       </header>
 
       <main className="dashboard-main">
         <section className="hero-section">
           <div>
-            <div className="eyebrow"><span className="eyebrow-line"/> GAMEWEEK COMMAND CENTER</div>
+            <div className="eyebrow"><span className="eyebrow-line"/> OBSIDIAN STUDIO / V2.1 INTELLIGENCE</div>
             <h1>Das perfekte <em>{title}</em> Lineup.</h1>
-            <p>Spieler analysieren. Karten bewerten. Aufstellungen mit nachvollziehbaren Prognosen optimieren.</p>
+            <p>Spieler analysieren. Versteckte Chancen finden. Lineups diagnostizieren. Datenqualität immer im Blick.</p>
             {sport === "football" && <p className="league-focus">Nur Bundesliga · LaLiga · Ligue 1 · Premier League</p>}
             <div className="hero-cta"><a href="#lineup-builder" className="hero-primary">Lineup erstellen <span aria-hidden="true">↗</span></a><a href="#spieler" className="hero-secondary">Spieler entdecken →</a></div>
             <div className="hero-tags"><span>◆ 5 Karten</span><span>{sport === "nba" ? "★ Maximal 16 Sterne" : "◈ TW · VER · MF · FWD · EX"}</span><span>◎ Sorare-Prognosen</span></div>
@@ -478,6 +482,10 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
         <GameweekCenter sport={sport} players={players} cardStore={cardStore} nbaSchedule={nbaSchedule}
           currentTarget={validTarget?totalTarget:null} onApplyTarget={applyArcadeGoal}
           onOpenPlayer={setSelectedPlayerId} onAddPlayer={queueManualPlayer} onExploreTeam={exploreGameweekTeam}/>
+
+        <DataHealthCenter sport={sport} players={basePlayers} summary={fetchSummary}
+          archiveBackend={archiveBackend} pendingResults={autoPending}
+          matchupSource={automaticMatchups.source} scheduleStatus={nbaSchedule.status}/>
 
         <section className="panel forecast-lab" id="forecast-lab">
           <div className="section-top"><div><span className="section-kicker">03 / FORECAST LAB · VERSION 1.8</span><h2>Prognosen, die sich beweisen müssen.</h2></div><span className="lab-stage">EXPERIMENTELL · NICHT VALIDIERT</span></div>
@@ -518,6 +526,9 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
             </div>)}
           </div> : <p className="matchup-disclaimer">Bewerte mindestens einen Gegner, um ein transparentes Matchup-Ranking zu erhalten. Ohne belastbare Defensivdaten gibt es bewusst keine erfundenen Top-10-Matchups.</p>}
         </section>
+
+        <HiddenGems sport={sport} players={players} cardStore={cardStore} watchlist={watchlist}
+          onOpenPlayer={setSelectedPlayerId} onAddPlayer={queueManualPlayer} onToggleFavorite={toggleFavorite}/>
 
         <section className="two-column">
           <div className="panel builder-panel" id="lineup-builder">

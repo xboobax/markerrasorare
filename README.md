@@ -1,3 +1,7 @@
+# Markerras Sorare Helper V2.1 – Obsidian Intelligence
+
+**Aktuelle Version:** Lineup Doctor, Hidden Gems Finder, Data Health & Sync Center. Die Datenanbindung aus V2.0 ist bytegenau unverändert. **Installation:** [`UPDATE_V2_1_DE.md`](UPDATE_V2_1_DE.md).
+
 # Markerras Sorare Helper V1.9 – Obsidian Studio
 
 **Stabile Basis:** Sorare-Adapter aus V1.7.2 ist unverändert. **Neue V1.9-Module:** `lib/lineup-intelligence.ts` und `lib/watchlist.ts`. **Installationsanleitung:** [`UPDATE_V1_9_DE.md`](UPDATE_V1_9_DE.md). Die V1.8-Forecast-Lab-Module bleiben erhalten.

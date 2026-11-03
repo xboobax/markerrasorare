@@ -1,3 +1,9 @@
+# V2.1 – Obsidian Intelligence (November 2026)
+
+Neu: Lineup Doctor (regelvalidierte Wechselideen), Hidden Gems Finder (NBA Punkte/Stern; Fußball heuristischer Index), Data Health & Sync Center (Datenabdeckung und lokale Einstellungs-Backups), Dark-Mode-Design-Politur. Der etablierte Sorare-Adapter blieb bytegenau unverändert. Siehe `UPDATE_V2_1_DE.md`.
+
+---
+
 # Änderungen gegenüber `divisorare-main.zip`
 
 ## Analyse der Originaldateien

@@ -6,6 +6,7 @@ import {ARCADE} from "@/config/divination";
 import {slotAccepts, isValidNbaStars, type CardInput} from "@/lib/arcade";
 import {emptyManualSelection, evaluateManualLineup, suggestManualSwaps, normalizeManualSelection, type ManualSelection} from "@/lib/manual-lineup";
 import {assessLineup, duplicateToFreePreset, firstEligibleEmptySlot} from "@/lib/lineup-intelligence";
+import {diagnoseLineup} from "@/lib/lineup-doctor";
 import type {Forecast, Sport} from "@/lib/model";
 
 type CardSettings = {owned?:boolean; stars?:number|null; bonusPercent?:number};
@@ -74,6 +75,7 @@ export default function ManualLineup({sport,players,cardStore,updateCard,targetS
   const riskyPicks=lineup.picks.filter(p=>p.player.playProb<0.6 || p.player.confidence==="gering" || p.player.sampleSize===0).length;
   const slots=sport==="nba"?ARCADE.nba.slots:ARCADE.football.slots;
   const findings=useMemo(()=>assessLineup(lineup,sport,targetScore),[lineup,sport,targetScore]);
+  const doctor=useMemo(()=>diagnoseLineup(selection,cards,sport,targetScore,{ownedOnly:swapOwnedOnly,limit:3}),[selection,cards,sport,targetScore,swapOwnedOnly]);
   // A request originates from a deliberate click in the Explorer or player profile.
   // Never evict a current pick silently; if all slots are full, tell the user.
   useEffect(()=>{
@@ -189,9 +191,22 @@ export default function ManualLineup({sport,players,cardStore,updateCard,targetS
       {targetScore!==null&&<div><small>GESCHÄTZTE ZIELCHANCE*</small><strong>{lineup.targetProbability===null?"—":`${Math.round(lineup.targetProbability*100)} %`}</strong><small>Score-Ziel {fmt(targetScore)}</small></div>}
     </div>
     <section className="lineup-assistant" aria-label="Smart Lineup Assistant">
-      <div className="assistant-heading"><div className="assistant-symbol" aria-hidden="true">✦</div><div><span className="section-kicker">V1.9 / LINEUP INTELLIGENCE</span><h3>Dein Smart Lineup Assistant</h3><p>Prüft nur deine tatsächliche Auswahl und die geladenen Modelldaten. Keine automatische Änderung.</p></div><span className="assistant-counter">{lineup.picks.length} / 5</span></div>
+      <div className="assistant-heading"><div className="assistant-symbol" aria-hidden="true">✦</div><div><span className="section-kicker">V2.1 / LINEUP DOCTOR</span><h3>Dein Lineup Doctor</h3><p>Prüft Regelkonformität, Datenqualität und Chancen auf risikoärmere oder punktestärkere Alternativen. Änderungen nur auf deinen Klick.</p></div><span className="assistant-counter">{lineup.picks.length} / 5</span></div>
       <div className="assistant-findings">{findings.map(item=><div className={`assistant-finding tone-${item.tone}`} key={item.id}><span aria-hidden="true">{item.tone==="success"?"✓":item.tone==="warning"?"!":"i"}</span><div><strong>{item.title}</strong><small>{item.description}</small></div></div>)}</div>
-      {swaps.length>0 && lineup.valid && <div className="assistant-highlight"><div><small>BESTER OPTIONALER WECHSEL</small><strong>{swaps[0].fromName} → {swaps[0].toName}</strong><span>Prognose vorher {fmt(lineup.projectedScore)} · nachher {fmt(swaps[0].newProjectedTotal)} Pkt. {sport==="nba"?`· ${fmt(swaps[0].newStarsUsed)} / 16 ★`:""}</span></div><span className="assistant-gain">+{fmt(swaps[0].gain)}</span></div>}
+      <div className="doctor-diagnostics" aria-label="Lineup Doctor Detailanalyse">
+        <div className="doctor-status-row"><span className={`doctor-state doctor-${doctor.status}`}>{doctor.status==="ready"?"✓ UNAUFFÄLLIG":doctor.status==="attention"?"! RISIKOHINWEISE":doctor.status==="invalid"?"! REGELPRÜFUNG":"○ UNVOLLSTÄNDIG"}</span><strong>{doctor.verified} / {doctor.checks} ausgewählte Spieler mit brauchbarer Score-Grundlage und mindestens 65 % geschätzter Einsatzchance</strong></div>
+        {doctor.issues.length>0&&<details className="doctor-issue-details"><summary>{doctor.issues.length} detaillierte Diagnosehinweise anzeigen</summary>{doctor.issues.map(issue=><div key={issue.id} className={`doctor-issue issue-${issue.severity}`}><strong>{issue.title}</strong><span>{issue.description}</span></div>)}</details>}
+        <div className="doctor-swap-title"><div><span className="section-kicker">EMPFOHLENE ALTERNATIVEN</span><h4>{doctor.swaps.length?`${doctor.swaps.length} geprüfte Wechselideen`:"Noch keine zulässigen Wechsel gefunden"}</h4></div><label><input type="checkbox" checked={swapOwnedOnly} onChange={e=>setSwapOwnedOnly(e.target.checked)}/> Nur meine Karten</label></div>
+        {doctor.swaps.length ? <div className="doctor-recommendations">{doctor.swaps.map((swap,index)=><article className="doctor-recommendation" key={`${swap.slotIndex}-${swap.toId}`}>
+          <div className="doctor-swap-top"><span>#{index+1} · {sport==="nba"?`Karte ${swap.slotIndex+1}`:names[slots[swap.slotIndex]]}</span><span className={`doctor-kind kind-${swap.kind}`}>{swap.kind==="repair"?"REGEL-FIX":swap.kind==="safer"?"RISIKO SENKEN":"SCORE BOOST"}</span></div>
+          <div className="doctor-pair"><span>{swap.fromName}</span><b aria-hidden="true">→</b><strong>{swap.toName}</strong></div>
+          <p>{swap.reason} · {swap.toTeam}{!swap.owned?" · Kartenbesitz nicht bestätigt":""}</p>
+          <div className="doctor-comparison"><div><small>VORHER</small><strong>{fmt(swap.projectedBefore)}</strong></div><div><small>NACHHER</small><strong>{fmt(swap.projectedAfter)}</strong></div><div><small>DIFFERENZ</small><strong className={swap.delta>=0?"doctor-positive":"doctor-negative"}>{swap.delta>=0?"+":""}{fmt(swap.delta)}</strong></div></div>
+          {sport==="nba"&&<span className="doctor-stars">★ {fmt(swap.starsBefore)} → {fmt(swap.starsAfter)} / 16 Sterne · Regeln erneut validiert</span>}
+          <button type="button" onClick={()=>{setSelection(old=>{if(old[swap.slotIndex]!==swap.fromId)return old;const next=[...old];next[swap.slotIndex]=swap.toId;return next;});setMessage(`Wechsel zu ${swap.toName} übernommen. Prüfe Kartenbesitz und endgültige Sorare-Spielberechtigung.`);}}>Diesen Wechsel übernehmen ↗</button>
+        </article>)}</div> : <p className="doctor-empty">{lineup.complete?"Keine passende 1-zu-1-Alternative in den geladenen Spielern. Fehlende Sterne, Ligen oder Karten können Kandidaten ausschließen.":"Besetze zunächst alle fünf Slots. Danach prüft der Doctor vollständige Wechsel auf Sternelimit, Position und Duplikate."}</p>}
+        <p className="doctor-caveat">Sämtliche Hinweise sind Modellschätzungen. Neue Spieler werden niemals automatisch eingesetzt. Vor dem Arcade-Lock Kartentier, Einsatz und offizielle Sorare-Regeln prüfen.</p>
+      </div>
       {targetScore!==null && targetScore>0 && <div className="assistant-target"><div><span>Fortschritt zum gewählten Ziel</span><strong>{fmt(lineup.projectedScore)} / {fmt(targetScore)}</strong></div><div className="assistant-progress"><span style={{width:`${Math.min(100,Math.max(0,lineup.projectedScore/targetScore*100))}%`}}/></div><small>Nur ein Vergleich des Modell-Erwartungswertes mit dem Ziel, keine Erfolgsgarantie.</small></div>}
     </section>
     {lineup.complete && <div className="manual-health" aria-label="Datenqualität deiner Aufstellung">

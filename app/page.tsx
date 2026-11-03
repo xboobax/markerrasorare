@@ -5,6 +5,7 @@ import { FOOTBALL_LEAGUES, isFootballLeague } from "@/lib/leagues";
 import {getAutomaticMatchupData} from "@/lib/auto-matchups";
 import {getNbaGameweekSchedule} from "@/lib/nba-gameweek-feed";
 import type {ScheduleData} from "@/lib/gameweek-center";
+import type {FetchSummary} from "@/lib/data-health";
 
 export const revalidate = 300;
 export const maxDuration = 60;
@@ -21,6 +22,7 @@ export default async function Page({ searchParams }: Props) {
   let team = searchParams.team ?? "";
   let info = "";
   let error = "";
+  let fetchSummary: FetchSummary={scopeTeams:0,failedTeams:0,incompleteTeams:0,noScoreTeams:0,generatedAt:""};
 
   try {
     clubs = sport === "football" ? await getFootballClubs() : await getNbaTeams();
@@ -37,7 +39,9 @@ export default async function Page({ searchParams }: Props) {
     // Ignore invalid team parameters instead of silently reporting a false zero-player result.
     if (team && !shownClubs.some(c => c.slug === team)) team = "";
     const scope = team ? shownClubs.filter(c => c.slug === team) : shownClubs;
+    fetchSummary.scopeTeams=scope.length;
     const response = await getPlayers(sport, scope);
+    fetchSummary={...fetchSummary,failedTeams:response.failed,incompleteTeams:response.incomplete,noScoreTeams:response.noScoreFields};
     players = response.players;
     info = `${players.length} aktive Sorare-Kaderspieler geladen · ${scope.length - response.failed} von ${scope.length} Teams erfolgreich.`;
     if (response.incomplete) info += ` ${response.incomplete} Kader nur teilweise geladen (Pagination nicht vollständig verfügbar).`;
@@ -51,8 +55,10 @@ export default async function Page({ searchParams }: Props) {
     }
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
+    fetchSummary.error=error;
   }
 
+  fetchSummary.generatedAt=new Date().toISOString();
   const projected = players.map(forecast).sort((a,b)=>b.weighted-a.weighted);
   // Optional schedule lives beside the established matchup provider. It cannot
   // invalidate Sorare player scores or the core page if BALLDONTLIE is down.
@@ -71,5 +77,6 @@ export default async function Page({ searchParams }: Props) {
     error={error}
     automaticMatchups={automaticMatchups}
     nbaSchedule={nbaSchedule}
+    fetchSummary={fetchSummary}
   />;
 }
