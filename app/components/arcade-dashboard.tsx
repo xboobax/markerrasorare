@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import ManualLineup from "@/app/components/manual-lineup";
+import BuilderWorkspace from "@/app/components/builder-workspace";
 import GameweekCenter from "@/app/components/gameweek-center";
 import HiddenGems from "@/app/components/hidden-gems";
 import DataHealthCenter from "@/app/components/data-health-center";
@@ -586,9 +586,9 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
         <HiddenGems sport={sport} players={players} cardStore={effectiveCardStore} watchlist={watchlist}
           onOpenPlayer={setSelectedPlayerId} onAddPlayer={queueManualPlayer} onToggleFavorite={toggleFavorite}/>
 
-        <section className="two-column">
+        <section className="two-column builder-zone-v23">
           <div className="panel builder-panel" id="lineup-builder">
-            <div className="section-top"><div><span className="section-kicker">04 / LINEUP STUDIO</span><h2>Arcade Lineup Builder</h2></div><span className="live-pill">5 POSITIONEN</span></div>
+            <div className="section-top"><div><span className="section-kicker">04 / LINEUP STUDIO</span><h2>Arcade Lineup Workspace</h2></div><span className="live-pill">5 POSITIONEN</span></div>
             <div className="builder-mode-tabs" role="group" aria-label="Lineup Builder Modus">
               <button type="button" className={builderMode === "manual" ? "active" : ""} aria-pressed={builderMode === "manual"} onClick={() => setBuilderMode("manual")}>✋ Selbst aufstellen</button>
               <button type="button" className={builderMode === "automatic" ? "active" : ""} aria-pressed={builderMode === "automatic"} onClick={() => setBuilderMode("automatic")}>✦ Automatisch optimieren</button>
@@ -598,10 +598,11 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
               <input id="manual-target" type="number" min="1" step="1" inputMode="numeric" value={target} placeholder="Score-Ziel eingeben" onChange={e=>setTarget(e.target.value)}/>
               {sport === "football" && <><button type="button" onClick={()=>setTarget("180")}>180 Pkt.</button><button type="button" onClick={()=>setTarget("360")}>360 Pkt.</button></>}
             </div>}
-            {builderMode === "manual" ? <ManualLineup sport={sport} players={players} cardStore={effectiveCardStore}
+            {builderMode === "manual" ? <BuilderWorkspace sport={sport} players={players} cardStore={effectiveCardStore}
               updateCard={updateCard} targetScore={validTarget ? totalTarget : null}
               onOpenProfile={setSelectedPlayerId}
-              onSavePredictions={items => items.forEach(saveTracked)} requestedPlayer={manualRequest}/> : <>
+              onSavePredictions={items => items.forEach(saveTracked)} requestedPlayer={manualRequest}
+              favorites={watchlist} onToggleFavorite={toggleFavorite}/> : <>
             <div className="mode-switch" role="group" aria-label="Spielerauswahl">
               <button type="button" className={!ownedOnly ? "active" : ""} onClick={() => {setOwnedOnly(false); setActiveResult(0);setIntelligencePickKey(null);}}>Alle Spieler · theoretisch</button>
               <button type="button" className={ownedOnly ? "active" : ""} onClick={() => {setOwnedOnly(true); setActiveResult(0);setIntelligencePickKey(null);}}>Nur meine Karten</button>

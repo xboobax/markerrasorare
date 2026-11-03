@@ -1,3 +1,11 @@
+# Markerras Sorare Helper V2.3 – Builder Workspace Redesign
+
+**Aktuelle Version:** V2.3 baut den manuellen Lineup Builder nach vier Nutzer-Screenshots neu: mehrere Teams links, umfangreicher Spielerpool rechts, kompakte NBA- und Fußball-Spielerkarten, Direktauswahl, Filter, Auto-Fill, Undo, lokaler Team-Speicher und Dark-Mode-Politur. V2.2 Arcade Intelligence bleibt über den zweiten Builder-Tab vorhanden. **Sorare-Datenabruf und offizieller NBA-Sterne-Sync bleiben unverändert.**
+
+**Update-Anleitung:** [`UPDATE_V2_3_DE.md`](UPDATE_V2_3_DE.md). Es werden keine Gameweek-Termine oder offiziellen Einsatzchancen erfunden; die angezeigten Prognosewerte sind Modellschätzungen.
+
+---
+
 # Markerras Sorare Helper V2.2 – Arcade Lineup Intelligence
 
 **Aktuelle Version:** V2.2 integriert einen neuen Strategie-Vergleich mit bis zu vier verschiedenen, gültigen Aufstellungen (Safety First, Best Projection, High Ceiling, Arcade Target), Risikoindex, Floor/Ceiling, heuristischer Zielchance und einer direkten Vorschau im automatischen Builder. NBA nutzt weiterhin die offiziellen Sterne aus V2.1.1. Die bestehenden Sorare- und NBA-Sterne-Abfragen wurden **nicht verändert**. Anleitung: [`UPDATE_V2_2_DE.md`](UPDATE_V2_2_DE.md).

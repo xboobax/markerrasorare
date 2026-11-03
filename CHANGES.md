@@ -1,3 +1,9 @@
+# V2.3 – Builder Workspace Redesign (November 2026)
+
+Vier vom Nutzer gelieferte Screenshots als strukturelle Vorlage: NBA- und Fußball-Karten als kompakte Team-Slots; bis zu sechs Teams links; Spielerdatenbank mit Suchfeld, Sortierung, Bonus, Sorare-NBA-Sternen und Formdarstellung rechts. Direkt hinzufügen, explizit tauschen, duplizieren, leeren, Undo, Auto-Fill, Team-Ziele und lokales Speichern mit Migration der V2.2-Presets. Lineup Doctor inklusive interaktiver geprüfter Wechselvorschläge. Komplettes Obsidian-Dark-Mode-Workspace-Design. Die bisherigen Score-/Sterne-API-Module und Optimierungsregeln wurden nicht verändert. Siehe `UPDATE_V2_3_DE.md`.
+
+---
+
 # V2.2 – Arcade Lineup Intelligence (November 2026)
 
 Neu: Unabhängiger, regelkonformer Vergleich mehrerer optimierter fünf-Spieler-Aufstellungen; Safety First (Floor), Best Projection (erwarteter Score), High Ceiling (Ceiling) und Arcade Target (höchste unkalibrierte Zielchance unter den erzeugten Kandidaten). Bei identischen Ergebnissen werden keine Scheinalternativen gezeigt. Risikoindex auf Grundlage der vorhandenen Einsatz-, Daten- und Formstreuungswerte; direkte Vorschau der Auswahl im automatischen Builder. Erweiterter Obsidian-Dark-Mode-Bereich mit responsiven Strategiekarten. Kein neuer API-Endpunkt, kein neuer API-Key, keine Änderungen an Sorare-Scores oder NBA-Stern-Sync.
