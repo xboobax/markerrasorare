@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import ManualLineup from "@/app/components/manual-lineup";
+import GameweekCenter from "@/app/components/gameweek-center";
+import type {ScheduleData} from "@/lib/gameweek-center";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Forecast, Sport } from "@/lib/model";
 import type { Strategy } from "@/lib/arcade";
@@ -36,6 +38,7 @@ type Props = {
   info: string;
   error: string;
   automaticMatchups: AutomaticMatchupData;
+  nbaSchedule: ScheduleData;
 };
 
 const POS_LABEL: Record<string, string> = {
@@ -63,7 +66,7 @@ function PlayerAvatar({player, small = false}: {player: Forecast; small?: boolea
   </span>;
 }
 
-export default function ArcadeDashboard({sport, league, leagues, team, clubs, players: basePlayers, info, error, automaticMatchups}: Props) {
+export default function ArcadeDashboard({sport, league, leagues, team, clubs, players: basePlayers, info, error, automaticMatchups, nbaSchedule}: Props) {
   const [search, setSearch] = useState("");
   const searchRef = useRef<HTMLInputElement|null>(null);
   const [watchlist, setWatchlist] = useState<string[]>([]);
@@ -131,6 +134,14 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
     document.getElementById("lineup-builder")?.scrollIntoView({behavior:"smooth",block:"start"});
   };
   const toggleFavorite=(id:string)=>setWatchlist(prev=>toggleWatchlist(prev,id));
+  const exploreGameweekTeam=(name:string)=>{
+    setSearch(name);setPosition("all");setShowCount(70);
+    document.getElementById("spieler")?.scrollIntoView({behavior:"smooth",block:"start"});
+  };
+  const applyArcadeGoal=(goal:number)=>{
+    setTarget(String(goal));setStrategy("target");setBuilderMode("manual");
+    document.getElementById("lineup-builder")?.scrollIntoView({behavior:"smooth",block:"start"});
+  };
 
   // A player entry is not proof of owning a specific Sorare card.
   // Browser-side settings are a temporary bridge until collection API sync exists.
@@ -414,20 +425,20 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
       <header className="app-topbar">
         <Link href="/?sport=football" className="brand" aria-label="Markerras Sorare Helper Startseite">
           <span className="brand-logo">M<span>◆</span></span>
-          <span className="brand-text"><strong>MARKERRAS SORARE HELPER</strong><small>ARCADE INTELLIGENCE · V1.9</small></span>
+          <span className="brand-text"><strong>MARKERRAS SORARE HELPER</strong><small>ARCADE INTELLIGENCE · V2.0</small></span>
         </Link>
         <nav className="sport-switch" aria-label="Sportart wählen">
           <Link href="/?sport=football" aria-current={sport === "football" ? "page" : undefined}>⚽ Football</Link>
           <Link href="/?sport=nba" aria-current={sport === "nba" ? "page" : undefined}>🏀 NBA</Link>
         </nav>
-        <nav className="quick-nav" aria-label="Schnellnavigation"><a href="#lineup-builder">Lineup Studio</a><a href="#spieler">Spielersuche</a><a href="#forecast-lab">Forecast Lab</a></nav>
+        <nav className="quick-nav" aria-label="Schnellnavigation"><a href="#gameweek-center">Gameweek Center</a><a href="#lineup-builder">Lineup Studio</a><a href="#spieler">Spielersuche</a><a href="#forecast-lab">Forecast Lab</a></nav>
         <span className="topbar-pill"><span className="status-dot" style={error ? {background: "#d9a06f"} : undefined}/>{error ? "API nicht erreichbar" : players.length ? "Sorare-Daten geladen" : "Sorare Datenadapter"}</span>
       </header>
 
       <main className="dashboard-main">
         <section className="hero-section">
           <div>
-            <div className="eyebrow"><span className="eyebrow-line"/> GAMEWEEK RESEARCH CENTER</div>
+            <div className="eyebrow"><span className="eyebrow-line"/> GAMEWEEK COMMAND CENTER</div>
             <h1>Das perfekte <em>{title}</em> Lineup.</h1>
             <p>Spieler analysieren. Karten bewerten. Aufstellungen mit nachvollziehbaren Prognosen optimieren.</p>
             {sport === "football" && <p className="league-focus">Nur Bundesliga · LaLiga · Ligue 1 · Premier League</p>}
@@ -464,8 +475,12 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
           )}
         </section>
 
+        <GameweekCenter sport={sport} players={players} cardStore={cardStore} nbaSchedule={nbaSchedule}
+          currentTarget={validTarget?totalTarget:null} onApplyTarget={applyArcadeGoal}
+          onOpenPlayer={setSelectedPlayerId} onAddPlayer={queueManualPlayer} onExploreTeam={exploreGameweekTeam}/>
+
         <section className="panel forecast-lab" id="forecast-lab">
-          <div className="section-top"><div><span className="section-kicker">02 / FORECAST LAB · VERSION 1.8</span><h2>Prognosen, die sich beweisen müssen.</h2></div><span className="lab-stage">EXPERIMENTELL · NICHT VALIDIERT</span></div>
+          <div className="section-top"><div><span className="section-kicker">03 / FORECAST LAB · VERSION 1.8</span><h2>Prognosen, die sich beweisen müssen.</h2></div><span className="lab-stage">EXPERIMENTELL · NICHT VALIDIERT</span></div>
           <p className="lab-intro">Das neue Modell gewichtet reale Formdaten robuster, dämpft Ausreißer und berücksichtigt Nicht-Einsatz-Risiken. <strong>Die bestehende V1.7.2-Prognose bleibt zum Vergleich gespeichert.</strong> Verbesserungen werden erst nach echten Spielergebnissen bewertet.</p>
           <div className="lab-model-switch" role="group" aria-label="Prognosemodell wählen">
             <button type="button" aria-pressed={modelMode==="v18"} className={modelMode==="v18"?"active":""} onClick={()=>setModelMode("v18")}>◆ V1.8 · Experiment</button>
@@ -480,7 +495,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
         </section>
 
         <section className="panel matchup-panel" id="matchups">
-          <div className="section-top"><div><span className="section-kicker">03 / MATCHUP INTELLIGENCE</span><h2>Gegneranalyse & Top-Matchups</h2></div><span className="record-count">{ratedOpponents} von {opponents.length} Gegnern bewertet</span></div>
+          <div className="section-top"><div><span className="section-kicker">04 / MATCHUP INTELLIGENCE</span><h2>Gegneranalyse & Top-Matchups</h2></div><span className="record-count">{ratedOpponents} von {opponents.length} Gegnern bewertet</span></div>
           <p className="matchup-disclaimer">Die kommenden Gegner stammen aus Sorare-Fixtures, soweit verfügbar. {automaticMatchups.source && !automaticMatchups.error ? <><strong>Automatische Defensivdaten:</strong> {automaticMatchups.source}, Saison {automaticMatchups.season}. Die 1–5-Einstufung ist eine relative Einteilung nach Gegentoren bzw. Gegenpunkten, keine positionsbezogene Analyse. </> : <><strong>Automatische Defensivdaten nicht eingerichtet.</strong> Hinterlege {sport === "nba" ? "BALLDONTLIE_API_KEY" : "API_FOOTBALL_KEY"} als Vercel-Umgebungsvariable, um verfügbare echte Gegnerstatistiken zu laden. </>}{automaticMatchups.error && <>Feed-Fehler: {automaticMatchups.error}. </>}Du kannst die Bewertung unten jederzeit manuell überschreiben. Ohne zuverlässige Zuordnung bleibt der Gegner neutral.</p>
           <div className="opponent-grid">
             {opponents.map(([name, amount]) => <label className="opponent-rating" key={name}>

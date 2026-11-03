@@ -3,6 +3,8 @@ import { forecast, type Player, type Sport } from "@/lib/model";
 import ArcadeDashboard from "@/app/components/arcade-dashboard";
 import { FOOTBALL_LEAGUES, isFootballLeague } from "@/lib/leagues";
 import {getAutomaticMatchupData} from "@/lib/auto-matchups";
+import {getNbaGameweekSchedule} from "@/lib/nba-gameweek-feed";
+import type {ScheduleData} from "@/lib/gameweek-center";
 
 export const revalidate = 300;
 export const maxDuration = 60;
@@ -52,7 +54,12 @@ export default async function Page({ searchParams }: Props) {
   }
 
   const projected = players.map(forecast).sort((a,b)=>b.weighted-a.weighted);
-  const automaticMatchups = await getAutomaticMatchupData(sport);
+  // Optional schedule lives beside the established matchup provider. It cannot
+  // invalidate Sorare player scores or the core page if BALLDONTLIE is down.
+  const [automaticMatchups,nbaSchedule] = await Promise.all([
+    getAutomaticMatchupData(sport),
+    sport === "nba" ? getNbaGameweekSchedule() : Promise.resolve<ScheduleData>({fixtures:[],status:"not-configured",source:null}),
+  ]);
   return <ArcadeDashboard
     sport={sport}
     league={league}
@@ -63,5 +70,6 @@ export default async function Page({ searchParams }: Props) {
     info={info}
     error={error}
     automaticMatchups={automaticMatchups}
+    nbaSchedule={nbaSchedule}
   />;
 }

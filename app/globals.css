@@ -650,3 +650,87 @@ body { background:#090d17; color:var(--ink); -webkit-font-smoothing:antialiased;
 .search-suggestion .suggestion-add {flex-shrink:0;width:26px;height:26px;padding:0;border:1px solid #638d83;border-radius:7px;background:#255149;color:#bcffe7;font-size:18px;}
 @media(max-width:1000px){.search-suggestions-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
 @media(max-width:560px){.search-suggestions-grid{grid-template-columns:1fr;}.search-suggestions-heading{align-items:flex-start;flex-direction:column;gap:3px;}}
+
+/* ────────────────────────────────────────────────────────────────
+   V2.0 · GAMEWEEK & ARCADE CENTER — Obsidian Command interface
+   All selectors are namespaced so V1.9 components remain untouched.
+   ──────────────────────────────────────────────────────────────── */
+.gw-center { position:relative; overflow:hidden; margin:20px 0; padding:26px; border-color:#454060;
+  background:radial-gradient(ellipse 65% 45% at 98% 0%,rgba(137,105,244,.13),transparent 70%),
+    linear-gradient(135deg,#151c2d,#101522 65%,#121625); box-shadow:0 14px 45px #0002; }
+.gw-center:before {content:"";position:absolute;inset:0 0 auto 0;height:2px;background:linear-gradient(90deg,transparent,#987bff,#72e1cc,transparent);opacity:.68;}
+.gw-heading {display:flex;justify-content:space-between;align-items:flex-start;gap:16px;position:relative;margin:0 0 24px;}
+.gw-heading h2 {font-size:clamp(24px,2.3vw,33px);letter-spacing:-.045em;font-weight:850;margin:7px 0 2px;}
+.gw-heading p {color:#abb6d0;font-size:12px;margin:5px 0 0;}
+.gw-version {color:#d8c9ff;border:1px solid #63528c;background:#35275099;white-space:nowrap;border-radius:40px;padding:8px 12px;font-size:10px;letter-spacing:.13em;font-weight:850;}
+.gw-version span {color:#68dac2;}
+.gw-top-stats {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:0 0 20px;}
+.gw-top-stats>div {border:1px solid #383953;background:linear-gradient(145deg,#242139,#151b2b);border-radius:13px;padding:16px 17px;min-width:0;display:flex;flex-direction:column;gap:3px;}
+.gw-top-stats small,.gw-mini-label {color:#b2a1e9;font-size:9px;font-weight:850;letter-spacing:.18em;}
+.gw-top-stats strong {font-size:clamp(21px,2vw,29px);letter-spacing:-.05em;line-height:1.2;}
+.gw-top-stats span {font-size:10px;color:#93a2b9;line-height:1.5;}
+.gw-columns {display:grid;grid-template-columns:minmax(0,1.65fr) minmax(290px,.85fr);gap:16px;align-items:start;}
+.gw-column-main {display:flex;flex-direction:column;gap:16px;min-width:0;}
+.gw-card {border:1px solid #363c55;background:linear-gradient(145deg,#131b2b,#101625);border-radius:16px;padding:21px;min-width:0;}
+.gw-card-header {display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin:0 0 15px;}
+.gw-card-header h3 {font-size:17px;font-weight:800;letter-spacing:-.025em;margin:5px 0 0;}
+.gw-filter {border:1px solid #373952;background:#0c1220;padding:3px;display:flex;gap:2px;border-radius:9px;flex-shrink:0;}
+.gw-filter button {background:transparent;color:#93a0b9;border:none;padding:7px 9px;border-radius:6px;font-size:11px;font-weight:800;}
+.gw-filter button.is-active {background:#5b4689;color:white;box-shadow:0 2px 10px #0003;}
+.gw-source {font-size:11px!important;color:#98a6be!important;line-height:1.6;margin:0 0 14px!important;max-width:none!important;}
+.gw-schedule {max-height:485px;overflow:auto;scrollbar-color:#4e456d transparent;scrollbar-width:thin;padding-right:4px;}
+.gw-date-group {margin:0 0 17px;}
+.gw-date-label {display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #2d3750;padding-bottom:7px;margin-bottom:5px;}
+.gw-date-label>span {font-size:11px;color:#d4c8ee;font-weight:850;text-transform:uppercase;letter-spacing:.09em;}
+.gw-date-label small {color:#8496b0;font-size:10px;}
+.gw-fixture {border:1px solid transparent;border-radius:9px;width:100%;display:flex;align-items:center;gap:12px;background:transparent;color:#e6e9f6;padding:10px 11px;text-align:left;transition:background .18s,border-color .18s;}
+.gw-fixture:hover,.gw-fixture.is-selected {background:#28233f;border-color:#65558e;}
+.gw-fixture:focus-visible {outline:2px solid #9980ff;outline-offset:1px;}
+.gw-fixture-icon {width:33px;height:33px;flex-shrink:0;display:grid;place-items:center;border:1px solid #443e66;background:#292640;border-radius:9px;color:#c5abfd;}
+.gw-fixture-teams {display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:9px;flex:1;min-width:0;}
+.gw-fixture-teams strong {font-size:11px;line-height:1.35;font-weight:750;overflow-wrap:anywhere;}
+.gw-fixture-teams small {font-size:9px;color:#8b96af;font-weight:800;}
+.gw-fixture-side {flex-shrink:0;font-size:10px;color:#97a7c5;white-space:nowrap;}
+.gw-fixture-side span {color:#baabf7;margin-left:5px;font-size:16px;}
+.gw-empty {border:1px dashed #544873;background:#211d35;border-radius:12px;padding:26px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:7px;}
+.gw-empty>span {font-size:27px;color:#ad91e8;}.gw-empty strong {font-size:12px;color:#ddd4f1;}
+.gw-empty p {margin:0!important;font-size:11px!important;color:#a9acc5!important;max-width:540px!important;}
+.gw-game-detail {border:1px solid #66568d;border-radius:12px;padding:15px;background:linear-gradient(145deg,#26213e,#161b30);margin-top:12px;}
+.gw-game-detail-head {display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px;}
+.gw-game-detail-head h4 {font-size:14px;margin:3px 0;}.gw-game-detail-head small {color:#9facbd;font-size:11px;}
+.gw-close {border:1px solid #534d70;background:#211c33;color:#cfc7ec;border-radius:8px;width:28px;height:28px;font-size:19px;}
+.gw-game-players {display:flex;flex-direction:column;gap:5px;}
+.gw-game-player {display:flex;align-items:center;gap:9px;padding:7px 5px;border-bottom:1px solid #35314e;}
+.gw-player-image {width:35px;height:35px;flex-shrink:0;object-fit:cover;object-position:top;background:#342b50;border-radius:9px;border:1px solid #6b5c91;}
+.gw-player-fallback {display:grid;place-items:center;font-weight:800;color:#c3b4e1;font-size:10px;}
+.gw-game-name {min-width:0;flex:1;display:flex;flex-direction:column;align-items:flex-start;text-align:left;gap:2px;border:0;background:transparent;color:#ece8fd;}
+.gw-game-name strong {font-size:11px;}.gw-game-name span {color:#9faabd;font-size:10px;}
+.gw-mini-add {width:30px;height:30px;border:1px solid #6d559f;background:#413061;color:#f2eaff;border-radius:8px;font-weight:850;font-size:18px;}
+.gw-detail-actions {display:flex;gap:8px;flex-wrap:wrap;margin-top:13px;}
+.gw-detail-actions button {font-size:10px;color:#d7c8ee;border:1px solid #54476d;background:#271f3c;border-radius:8px;padding:8px 10px;}
+.gw-collection-glyph {display:grid;place-items:center;color:#b4a0f0;background:#27213d;border:1px solid #5e508a;width:31px;height:31px;border-radius:9px;font-size:20px;}
+.gw-collection-stats {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-bottom:14px;}
+.gw-collection-stats>div {background:#1e2337;border:1px solid #383c54;border-radius:11px;padding:12px;display:flex;flex-direction:column;gap:4px;}
+.gw-collection-stats strong {font-size:22px;line-height:1.15;}.gw-collection-stats small {font-size:10px;color:#9dabc1;}
+.gw-collection-warning {font-size:11px!important;color:#f0be92!important;margin-bottom:12px!important;}
+.gw-actions {display:flex;gap:10px;flex-wrap:wrap;}
+.gw-actions a {flex:1;border:1px solid #544675;border-radius:9px;background:#2b2341;padding:10px 12px;color:#ded5fb;font-size:11px;font-weight:700;display:flex;justify-content:space-between;gap:10px;}
+.gw-actions a:hover {background:#382a58;}.gw-actions a span {color:#7be6ca;}
+.gw-board {background:radial-gradient(ellipse at 70% 3%,#3d2e6488,transparent 60%),linear-gradient(155deg,#1d1c33,#111624);border-color:#574875;}
+.gw-level-mark {font-size:11px;font-weight:900;letter-spacing:.08em;border:1px solid #8063a8;background:#41305d;color:#e7c8ff;padding:7px 10px;border-radius:9px;white-space:nowrap;}
+.gw-level-hero {padding:25px 12px 21px;text-align:center;border:1px solid #47395f;background:radial-gradient(circle at center,#392d58,#231d38 70%);border-radius:12px;margin:0 0 19px;}
+.gw-level-hero>span {color:#c5b3ef;letter-spacing:.22em;font-size:10px;font-weight:850;}.gw-level-hero strong {font-size:clamp(37px,4vw,51px);display:block;letter-spacing:-.065em;color:#f9eaff;margin:4px 0;line-height:1.1;}
+.gw-level-hero strong small {font-size:13px;letter-spacing:.07em;color:#9f97b4;}.gw-level-hero p {font-size:11px!important;color:#b4abc7!important;margin:8px 0 0!important;}
+.gw-lives-head {display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#b7c1d5;margin-bottom:8px;}.gw-lives-head strong {color:#e5def2;}
+.gw-lives {display:flex;gap:8px;margin-bottom:20px;}.gw-lives span {flex:1;text-align:center;padding:8px;border:1px solid #3c3b55;border-radius:9px;background:#151827;font-size:18px;color:#525164;}.gw-lives span.active {border-color:#865472;background:#482e47;color:#f6a7ca;box-shadow:inset 0 0 20px #d65d7815;}
+.gw-goal-edit label {display:block;color:#aeb5c9;font-size:11px;margin-bottom:7px;}.gw-goal-edit>div {display:flex;gap:7px;}.gw-goal-edit input {width:100%;min-width:0;background:#0f1523;border:1px solid #45435d;border-radius:9px;padding:10px 12px;color:#fff;}
+.gw-goal-edit button {border:1px solid #6c559b;border-radius:9px;background:#372958;color:#f6efff;padding:9px 12px;font-size:11px;font-weight:800;}.gw-goal-edit button:disabled {opacity:.5;cursor:not-allowed;}
+.gw-primary {display:flex;width:100%;justify-content:space-between;gap:10px;background:linear-gradient(95deg,#7656d6,#5b46c6);color:#fff;border:none;border-radius:10px;font-size:11px;font-weight:850;padding:13px 14px;margin-top:13px;box-shadow:0 6px 20px #6b53bf44;}.gw-primary:disabled {opacity:.45;cursor:not-allowed;}
+.gw-board-actions {display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:19px;}.gw-board-actions button {border-radius:9px;padding:11px 8px;font-size:11px;font-weight:800;}.gw-success {border:1px solid #367665;background:#17433c;color:#8af1d3;}.gw-miss {border:1px solid #82536a;background:#43263b;color:#f0aec7;}
+.gw-board-footer {display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:15px;}.gw-board-footer button {background:transparent;border:0;padding:4px 0;color:#c8b5ec;font-size:11px;text-decoration:underline;text-underline-offset:3px;}.gw-board-footer button:disabled {color:#75758e;text-decoration:none;cursor:not-allowed;}.gw-board-footer>span {color:#8b94ab;font-size:10px;}
+.gw-message {font-size:11px!important;color:#b9edd9!important;border:1px solid #426c65;background:#1b3e3866;border-radius:8px;padding:10px!important;margin:12px 0!important;}
+.gw-history {border-top:1px solid #483d5d;margin-top:17px;padding-top:14px;}.gw-history>div {display:flex;justify-content:space-between;gap:9px;padding:6px 0;border-bottom:1px solid #363449;color:#e8e4f2;font-size:11px;}.gw-history small {color:#9eabc2;}
+.gw-board-note {font-size:10px!important;line-height:1.65!important;color:#abb3c6!important;margin:19px 0 0!important;}
+@media (max-width:1050px) {.gw-columns{grid-template-columns:1fr}.gw-board{order:-1}.gw-top-stats{grid-template-columns:repeat(2,minmax(0,1fr));}}
+@media (max-width:640px) {.gw-center{padding:15px}.gw-heading{flex-direction:column}.gw-top-stats{gap:7px}.gw-top-stats>div{padding:12px}.gw-card{padding:14px}.gw-fixture-teams{gap:5px}.gw-fixture{padding:10px 5px;gap:7px}.gw-fixture-icon{display:none}.gw-fixture-side{font-size:0}.gw-fixture-side span{font-size:15px}.gw-collection-stats{gap:6px}.gw-collection-stats>div{padding:9px 7px}.gw-game-detail{padding:11px}.gw-actions{flex-direction:column}.gw-board-actions{grid-template-columns:1fr 1fr}.gw-version{white-space:normal}}
+@media (prefers-reduced-motion:reduce) {.gw-fixture{transition:none}}

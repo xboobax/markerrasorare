@@ -99,3 +99,9 @@ Du kannst fünf Spieler jetzt selbst für die vorgesehenen Positionen aufstellen
 - Optional Tauschvorschläge nur für manuell markierte eigene Karten.
 
 Vollständige Installations- und Testhinweise: [UPDATE_V1_6_DE.md](UPDATE_V1_6_DE.md).
+
+## Neu in V2.0: Gameweek & Arcade Center
+
+Das neue `GameweekCenter` kombiniert eine Übersicht kommender Begegnungen (aus bereits geladenen Sorare-Fußball-Fixtures oder optional über BALLDONTLIE-NBA-Spiele), einen lokalen Arcade-Level-/Leben-Tracker, frei wählbare Score-Ziele mit Übernahme in den Lineup Builder sowie eine kompakte Übersicht eigener manuell markierter Karten. Es nimmt selbst **keine Sorare-Lineups vor** und erfindet keine Spieltermine oder offizielle Board-Level.
+
+Details und sichere Aktualisierung via GitHub Desktop: **`UPDATE_V2_0_DE.md`**.
