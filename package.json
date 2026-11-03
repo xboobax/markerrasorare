@@ -1,12 +1,12 @@
 {
   "name": "markerras-sorare-helper",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test:arcade": "tsc --target ES2020 --module commonjs --moduleResolution node --strict --skipLibCheck --outDir .test-build lib/model.ts lib/arcade.ts config/divination.ts lib/leagues.ts lib/sorare.ts lib/matchups.ts lib/target-probability.ts lib/manual-lineup.ts lib/auto-matchups.ts lib/tracking.ts lib/tracking-auto.ts tests/next-test-types.d.ts && node tests/arcade.test.js && node tests/leagues.test.js && node tests/football-clubs.test.js && node tests/v12.test.js && node tests/v13.test.js && node tests/v14.test.js && node tests/v141.test.js && node tests/manual-lineup.test.js && node tests/v16.test.js && node tests/v161-images.test.js && node tests/v162-football-schema.test.js && node tests/v17-tracking.test.js"
+    "test:arcade": "tsc --target ES2020 --module commonjs --moduleResolution node --strict --skipLibCheck --outDir .test-build lib/model.ts lib/arcade.ts config/divination.ts lib/leagues.ts lib/sorare.ts lib/matchups.ts lib/target-probability.ts lib/manual-lineup.ts lib/auto-matchups.ts lib/tracking.ts lib/tracking-auto.ts tests/next-test-types.d.ts && node tests/arcade.test.js && node tests/leagues.test.js && node tests/football-clubs.test.js && node tests/v12.test.js && node tests/v13.test.js && node tests/v14.test.js && node tests/v141.test.js && node tests/manual-lineup.test.js && node tests/v16.test.js && node tests/v161-images.test.js && node tests/v162-football-schema.test.js && node tests/v17-tracking.test.js && node tests/v171-nba-l5.test.js"
   },
   "dependencies": {
     "next": "14.2.35",

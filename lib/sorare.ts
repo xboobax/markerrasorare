@@ -58,8 +58,12 @@ const NBA_CORE = "slug displayName anyPositions avatarPictureUrl";
 const FOOT_AVERAGES = `averageL5: averageScore(type: LAST_FIVE_SO5_AVERAGE_SCORE)
   averageL10: averageScore(type: LAST_TEN_PLAYED_SO5_AVERAGE_SCORE)`;
 const FOOT_RECENT = "rawPlayerGameScores(last: 10)";
-// Keep NBA untouched in this HOTFIX; it was working in the deployed version.
-const NBA_AVERAGES = "lastFiveSo5AverageScore lastTenPlayedSo5AverageScore lastFiveSo5Appearances nextClassicFixtureProjectedScore nextDailyFixtureProjectedScore";
+// NBAPlayer does not expose the football-only rawPlayerGameScores field.
+// Keep NBA averages in the first, compact roster request. Do not request
+// optional injury/nextGame fields in this query: one unsupported field would
+// otherwise downgrade the *entire* league to name/photo-only records.
+// Source: Sorare NBAPlayer lastFiveSo5AverageScore / lastTenPlayedSo5AverageScore.
+const NBA_AVERAGES = "lastFiveSo5AverageScore lastTenPlayedSo5AverageScore";
 const FOOT_SCORING = `${FOOT_RECENT} ${FOOT_AVERAGES} lastFiveSo5Appearances nextClassicFixtureProjectedScore`;
 const TIERS: Record<Sport, string[]> = {
   football: [
@@ -72,11 +76,13 @@ const TIERS: Record<Sport, string[]> = {
     FOOT_CORE,
   ],
   nba: [
-    `${NBA_CORE} rawPlayerGameScores(last: 10) ${NBA_AVERAGES} ${GAME}`,
-    `${NBA_CORE} ${NBA_AVERAGES} ${GAME}`,
-    `${NBA_CORE} ${NBA_AVERAGES} ${GAME}`,
+    // Prefer NBA's established L5/L10 fields. Projection fields are optional;
+    // if Sorare removes one, the following tier preserves the averages.
+    `${NBA_CORE} ${NBA_AVERAGES} nextDailyFixtureProjectedScore nextClassicFixtureProjectedScore lastFiveSo5Appearances`,
+    `${NBA_CORE} ${NBA_AVERAGES} nextDailyFixtureProjectedScore`,
     `${NBA_CORE} ${NBA_AVERAGES}`,
-    `${NBA_CORE} nextClassicFixtureProjectedScore nextDailyFixtureProjectedScore`,
+    `${NBA_CORE} lastFiveSo5AverageScore`,
+    `${NBA_CORE} seasonAverage`,
     NBA_CORE,
   ],
 };
@@ -120,7 +126,8 @@ function toPlayer(n: any, club: Club, sport: Sport): Player {
     ? n.rawPlayerGameScores.filter((x: unknown): x is number => typeof x === "number" && isFinite(x))
     : [];
   const avg = raw.length ? raw.reduce((a, b) => a + b, 0) / raw.length :
-    num(n.averageL10) ?? num(n.averageL5) ?? num(n.lastTenPlayedSo5AverageScore) ?? num(n.lastFiveSo5AverageScore);
+    num(n.averageL10) ?? num(n.averageL5) ?? num(n.lastTenPlayedSo5AverageScore) ?? num(n.lastFiveSo5AverageScore)
+      ?? (sport === "nba" ? num(n.seasonAverage) : null);
   const playOdds = o
     ? Math.max(0, Math.min(1, (Number(o.starterOddsBasisPoints) + 0.6 * Number(o.substituteOddsBasisPoints)) / 10000))
     : null;
