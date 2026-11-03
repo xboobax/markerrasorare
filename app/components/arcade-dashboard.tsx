@@ -2,14 +2,15 @@
 
 import Link from "next/link";
 import ManualLineup from "@/app/components/manual-lineup";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Forecast, Sport } from "@/lib/model";
 import type { Strategy } from "@/lib/arcade";
 import { enrichForecast, matchupLabel, validDefenseRating, type OpponentRatings } from "@/lib/matchups";
 import { optimizeArcadeLineups, isValidNbaStars, type CardInput } from "@/lib/arcade";
 import { ARCADE } from "@/config/divination";
 import type { Club } from "@/lib/sorare";
-import { createTrackedPrediction, upsertTracked, setActual, trackingMetrics, type TrackedPrediction } from "@/lib/tracking";
+import { createTrackedPrediction, upsertTracked, setActual, trackingMetrics, applyOfficialResults, parseTrackingBackup, calibrationSuggestion, type TrackedPrediction } from "@/lib/tracking";
+import { pendingForAutoCheck, type AutomaticResult } from "@/lib/tracking-auto";
 import {alignOpponentNames, type AutomaticMatchupData} from "@/lib/auto-matchups";
 
 type CardSettings = {
@@ -64,6 +65,11 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const [historyError, setHistoryError] = useState(false);
   const [tracked, setTracked] = useState<TrackedPrediction[]>([]);
   const [loadedTrackingSport, setLoadedTrackingSport] = useState<Sport | null>(null);
+  const [trackingCheck, setTrackingCheck] = useState<{running:boolean;message:string}>({running:false,message:""});
+  const autoCheckAttempt = useRef<Sport|null>(null);
+  const checkingRef = useRef(false);
+  const sportRef = useRef(sport);
+  sportRef.current = sport;
   const [position, setPosition] = useState("all");
   const [sortBy, setSortBy] = useState("weighted");
   const [showCount, setShowCount] = useState(70);
@@ -127,9 +133,8 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
     setLoadedTrackingSport(null);
     try {
       const raw = localStorage.getItem(`markerras.sorare.tracking.v1.${sport}`);
-      const parsed = raw ? JSON.parse(raw) : [];
-      setTracked(Array.isArray(parsed) ? parsed.filter((v): v is TrackedPrediction =>
-        v && typeof v.key === "string" && typeof v.playerName === "string") : []);
+      const parsed: unknown = raw ? JSON.parse(raw) : [];
+      setTracked(parseTrackingBackup(parsed,sport));
     } catch {setTracked([]);}
     setLoadedTrackingSport(sport);
   }, [sport]);
@@ -138,6 +143,61 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
     try {localStorage.setItem(`markerras.sorare.tracking.v1.${sport}`, JSON.stringify(tracked));}
     catch { /* storage disabled */ }
   }, [tracked, sport, loadedTrackingSport]);
+  // Each browser visit checks a small set of prior saved fixtures once.
+  // No scores are inferred from L5/L10 or the latest player's score.
+  const checkSavedResults = async (quiet = false) => {
+    if (checkingRef.current || loadedTrackingSport !== sport) return;
+    const pending = pendingForAutoCheck(tracked).slice(0,12);
+    if (!pending.length) {
+      if (!quiet) setTrackingCheck({running:false,message:"Keine prüfbaren, offenen Spiele. Fehlende Spieltermine benötigen eine manuelle Eingabe."});
+      return;
+    }
+    checkingRef.current = true;
+    setTrackingCheck({running:true,message:`Prüfe ${pending.length} gespeicherte Prognosen bei Sorare …`});
+    try {
+      const response = await fetch("/api/tracking-results",{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({items:pending}),cache:"no-store",
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data: unknown = await response.json();
+      const payload = data as {matched?:AutomaticResult[];checked?:number;failures?:number};
+      if (!Array.isArray(payload.matched)) throw new Error("Ungültige Antwort");
+      if (sportRef.current === sport) {
+        const valid = payload.matched.filter(r => r && typeof r.key === "string" && typeof r.score === "number" &&
+          Number.isFinite(r.score) && r.score >= 0 && r.score <= 500 && typeof r.gameDate === "string");
+        setTracked(old => applyOfficialResults(old,valid));
+        const failures = Number(payload.failures ?? 0);
+        setTrackingCheck({running:false,message:`${valid.length} offizielle Ergebnisse zugeordnet · ${pending.length} Prognosen geprüft${failures ? ` · ${failures} API-Fehler (erneut versuchen)` : ""}. Nicht eindeutig zuordenbare Ergebnisse bleiben offen.`});
+      }
+    } catch {
+      if (sportRef.current === sport) setTrackingCheck({running:false,message:"Sorare-Ergebnisse aktuell nicht erreichbar. Deine gespeicherten Prognosen sind unverändert; später erneut versuchen."});
+    } finally {checkingRef.current = false;}
+  };
+  useEffect(() => {
+    if (loadedTrackingSport !== sport || autoCheckAttempt.current === sport) return;
+    autoCheckAttempt.current = sport;
+    void checkSavedResults(true);
+  }, [loadedTrackingSport,sport,tracked]);
+
+  const exportTracking = () => {
+    const json = JSON.stringify({version:1,sport,exportedAt:new Date().toISOString(),items:tracked},null,2);
+    const url = URL.createObjectURL(new Blob([json],{type:"application/json"}));
+    const a = document.createElement("a");
+    a.href=url; a.download=`markerras-prognosen-${sport}.json`;a.click();
+    URL.revokeObjectURL(url);
+  };
+  const importTracking = async (file: File | undefined) => {
+    if (!file || file.size > 200_000) {setTrackingCheck({running:false,message:"Datei fehlt oder ist zu groß (maximal 200 KB)."});return;}
+    try {
+      const json:unknown = JSON.parse(await file.text());
+      const rows = parseTrackingBackup(json,sport);
+      if (!rows.length) throw new Error("Keine gültigen Prognosen für diese Sportart");
+      setTracked(old=>rows.reduce((items,row)=>upsertTracked(items,row),old));
+      setTrackingCheck({running:false,message:`${rows.length} Prognosen aus der Sicherung eingelesen (bestehende Einträge bleiben erhalten).`});
+    } catch {setTrackingCheck({running:false,message:"Import fehlgeschlagen: Bitte eine gültige Prognose-JSON dieser Sportart wählen."});}
+  };
+
   useEffect(() => {
     if (!selectedPlayerId) return;
     const escape = (e: KeyboardEvent) => { if (e.key === "Escape") setSelectedPlayerId(null); };
@@ -209,6 +269,8 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const selectedCard = selectedPlayer ? cardStore[selectedPlayer.id] ?? {} : {};
   const profileScores = selectedPlayer ? ((selectedPlayer.recentScores?.length ?? 0) > 0 ? selectedPlayer.recentScores! : profileHistories[selectedPlayer.id] ?? []) : [];
   const metrics = trackingMetrics(tracked);
+  const advice = calibrationSuggestion(tracked);
+  const autoPending = pendingForAutoCheck(tracked).length;
   const saveTracked = (p: Forecast) => setTracked(items => upsertTracked(items, createTrackedPrediction(p, sport)));
   const progress = chosen && validTarget ? Math.min(100, chosen.projectedScore / totalTarget * 100) : 0;
 
@@ -435,15 +497,23 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
         </section>
         <section className="panel tracking-panel" id="tracking">
           <div className="section-top"><div><span className="section-kicker">06 / PROGNOSE-TRACKING</span><h2>Prognose gegen Ergebnis</h2></div><span className="record-count">{metrics.count} ausgewertete Vorhersagen</span></div>
-          <p className="matchup-disclaimer">Speichere Spielerprognosen <strong>vor dem Spiel</strong> und trage danach den tatsächlichen Sorare-Score ein. Prognosen und Ergebnisse bleiben lokal auf deinem Gerät. Die automatische Zuordnung offizieller Scores ist noch nicht vorhanden.</p>
+          <p className="matchup-disclaimer">Speichere deine Prognosen <strong>vor dem Spiel</strong>. Beim nächsten Öffnen überprüft der Helper abgeschlossene Spiele und ordnet <strong>eindeutig passende FINAL-Scores</strong> automatisch zu. Das funktioniert nur für gespeicherte Prognosen mit Spieltermin; unklare Fälle bleiben zur manuellen Eingabe offen. Die Daten bleiben in diesem Browser – keine Cloud-Synchronisierung.</p>
+          <div className="tracking-tools">
+            <button className="action-primary" type="button" disabled={trackingCheck.running || !autoPending} onClick={()=>void checkSavedResults()}>{trackingCheck.running ? "Prüfung läuft …" : `Ergebnisse prüfen (${autoPending} offen)`}</button>
+            <button type="button" onClick={exportTracking} disabled={!tracked.length}>Prognosen sichern (JSON)</button>
+            <label className="tracking-upload">Sicherung importieren<input type="file" accept=".json,application/json" onChange={e=>{void importTracking(e.target.files?.[0]);e.target.value="";}}/></label>
+          </div>
+          {trackingCheck.message && <p className="tracking-status" role="status">{trackingCheck.message}</p>}
+          <p className="tracking-explainer">Automatisch ausgefüllt: {metrics.officialCount} · Manuell: {metrics.manualCount} · Noch offen: {tracked.filter(t=>t.actual === null).length}. Bei fehlendem Spieltermin oder nicht endgültigem Sorare-Score wird nichts geraten.</p>
           <div className="tracking-metrics">
             <div><small>MAE · Ø absoluter Fehler</small><strong>{metrics.mae === null ? "—" : `${fmt(metrics.mae)} Pkt.`}</strong></div>
             <div><small>RMSE · größere Fehler stärker gewichtet</small><strong>{metrics.rmse === null ? "—" : `${fmt(metrics.rmse)} Pkt.`}</strong></div>
             <div><small>Bias · Prognose minus Ist</small><strong>{metrics.bias === null ? "—" : `${fmt(metrics.bias)} Pkt.`}</strong></div>
           </div>
+          <div className="tracking-calibration">{advice ? <><strong>Kalibrierungsvorschlag ({advice.count} Ergebnisse)</strong><p>{advice.label}. Ein vorsichtiger Richtwert wäre {advice.offset > 0 ? "+" : ""}{fmt(advice.offset)} Punkte pro Prognose. Dieser Hinweis ändert das Modell <strong>nicht automatisch</strong>, um Überanpassung zu vermeiden.</p></> : <><strong>Modell-Lerneffekt</strong><p>Für einen belastbaren Korrekturvorschlag benötigen wir mindestens 20 ausgewertete Prognosen aus fünf Spieltagen. Die bisherigen Prognoseformeln bleiben bis dahin unverändert.</p></>}</div>
           {chosen && <button type="button" className="action-primary" onClick={() => chosen.picks.forEach(pick => saveTracked(pick.player))}>Diese 5 Spielerprognosen speichern</button>}
           <div className="tracking-scroll"><table className="tracking-table"><thead><tr><th>Spieler / gespeicherte Partie</th><th>Prognose</th><th>Ist-Score</th><th>Fehler</th><th></th></tr></thead><tbody>
-            {tracked.slice(0, 60).map(row => <tr key={row.key}><td><strong>{row.playerName}</strong><small>{row.fixture ?? row.savedAt.slice(0,10)}</small></td><td>{fmt(row.predicted)}</td><td><input aria-label={`Tatsächlicher Sorare-Score für ${row.playerName}`} type="number" min="0" max="500" step="0.1" value={row.actual ?? ""} placeholder="Eintragen" onChange={e => setTracked(items => setActual(items,row.key,e.target.value === "" ? null : Number(e.target.value)))}/></td><td>{row.actual === null ? "—" : fmt(row.predicted-row.actual)}</td><td><button type="button" className="delete-tracking" aria-label={`Prognose für ${row.playerName} löschen`} onClick={() => setTracked(items=>items.filter(item=>item.key!==row.key))}>Entfernen</button></td></tr>)}
+            {tracked.slice(0, 60).map(row => <tr key={row.key}><td><strong>{row.playerName}</strong><small>{row.fixture ?? row.savedAt.slice(0,10)}</small></td><td>{fmt(row.predicted)}</td><td><input aria-label={`Tatsächlicher Sorare-Score für ${row.playerName}`} type="number" min="0" max="500" step="0.1" value={row.actual ?? ""} placeholder="Eintragen" onChange={e => setTracked(items => setActual(items,row.key,e.target.value === "" ? null : Number(e.target.value)))}/></td><td>{row.actual === null ? "—" : <>{fmt(row.predicted-row.actual)} <small className="tracking-source">{row.actualSource === "sorare" ? "Sorare FINAL" : "manuell"}</small></>}</td><td><button type="button" className="delete-tracking" aria-label={`Prognose für ${row.playerName} löschen`} onClick={() => setTracked(items=>items.filter(item=>item.key!==row.key))}>Entfernen</button></td></tr>)}
           </tbody></table></div>
           {!tracked.length && <div className="empty-state">Noch keine Prognosen gespeichert. Öffne einen Spieler und klicke auf „Prognose merken“ oder speichere ein vollständiges Lineup.</div>}
         </section>

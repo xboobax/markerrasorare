@@ -400,3 +400,17 @@ input[type="checkbox"] { accent-color:#9a76ee; }
 .profile-forecast-explain .forecast-calc-note {border-top:1px solid #394660;padding-top:9px}
 .forecast-form-status {font-size:11px;color:#b4cce1;display:flex;flex-wrap:wrap;gap:5px}
 .forecast-form-status small {display:block;width:100%;font-size:10px;color:#8394b1}
+
+/* V1.7 · Prognose-Tracking, offizielle Ergebnisprüfung & lokale Sicherung */
+.tracking-tools {display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin:12px 0;}
+.tracking-tools > button,.tracking-upload {font-size:12px;border-radius:9px;padding:10px 13px;border:1px solid #48516b;background:#222a40;color:#e5e8f3;cursor:pointer;}
+.tracking-tools .action-primary {background:#6650a0;border-color:#8a6dc0;color:white;}
+.tracking-tools button:disabled {opacity:.45;cursor:not-allowed;}
+.tracking-upload {position:relative;overflow:hidden;display:inline-block;}
+.tracking-upload input {position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;}
+.tracking-status {padding:11px 13px;background:#21283b;border:1px solid #4b536d;border-radius:9px;color:#cad5eb;font-size:12px;line-height:1.5;}
+.tracking-explainer {font-size:11px;color:#a6b2ca;margin:11px 0 17px;}
+.tracking-calibration {padding:14px 16px;border:1px solid #404669;border-radius:11px;background:#1b2236;margin:15px 0;}
+.tracking-calibration strong {display:block;color:#e4d7ff;font-size:12px;}
+.tracking-calibration p {color:#b0bfd6;font-size:12px;line-height:1.6;margin:7px 0 0;}
+.tracking-source {display:block;font-size:10px;color:#93d0be;margin-top:4px;}

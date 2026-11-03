@@ -1,3 +1,5 @@
+> **V1.7 (auf Basis der stabilen V1.6.2):** Automatischer Abgleich gespeicherter Prognosen mit eindeutig zuordenbaren FINAL-Spielerscores beim Öffnen der App, manuelle Ergebnisprüfung, JSON-Backup und Kalibrierungs-Hinweise. Keine Hintergrundprüfung, keine Cloud-Datenbank und keine Änderung am funktionierenden Sorare-Kaderabruf. Siehe [UPDATE_V1_7_DE.md](UPDATE_V1_7_DE.md).
+
 > **V1.6.1:** Spielerfoto-Fix: `avatarPictureUrl` für NBA und Fußball in allen Sorare-Abfragestufen. Siehe `UPDATE_V1_6_1_FOTOS_DE.md`.
 
 # Markerras Sorare Helper — Football & NBA Arcade
