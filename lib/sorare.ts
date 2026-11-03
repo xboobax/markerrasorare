@@ -35,8 +35,9 @@ export async function getFootballClubs(): Promise<Club[]> {
 export async function getNbaTeams(): Promise<Club[]> {
   const d = await gql(`{ teams(first: 50, sport: NBA) { nodes { slug name ready } } }`, 3600);
   const all = (d.teams.nodes as any[]).map((t) => ({ slug: String(t.slug), name: String(t.name), league: "NBA", ready: t.ready === true }));
-  const ready = all.filter((t) => t.ready);
-  return (ready.length ? ready : all).map(({ slug, name, league }) => ({ slug, name, league })).filter(validSlug);
+  // Do not exclude teams solely because Sorare labels them non-ready.
+  // The search should include every team returned by the NBA team index.
+  return all.map(({ slug, name, league }) => ({ slug, name, league })).filter(validSlug);
 }
 
 // Die Felder sind in Stufen angelegt: Falls Sorare ein Feld nicht (mehr) kennt,
@@ -55,7 +56,6 @@ const TIERS: Record<Sport, string[]> = {
   football: [`${FOOT_CORE} ${FOOT_IMAGE} ${FOOT_STATS} ${GAME} ${FOOT_ODDS}`, `${FOOT_CORE} ${FOOT_STATS} ${GAME} ${FOOT_ODDS}`, `${FOOT_CORE} ${FOOT_STATS}`, FOOT_CORE],
   nba: [`${NBA_CORE} ${NBA_IMAGE} ${NBA_STATS} ${GAME}`, `${NBA_CORE} ${NBA_STATS} ${GAME}`, `${NBA_CORE} ${NBA_STATS}`, NBA_CORE],
 };
-const tier: Record<Sport, number> = { football: 0, nba: 0 };
 
 const FOOT_POS: Record<string, string> = { Goalkeeper: "GK", Defender: "DEF", Midfielder: "MID", Forward: "FWD" };
 const num = (x: unknown): number | null => (typeof x === "number" && isFinite(x) ? x : null);
@@ -119,35 +119,91 @@ function toPlayer(n: any, club: Club, sport: Sport): Player {
   };
 }
 
-function teamQuery(sport: Sport, slug: string, fields: string): string {
+/** Fetch a complete current club roster instead of silently cutting off at first:100.
+ * Sorare's active* connections expose cursor pagination; if the deployed schema
+ * has no pageInfo field, fall back to the known legacy first-page query and
+ * mark that roster as incomplete rather than advertising completeness.
+ */
+function teamQuery(sport: Sport, slug: string, fields: string, after?: string, legacy = false): string {
+  const cursor = after ? `, after: ${JSON.stringify(after)}` : "";
+  const nodes = `nodes { ${fields} }`;
+  const selection = legacy ? nodes : `${nodes} pageInfo { hasNextPage endCursor }`;
   return sport === "football"
-    ? `{ football { club(slug: "${slug}") { activePlayers(first: 100) { nodes { ${fields} } } } } }`
-    : `{ team(slug: "${slug}") { anyActivePlayers(first: 100) { nodes { ${fields} } } } }`;
+    ? `{ football { club(slug: ${JSON.stringify(slug)}) { activePlayers(first: 100${cursor}) { ${selection} } } } }`
+    : `{ team(slug: ${JSON.stringify(slug)}) { anyActivePlayers(first: 100${cursor}) { ${selection} } } }`;
 }
 
-export async function getTeamPlayers(sport: Sport, club: Club): Promise<Player[]> {
-  for (;;) {
+export type RosterResult = { players: Player[]; complete: boolean };
+
+export async function getTeamRoster(sport: Sport, club: Club): Promise<RosterResult> {
+  for (let fieldTier = 0; fieldTier < TIERS[sport].length; fieldTier++) {
+    const fields = TIERS[sport][fieldTier];
     try {
-      const d = await gql(teamQuery(sport, club.slug, TIERS[sport][tier[sport]]), 900);
-      const nodes: any[] = sport === "football" ? d.football.club.activePlayers.nodes : d.team.anyActivePlayers.nodes;
-      return nodes.map((n) => toPlayer(n, club, sport));
+      let after: string | undefined;
+      const seen = new Set<string>();
+      const players: Player[] = [];
+      let complete = false;
+      // Safety cap guards against broken / circular cursors.
+      for (let page = 0; page < 25; page++) {
+        const d = await gql(teamQuery(sport, club.slug, fields, after), 900);
+        const connection = sport === "football" ? d.football?.club?.activePlayers : d.team?.anyActivePlayers;
+        if (!connection) throw new Error(`Kein Spieler-Kader für ${club.name}`);
+        for (const n of connection.nodes ?? []) {
+          if (typeof n?.slug !== "string" || seen.has(n.slug)) continue;
+          seen.add(n.slug);
+          players.push(toPlayer(n, club, sport));
+        }
+        const info = connection.pageInfo;
+        if (!info?.hasNextPage) { complete = true; break; }
+        if (!info.endCursor || info.endCursor === after) break;
+        after = info.endCursor;
+      }
+      return {players, complete};
     } catch (e) {
+      // If pagination isn't exposed in the current Sorare schema, the older
+      // one-page path can still show data; make incompleteness explicit.
       const msg = (e as Error).message;
-      if (!msg.startsWith("HTTP 422") || tier[sport] >= TIERS[sport].length - 1) throw e;
-      tier[sport]++;
+      if (!msg.startsWith("HTTP 422")) throw e;
+      if (/pageInfo|hasNextPage|endCursor|after/i.test(msg)) {
+        try {
+          const d = await gql(teamQuery(sport, club.slug, fields, undefined, true), 900);
+          const conn = sport === "football" ? d.football?.club?.activePlayers : d.team?.anyActivePlayers;
+          if (!conn) throw new Error(`Kein Spieler-Kader für ${club.name}`);
+          return {players: (conn.nodes ?? []).map((n: any) => toPlayer(n, club, sport)), complete: false};
+        } catch (fallbackError) {
+          if (!(fallbackError as Error).message.startsWith("HTTP 422")) throw fallbackError;
+        }
+      }
     }
   }
+  throw new Error(`Sorare liefert kein unterstütztes Kaderschema für ${club.name}`);
 }
 
-export async function getPlayers(sport: Sport, clubs: Club[]): Promise<{ players: Player[]; failed: number }> {
+/** Backwards-compatible array return type for existing tests/components. */
+export async function getTeamPlayers(sport: Sport, club: Club): Promise<Player[]> {
+  return (await getTeamRoster(sport, club)).players;
+}
+
+export async function getPlayers(sport: Sport, clubs: Club[]): Promise<{ players: Player[]; failed: number; incomplete: number }> {
   const players: Player[] = [];
   let failed = 0;
+  let incomplete = 0;
+  const unique = new Set<string>();
   const run = async (batch: Club[]) => {
-    const res = await Promise.all(batch.map((c) => getTeamPlayers(sport, c).catch(() => null)));
-    for (const r of res) (r ? players.push(...r) : failed++);
+    const res = await Promise.all(batch.map(c => getTeamRoster(sport,c).catch(() => null)));
+    for (const r of res) {
+      if (!r) { failed++; continue; }
+      if (!r.complete) incomplete++;
+      for (const player of r.players) {
+        if (unique.has(player.id)) continue;
+        unique.add(player.id);
+        players.push(player);
+      }
+    }
   };
+  // Limit concurrent API requests to avoid unnecessary 429s from Sorare.
   const queue = [...clubs];
-  if (queue.length) await run(queue.splice(0, 1)); // erster Club legt die passende Feld-Stufe fest
-  while (queue.length) await run(queue.splice(0, 6));
-  return { players, failed };
+  const concurrency = process.env.SORARE_API_KEY ? 6 : 2;
+  while (queue.length) await run(queue.splice(0, concurrency));
+  return {players, failed, incomplete};
 }

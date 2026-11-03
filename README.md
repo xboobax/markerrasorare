@@ -67,3 +67,7 @@ Spielerbilder, L5-/L10-basierte Prognosespanne und verbesserter Lineup Builder m
 ## Version 1.3
 
 Neue Matchup-Szenarien, optionales Spielminuten-Scouting und das Zielchance-Ranking im Arcade Lineup Builder. Die Gegnerstärke wird **manuell** eingetragen, bis eine verifizierte Verteidigungsstatistik-Quelle angeschlossen ist. xG/xA werden gespeichert, aber nicht unkalibriert in Sorare-Punkte umgerechnet. Details in [`UPDATE_V1_3_DE.md`](UPDATE_V1_3_DE.md).
+
+## Version 1.4
+
+Erweiterte Kader-Pagination, anklickbare Detailprofile, akzentunabhängige Suche, optionale automatische Defensivdaten aus externen Anbietern, 5-Lineup-Vergleich und lokales Prognose-Tracking. Die Datenvollständigkeit wird **nicht** über die tatsächlich gelieferten aktiven Kader hinaus versprochen. Siehe [UPDATE_V1_4_DE.md](UPDATE_V1_4_DE.md) für Einrichtung und Einschränkungen.

@@ -2,6 +2,7 @@ import { getFootballClubs, getNbaTeams, getPlayers, type Club } from "@/lib/sora
 import { forecast, type Player, type Sport } from "@/lib/model";
 import ArcadeDashboard from "@/app/components/arcade-dashboard";
 import { FOOTBALL_LEAGUES, isFootballLeague } from "@/lib/leagues";
+import {getAutomaticMatchupData} from "@/lib/auto-matchups";
 
 export const revalidate = 300;
 export const maxDuration = 60;
@@ -36,7 +37,8 @@ export default async function Page({ searchParams }: Props) {
     const scope = team ? shownClubs.filter(c => c.slug === team) : shownClubs;
     const response = await getPlayers(sport, scope);
     players = response.players;
-    info = `${players.length} Sorare-Spieler geladen · ${scope.length - response.failed} von ${scope.length} Teams erfolgreich.`;
+    info = `${players.length} aktive Sorare-Kaderspieler geladen · ${scope.length - response.failed} von ${scope.length} Teams erfolgreich.`;
+    if (response.incomplete) info += ` ${response.incomplete} Kader nur teilweise geladen (API-Pagination nicht vollständig bestätigt).`;
     if (sport === "football" && scope.length === 0) {
       info += " Keine Vereine für diese Liga erkannt. Bitte den Sorare-Ligaabruf prüfen.";
     }
@@ -46,6 +48,7 @@ export default async function Page({ searchParams }: Props) {
   }
 
   const projected = players.map(forecast).sort((a,b)=>b.weighted-a.weighted);
+  const automaticMatchups = await getAutomaticMatchupData(sport);
   return <ArcadeDashboard
     sport={sport}
     league={league}
@@ -55,5 +58,6 @@ export default async function Page({ searchParams }: Props) {
     players={projected}
     info={info}
     error={error}
+    automaticMatchups={automaticMatchups}
   />;
 }
