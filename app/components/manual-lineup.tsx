@@ -4,7 +4,7 @@ import Link from "next/link";
 import {useEffect, useMemo, useState} from "react";
 import {ARCADE} from "@/config/divination";
 import {slotAccepts, isValidNbaStars, type CardInput} from "@/lib/arcade";
-import {emptyManualSelection, evaluateManualLineup, normalizeManualSelection, type ManualSelection} from "@/lib/manual-lineup";
+import {emptyManualSelection, evaluateManualLineup, suggestManualSwaps, normalizeManualSelection, type ManualSelection} from "@/lib/manual-lineup";
 import type {Forecast, Sport} from "@/lib/model";
 
 type CardSettings = {owned?:boolean; stars?:number|null; bonusPercent?:number};
@@ -41,6 +41,7 @@ export default function ManualLineup({sport,players,cardStore,updateCard,targetS
   const [activeSlot,setActiveSlot]=useState<number|null>(null);
   const [search,setSearch]=useState("");
   const [ownedOnly,setOwnedOnly]=useState(false);
+  const [swapOwnedOnly,setSwapOwnedOnly]=useState(false);
   const [message,setMessage]=useState("");
 
   useEffect(()=>{
@@ -66,6 +67,8 @@ export default function ManualLineup({sport,players,cardStore,updateCard,targetS
   const cards:CardInput[]=useMemo(()=>players.map(p=>({player:p,owned:cardStore[p.id]?.owned===true,
     stars:cardStore[p.id]?.stars??null,bonusPercent:cardStore[p.id]?.bonusPercent??0})),[players,cardStore]);
   const lineup=useMemo(()=>evaluateManualLineup(selection,cards,sport,targetScore),[selection,cards,sport,targetScore]);
+  const swaps=useMemo(()=>suggestManualSwaps(selection,cards,sport,{ownedOnly:swapOwnedOnly,limit:5}),[selection,cards,sport,swapOwnedOnly]);
+  const riskyPicks=lineup.picks.filter(p=>p.player.playProb<0.6 || p.player.confidence==="gering" || p.player.sampleSize===0).length;
   const slots=sport==="nba"?ARCADE.nba.slots:ARCADE.football.slots;
   const selectedIds=new Set(selection.filter((id):id is string=>Boolean(id)));
   const candidates=useMemo(()=>{
@@ -150,6 +153,22 @@ export default function ManualLineup({sport,players,cardStore,updateCard,targetS
       <div><small>FLOOR / CEILING*</small><strong>{fmt(lineup.floorScore)} – {fmt(lineup.ceilingScore)}</strong><small>Heuristische Modellspanne</small></div>
       {targetScore!==null&&<div><small>GESCHÄTZTE ZIELCHANCE*</small><strong>{lineup.targetProbability===null?"—":`${Math.round(lineup.targetProbability*100)} %`}</strong><small>Score-Ziel {fmt(targetScore)}</small></div>}
     </div>
+    {lineup.complete && <div className="manual-health" aria-label="Datenqualität deiner Aufstellung">
+      <strong>Datencheck deiner Aufstellung</strong>
+      <span>{riskyPicks === 0 ? "Keine besonders auffällige Datenlücke oder niedrige Einsatzquote nach den verwendeten Modellgrenzen." : `${riskyPicks} von ${lineup.picks.length} Spielern mit erhöhtem Einsatzrisiko oder dünner Datenlage.`}</span>
+      <small>Der Hinweis ist keine automatische Verletzungsmeldung. Er bewertet nur die tatsächlich geladenen Sorare-Daten.</small>
+    </div>}
+    {lineup.valid && <section className="manual-swap-panel" aria-label="Freiwillige Wechselvorschläge">
+      <div className="manual-swap-head">
+        <div><strong>🔁 Schnelle Verbesserungen</strong><p>Ein Spielerwechsel, höhere Modellprognose. Nichts wird ohne deine Auswahl geändert.</p></div>
+        <label><input type="checkbox" checked={swapOwnedOnly} onChange={e=>setSwapOwnedOnly(e.target.checked)}/> Nur meine Karten</label>
+      </div>
+      {swaps.length ? <div className="manual-swap-list">{swaps.map(swap=><div className="manual-swap" key={`${swap.slotIndex}-${swap.toId}`}>
+        <div className="manual-swap-copy"><small>{sport === "nba" ? `Karte ${swap.slotIndex+1}` : names[slots[swap.slotIndex]]} · {swap.fromName} ersetzen</small>
+          <strong>{swap.toName}</strong><span>{swap.toTeam} · +{fmt(swap.gain)} erwartete Punkte{sport==="nba"?` · ${fmt(swap.newStarsUsed)} / 16 ★`:""}</span></div>
+        <button type="button" onClick={()=>{setSelection(old=>old.map((id,i)=>i===swap.slotIndex && id===swap.fromId?swap.toId:id));setMessage(`${swap.toName} für ${swap.fromName} eingesetzt. Bitte Lineup erneut prüfen.`);}}>Wechsel übernehmen</button>
+      </div>)}</div> : <p className="manual-footnote">Keine besseren zulässigen 1-zu-1-Wechsel im aktuell geladenen Spielerbereich{swapOwnedOnly?" und deinen markierten Karten":""} gefunden. Das ist kein Beweis für ein global optimales Lineup.</p>}
+    </section>}
     {lineup.errors.length>0&&<div className="manual-validation" role="alert"><strong>Aufstellung noch nicht gültig</strong>{lineup.errors.map((error,i)=><p key={i}>• {error}</p>)}</div>}
     {!lineup.complete&&!lineup.errors.length&&<p className="manual-hint">Noch {5-lineup.picks.length} freie Slots – stelle insgesamt fünf verschiedene Spieler auf.</p>}
     {lineup.valid&&<p className="manual-valid" role="status">✓ Fünf Spieler und die im Builder geprüften Regeln sind erfüllt. Die tatsächliche Sorare-Arcade-Berechtigung hängt zusätzlich von Set, Karten und Spieltag ab.</p>}

@@ -94,3 +94,62 @@ export function evaluateManualLineup(
       ? estimateTargetChance(picks, targetScore) : null,
   };
 }
+
+export type ManualSwapSuggestion = {
+  slotIndex: number;
+  fromId: string;
+  fromName: string;
+  toId: string;
+  toName: string;
+  toTeam: string;
+  gain: number;
+  newProjectedTotal: number;
+  newStarsUsed: number;
+  owned: boolean;
+};
+
+/**
+ * Freiwillige 1-zu-1-Verbesserungen für ein gültiges manuelles Lineup.
+ * Keine automatische Änderung: Die UI übernimmt einen Vorschlag erst nach Klick.
+ * Der Vergleich ist auf den Erwartungswert beschränkt. Die Sorare-Spielberechtigung
+ * ist weiterhin abhängig von der konkreten Karte und dem aktuellen Arcade-Set.
+ */
+export function suggestManualSwaps(
+  selection: ManualSelection,
+  cards: CardInput[],
+  sport: Sport,
+  options: {ownedOnly?: boolean; limit?: number} = {},
+): ManualSwapSuggestion[] {
+  const current = evaluateManualLineup(selection,cards,sport);
+  if (!current.valid) return [];
+  const ids = new Set(normalizeManualSelection(selection).filter((id): id is string => Boolean(id)));
+  const required = sport === "nba" ? ARCADE.nba.slots : ARCADE.football.slots;
+  const results: ManualSwapSuggestion[] = [];
+  for (let index=0;index<required.length;index++) {
+    const old = current.slots[index];
+    if (!old) continue;
+    let best:ManualSwapSuggestion|null = null;
+    for (const card of cards) {
+      const p=card.player;
+      if (ids.has(p.id) || p.hasGame===false || p.weighted<=0 || !Number.isFinite(p.weighted)) continue;
+      if (!slotAccepts(required[index],p.position)) continue;
+      if (options.ownedOnly && !card.owned) continue;
+      if (p.confidence==="gering" && p.proj===null && p.avg===null && p.sampleSize===0) continue;
+      if (sport === "nba" && !isValidNbaStars(card.stars)) continue;
+      const starsUsed=current.starsUsed-(old.stars??0)+(sport === "nba" ? (card.stars??0):0);
+      if (sport === "nba" && starsUsed>ARCADE.nba.maxStars+1e-9) continue;
+      const bonus = typeof card.bonusPercent==="number" && Number.isFinite(card.bonusPercent)
+        ? Math.max(0,Math.min(50,card.bonusPercent)):0;
+      const candidateScore=p.weighted*(1+bonus/100);
+      const gain=candidateScore-old.projectedScore;
+      if (gain <= 0.05) continue;
+      if (!best || gain>best.gain) best={
+        slotIndex:index,fromId:old.player.id,fromName:old.player.name,
+        toId:p.id,toName:p.name,toTeam:p.team,gain,
+        newProjectedTotal:current.projectedScore+gain,newStarsUsed:starsUsed,owned:!!card.owned,
+      };
+    }
+    if (best) results.push(best);
+  }
+  return results.sort((a,b)=>b.gain-a.gain).slice(0,Math.max(1,Math.min(10,options.limit??5)));
+}

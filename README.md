@@ -75,3 +75,13 @@ Erweiterte Kader-Pagination, anklickbare Detailprofile, akzentunabhängige Suche
 ## Version 1.5 – Eigener Lineup Builder
 
 Du kannst fünf Spieler jetzt selbst für die vorgesehenen Positionen aufstellen, austauschen und drei manuelle Lineups im Browser speichern. NBA-Sternelimit und Fußball-Positionen werden überprüft. Der bisherige automatische Optimizer bleibt als eigener Reiter erhalten. Details: [UPDATE_V1_5_DE.md](UPDATE_V1_5_DE.md).
+
+## Neu in V1.6 – nachvollziehbare Prognosen und einfachere Lineups
+
+- Vorsichtigere Gewichtung bei wenigen historischen Einzelscores; Herkunft jeder Prognose im Spielerprofil sichtbar.
+- Verständlicher Formtrend erst bei ausreichender Datenmenge.
+- Spieler ohne Score-Daten bleiben suchbar, zeigen aber keinen erfundenen Null-Score.
+- Freiwillige 1-zu-1-Tauschvorschläge im manuellen Builder mit NBA-Sternen- und Fußball-Positionsprüfung.
+- Optional Tauschvorschläge nur für manuell markierte eigene Karten.
+
+Vollständige Installations- und Testhinweise: [UPDATE_V1_6_DE.md](UPDATE_V1_6_DE.md).

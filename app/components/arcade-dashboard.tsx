@@ -69,6 +69,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const [showCount, setShowCount] = useState(70);
   const [ownedOnly, setOwnedOnly] = useState(false);
   const [hideUnavailable, setHideUnavailable] = useState(false);
+  const [hasForecastOnly, setHasForecastOnly] = useState(false);
   const [cardStore, setCardStore] = useState<CardStore>({});
   const [opponentRatings, setOpponentRatings] = useState<OpponentRatings>({});
   const [loadedRatingSport, setLoadedRatingSport] = useState<Sport | null>(null);
@@ -218,6 +219,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
     const source = players.filter((p) => {
       if (position !== "all" && p.position !== position) return false;
       if (hideUnavailable && (p.hasGame === false || p.playProb < .3)) return false;
+      if (hasForecastOnly && p.forecastSources.length === 0) return false;
       if (ownedOnly && !cardStore[p.id]?.owned) return false;
       if (needle && !normalize(`${p.name} ${p.team} ${p.position}`).includes(needle)) return false;
       return true;
@@ -234,7 +236,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
         default: return b.weighted - a.weighted;
       }
     });
-  }, [players, position, hideUnavailable, ownedOnly, cardStore, search, sortBy]);
+  }, [players, position, hideUnavailable, hasForecastOnly, ownedOnly, cardStore, search, sortBy]);
   const positions = Array.from(new Set(players.map(p => p.position))).sort();
   const topPicks = players.filter(p => p.hasGame !== false && p.weighted > 0).slice().sort((a,b) => b.weighted - a.weighted).slice(0, 4);
   const title = sport === "football" ? "Football Arcade" : "NBA Arcade";
@@ -396,7 +398,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
             <select aria-label="Nach Position filtern" value={position} onChange={e=>{setPosition(e.target.value);setShowCount(70);}}><option value="all">Alle Positionen</option>{positions.map(p=><option key={p} value={p}>{POS_LABEL[p] ?? p}</option>)}</select>
             <select aria-label="Sortierung" value={sortBy} onChange={e=>setSortBy(e.target.value)}><option value="weighted">Beste Prognose</option><option value="avg">Höchster Ø-Score</option><option value="last5">Beste L5-Form</option><option value="upside">Höchstes Ceiling</option><option value="risk">Höchste Einsatzchance</option><option value="matchup">Bester bewerteter Gegner</option><option value="name">Name A–Z</option><option value="team">Team A–Z</option></select>
           </div>
-          <div className="filter-checkbox"><label><input type="checkbox" checked={hideUnavailable} onChange={e=>setHideUnavailable(e.target.checked)}/> Spieler mit fehlendem Spiel oder geringerer Einsatzchance ausblenden</label></div>
+          <div className="filter-checkbox"><label><input type="checkbox" checked={hideUnavailable} onChange={e=>setHideUnavailable(e.target.checked)}/> Spieler mit fehlendem Spiel oder geringerer Einsatzchance ausblenden</label><label><input type="checkbox" checked={hasForecastOnly} onChange={e=>setHasForecastOnly(e.target.checked)}/> Nur Spieler mit mindestens einer Score-Datenquelle anzeigen</label></div>
           <div className="table-scroll"><table className="players-table"><thead><tr><th>Spieler / Team</th><th>Pos.</th><th>Ø Score</th><th>L5</th><th>Gegner</th><th>Floor – Ceiling</th><th>Daten</th><th>Einsatz</th><th>Prognose</th><th>Scouting (manuell)</th><th>Builder</th><th>Mein Bestand</th>{sport === "nba" && <th>Sterne ★</th>}<th>Kartenbonus</th></tr></thead>
             <tbody>{filtered.slice(0,showCount).map(p => {
               const card = cardStore[p.id] ?? {};
@@ -406,10 +408,10 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
                 <td className="numeric-cell">{p.avg === null ? "—" : fmt(p.avg)}</td>
                 <td className="numeric-cell">{p.last5Avg === null ? "—" : fmt(p.last5Avg)}</td>
                 <td><span className="opponent-cell"><strong>{p.opponent ?? "—"}</strong><small>{matchupLabel(p.opponentRating)}{p.opponentRating !== null ? ` (${fmt(p.matchupAdjustmentPct)} %)` : ""}</small></span></td>
-                <td className="numeric-cell range-cell">{fmt(p.floor)} – {fmt(p.ceiling)}</td>
+                <td className="numeric-cell range-cell">{p.forecastSources.length ? `${fmt(p.floor)} – ${fmt(p.ceiling)}` : "—"}</td>
                 <td><span className={`confidence-tag confidence-${p.confidence}`} title={`${p.sampleSize} Scores; Datenabdeckung, keine statistische Konfidenz`}>{p.confidence}</span></td>
                 <td><div className="prob-meter"><div style={{width:`${Math.round(p.playProb * 100)}%`}}/></div><small>{Math.round(p.playProb * 100)} %</small></td>
-                <td className="numeric-cell score-cell" title={`Bei Einsatz: ${fmt(p.expected)} · Einsatzchance: ${Math.round(p.playProb*100)} %`}>{fmt(p.weighted)}</td>
+                <td className="numeric-cell score-cell" title={p.forecastSources.length ? `Bei Einsatz: ${fmt(p.expected)} · Modell-Einsatzchance: ${Math.round(p.playProb*100)} %` : "Kein Score-Eingang vorhanden"}>{p.forecastSources.length ? fmt(p.weighted) : "—"}</td>
                 <td><div className="scout-inputs">
                   <label>Ø Min.<input type="number" min="1" max={sport === "nba" ? 60 : 130} placeholder="üblich" value={card.typicalMinutes ?? ""} onChange={e=>updateCard(p.id,{typicalMinutes: e.target.value ? Number(e.target.value) : null})}/></label>
                   <label>Erw. Min.<input type="number" min="1" max={sport === "nba" ? 60 : 130} placeholder="erwartet" value={card.expectedMinutes ?? ""} onChange={e=>updateCard(p.id,{expectedMinutes: e.target.value ? Number(e.target.value) : null})}/></label>
@@ -455,6 +457,19 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
               <div><small>Einsatzwahrscheinlichkeit (Modell)</small><strong>{Math.round(selectedPlayer.playProb*100)} %</strong></div>
               <div><small>Floor / Ceiling (heuristisch)</small><strong>{(selectedPlayer.sampleSize > 0 || selectedPlayer.proj !== null || selectedPlayer.avg !== null) ? `${fmt(selectedPlayer.floor)} – ${fmt(selectedPlayer.ceiling)}` : "—"}</strong></div>
             </div>
+            <section className="profile-forecast-explain" aria-label="Prognose transparent erklärt">
+              <div className="profile-forecast-title"><h3>Wie entsteht die Prognose?</h3><span>{selectedPlayer.forecastSources.length ? `${selectedPlayer.forecastSources.length} Datenquellen` : "Keine Score-Datenquelle"}</span></div>
+              {selectedPlayer.forecastSources.length ? <>
+                <p>Die Grundlage ist ein nach Datenabdeckung gewichteter Mittelwert. Wenige historische Einzelscores bekommen bewusst weniger Gewicht.</p>
+                <div className="profile-forecast-sources">{selectedPlayer.forecastSources.map((source,index)=><div className="forecast-source-row" key={`${source.label}-${index}`}>
+                  <span><strong>{source.label}</strong><small>{source.origin}</small></span>
+                  <span><strong>{fmt(source.value)} Pkt.</strong><small>{Math.round(source.share*100)} % Gewicht</small></span>
+                  <div className="forecast-source-track"><span style={{width:`${Math.round(source.share*100)}%`}}/></div>
+                </div>)}</div>
+                <p className="forecast-calc-note">Danach werden die vorhandene Gegnerbewertung ({fmt(selectedPlayer.matchupAdjustmentPct)} %) und eine optionale Minutenkorrektur ({fmt(selectedPlayer.minutesAdjustmentPct)} %) berücksichtigt. Für den risikoangepassten Wert wird anschließend die modellierte Einsatzchance einbezogen.</p>
+              </> : <p>Für diesen Spieler liegen keine verwertbaren Score-Eingaben vor. Es wird bewusst keine erfundene Punkteprognose gezeigt.</p>}
+              <div className="forecast-form-status"><strong>Formtrend:</strong> {selectedPlayer.formDirection === "unbekannt" ? "Nicht genügend getrennte historische Spielwerte" : `${selectedPlayer.formDirection} (${selectedPlayer.formChangePct !== null && selectedPlayer.formChangePct>0?"+":""}${fmt(selectedPlayer.formChangePct ?? 0)} % letzte fünf vs. ältere Spiele)`} <small>Der Trend ist nur eine Information und kein zusätzlicher Punktemultiplikator.</small></div>
+            </section>
             <h3>Formkurve · letzte {profileScores.length} Scores</h3>
             {profileScores.length ? <div className="score-bars">{[...profileScores].reverse().map((score,i) => <div key={i} title={`${fmt(score)} Punkte`}><span style={{height:`${Math.min(100, Math.max(4, score / Math.max(1,...profileScores) * 100))}%`}}/><small>{fmt(score)}</small></div>)}</div> : <p className="profile-muted">{historyLoading ? "Historische Scores werden geladen …" : historyError ? "Einzelscores konnten aktuell nicht geladen werden. L5/L10-Durchschnittswerte bleiben nutzbar, sofern Sorare sie liefert." : "Keine historischen Einzelscores von Sorare verfügbar."}</p>}
             <div className="profile-detail-grid"><p><strong>Nächstes Spiel:</strong> {selectedPlayer.nextGame ?? "Nicht verfügbar"}</p><p><strong>Gegner:</strong> {selectedPlayer.opponent ?? "Nicht verfügbar"}</p><p><strong>Form L5 / L10:</strong> {selectedPlayer.last5Avg === null ? "—" : fmt(selectedPlayer.last5Avg)} / {selectedPlayer.last10Avg === null ? "—" : fmt(selectedPlayer.last10Avg)}</p><p><strong>Datenabdeckung:</strong> {selectedPlayer.confidence} ({profileScores.length} Einzelscores; ggf. separate L5/L10-Mittelwerte)</p><p><strong>Bewertung Gegner:</strong> {matchupLabel(selectedPlayer.opponentRating)} {selectedPlayer.opponentRating !== null ? (opponentRatings[selectedPlayer.opponent ?? ""] ? "· manuell" : "· automatisch") : ""}</p><p><strong>Verletzungseinträge:</strong> {selectedPlayer.injuries}</p></div>

@@ -21,6 +21,9 @@ export type Player = {
   opponent?: string;   // nächster Gegner, wenn Sorare ein Fixture liefert
 };
 
+export type ForecastSource = {label: string; value: number; share: number; origin: "Sorare" | "Historie"};
+export type FormDirection = "steigend" | "fallend" | "stabil" | "unbekannt";
+
 export type Forecast = Player & {
   expected: number;             // Erwartungswert bei Einsatz
   playProb: number;             // separate Einsatzwahrscheinlichkeit
@@ -31,6 +34,9 @@ export type Forecast = Player & {
   ceiling: number;
   variability: number;
   sampleSize: number;
+  forecastSources: ForecastSource[]; // tatsächlich verwendete Eingangsgrößen, auf 100 % normalisiert
+  formDirection: FormDirection;
+  formChangePct: number | null; // L5 gegenüber L10; kein eigener Prognosebonus
   confidence: "hoch" | "mittel" | "gering"; // Datenabdeckung, keine statistische Konfidenz
 };
 
@@ -66,23 +72,51 @@ export function forecast(p: Player): Forecast {
   const l5 = scores.slice(0, 5);
   const last5Avg = l5.length ? mean(l5) : (p.averageL5 ?? null);
   const last10Avg = scores.length ? mean(scores) : (p.averageL10 ?? p.avg);
-  const entries: {value: number; weight: number}[] = [];
-  if (p.proj !== null && Number.isFinite(p.proj) && p.proj >= 0) entries.push({value: p.proj, weight: 0.5});
-  if (last5Avg !== null) entries.push({value: last5Avg, weight: 0.3});
-  if (last10Avg !== null && Number.isFinite(last10Avg) && last10Avg >= 0) entries.push({value: last10Avg, weight: 0.2});
-  const denominator = entries.reduce((sum, e) => sum + e.weight, 0);
-  const expected = denominator ? entries.reduce((sum, e) => sum + e.value * e.weight, 0) / denominator : 0;
+
+  // Ein einzelner hoher oder niedriger Score darf die Prognose nicht dominieren.
+  // Der Einfluss von Einzelscores wächst mit der Zahl der Beobachtungen.
+  // Vorliegende Sorare-Aggregate (L5/L10) dienen als eigenständige Orientierung.
+  const entries: Array<{label:string;value:number;weight:number;origin: "Sorare" | "Historie"}> = [];
+  const add = (label:string,value:number|null|undefined,weight:number,origin:"Sorare"|"Historie") => {
+    if (typeof value === "number" && Number.isFinite(value) && value >= 0 && weight > 0) {
+      entries.push({label,value,weight,origin});
+    }
+  };
+  add("Sorare-Projektion",p.proj,0.52,"Sorare");
+  if (l5.length) add(`Letzte ${l5.length} Scores`,last5Avg,0.28*Math.min(1,l5.length/5),"Historie");
+  else add("Sorare L5",p.averageL5,0.26,"Sorare");
+  if (scores.length >= 8) add(`Letzte ${scores.length} Scores`,last10Avg,0.17*Math.min(1,scores.length/10),"Historie");
+  else if (p.averageL10 !== null && p.averageL10 !== undefined) add("Sorare L10",p.averageL10,0.18,"Sorare");
+  else if (scores.length >= 2) add(`Letzte ${scores.length} Scores (lang)`,last10Avg,0.17*scores.length/10,"Historie");
+  add("Sorare-Durchschnitt",p.avg,0.20,"Sorare");
+  const totalWeight = entries.reduce((sum,e)=>sum+e.weight,0);
+  const expected = totalWeight ? entries.reduce((sum,e)=>sum+e.value*e.weight,0)/totalWeight : 0;
+  const forecastSources:ForecastSource[] = totalWeight ? entries.map(e=>({
+    label:e.label,value:e.value,share:e.weight/totalWeight,origin:e.origin,
+  })) : [];
+
   const sampleSize = scores.length;
-  const variance = scores.length > 1 ? scores.reduce((sum, s) => sum + (s - mean(scores)) ** 2, 0) / scores.length : 0;
-  // With sparse data, explicitly widen uncertainty rather than pretending precision.
-  const variability = Math.max(Math.sqrt(variance), expected * (sampleSize >= 5 ? 0.14 : 0.30));
-  const floor = Math.max(0, expected - 0.9 * variability);
-  const ceiling = expected + 1.15 * variability;
+  const avgRaw = scores.length ? mean(scores) : 0;
+  const variance = scores.length > 1 ? scores.reduce((sum,s)=>sum+(s-avgRaw)**2,0)/scores.length : 0;
+  // Wenige Beobachtungen => breite Unsicherheit, nicht künstlich präzise Spanne.
+  const variability = Math.max(Math.sqrt(variance),expected*(sampleSize>=8?0.14:sampleSize>=4?0.22:0.32));
+  const floor = Math.max(0,expected-0.9*variability);
+  const ceiling = expected+1.15*variability;
   const playProb = playProbability(p);
-  const confidence = sampleSize >= 8 && p.proj !== null ? "hoch"
-    : sampleSize >= 4 || p.proj !== null || last5Avg !== null || last10Avg !== null ? "mittel" : "gering";
-  return {...p, expected, playProb, weighted: expected * playProb,
-    last5Avg, last10Avg, floor, ceiling, variability, sampleSize, confidence};
+  const confidence = sampleSize>=8 && p.proj!==null ? "hoch"
+    : sampleSize>=4 || p.proj!==null || last5Avg!==null || last10Avg!==null ? "mittel":"gering";
+  // Ein Formtrend ist nur bei mindestens 8 unterscheidbaren Spielwerten sinnvoll.
+  const older = scores.slice(5,10);
+  const recent = scores.slice(0,5);
+  const recentAvg = recent.length===5 ? mean(recent) : null;
+  const olderAvg = older.length>=3 ? mean(older) : null;
+  const formChangePct = recentAvg !== null && olderAvg !== null && olderAvg>0
+    ? Math.max(-200,Math.min(200,(recentAvg/olderAvg-1)*100)) : null;
+  const formDirection:FormDirection = formChangePct===null ? "unbekannt"
+    : formChangePct>8 ? "steigend" : formChangePct < -8 ? "fallend":"stabil";
+  return {...p,expected,playProb,weighted:expected*playProb,
+    last5Avg,last10Avg,floor,ceiling,variability,sampleSize,confidence,
+    forecastSources,formDirection,formChangePct};
 }
 
 /** Legacy helper retained for backwards compatibility. */
