@@ -52,7 +52,7 @@ console.log('V2.0 fixture deduplication, progression, undo, score goals, invento
     process.env.BALLDONTLIE_API_KEY='local-test-secret';
     let calls=0;
     global.fetch=async (url,options)=>{
-      calls++;assert.ok(String(url).includes('start_date=2026-11-03'));assert.equal(options.headers.Authorization,'local-test-secret');
+      calls++;assert.ok(String(url).includes('start_date=2026-11-02'),'Check previous US game day to cover European early-morning NBA tipoffs');assert.equal(options.headers.Authorization,'local-test-secret');
       return {ok:true,json:async()=>({data:[
         {id:1,date:'2026-11-04',home_team:{full_name:'Detroit Pistons'},visitor_team:{full_name:'Philadelphia 76ers'},status:'Scheduled'},
         {id:2,date:'2026-11-02',home_team:{full_name:'Old'},visitor_team:{full_name:'Old'},status:'Final'},

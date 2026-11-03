@@ -9,6 +9,7 @@ import ArcadeIntelligenceLab from "@/app/components/arcade-intelligence-lab";
 import {buildArcadeIntelligence} from "@/lib/arcade-intelligence";
 import type {FetchSummary} from "@/lib/data-health";
 import type {ScheduleData} from "@/lib/gameweek-center";
+import {canonicalNbaTeam} from "@/lib/nba-fixture-mapping";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Forecast, Sport } from "@/lib/model";
 import type { Strategy } from "@/lib/arcade";
@@ -181,7 +182,8 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   };
   const toggleFavorite=(id:string)=>setWatchlist(prev=>toggleWatchlist(prev,id));
   const exploreGameweekTeam=(name:string)=>{
-    setSearch(name);setPosition("all");setShowCount(70);
+    const match=sport==="nba"?clubs.find(c=>canonicalNbaTeam(c.name)!==null&&canonicalNbaTeam(c.name)===canonicalNbaTeam(name)):null;
+    setSearch(match?.name??name);setPosition("all");setShowCount(70);
     document.getElementById("spieler")?.scrollIntoView({behavior:"smooth",block:"start"});
   };
   const applyArcadeGoal=(goal:number)=>{

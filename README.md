@@ -133,3 +133,7 @@ Vollständige Installations- und Testhinweise: [UPDATE_V1_6_DE.md](UPDATE_V1_6_D
 Das neue `GameweekCenter` kombiniert eine Übersicht kommender Begegnungen (aus bereits geladenen Sorare-Fußball-Fixtures oder optional über BALLDONTLIE-NBA-Spiele), einen lokalen Arcade-Level-/Leben-Tracker, frei wählbare Score-Ziele mit Übernahme in den Lineup Builder sowie eine kompakte Übersicht eigener manuell markierter Karten. Es nimmt selbst **keine Sorare-Lineups vor** und erfindet keine Spieltermine oder offizielle Board-Level.
 
 Details und sichere Aktualisierung via GitHub Desktop: **`UPDATE_V2_0_DE.md`**.
+
+### V2.4.1 – NBA Spielplan-/Gegner-Fix
+
+Die NBA-Spielkarten und die Spielerpool-Tabelle nutzen jetzt den getrennt geladenen NBA-Spielplan zur Anzeige der nächsten Gegner und Spieltermine. BALLDONTLIE wird weiterhin zuerst verwendet; optional greift ein öffentlicher ESPN-Webseitenfeed als nicht garantierter Ersatz. Ohne bestätigte Spieldaten wird nichts geschätzt. Installationshilfe: `UPDATE_V2_4_1_DE.md`.

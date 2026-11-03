@@ -4,6 +4,7 @@ import ArcadeDashboard from "@/app/components/arcade-dashboard";
 import { FOOTBALL_LEAGUES, isFootballLeague } from "@/lib/leagues";
 import {getAutomaticMatchupData} from "@/lib/auto-matchups";
 import {getNbaGameweekSchedule} from "@/lib/nba-gameweek-feed";
+import {attachNbaFixtures} from "@/lib/nba-fixture-mapping";
 import type {ScheduleData} from "@/lib/gameweek-center";
 import type {FetchSummary} from "@/lib/data-health";
 
@@ -66,13 +67,16 @@ export default async function Page({ searchParams }: Props) {
     getAutomaticMatchupData(sport),
     sport === "nba" ? getNbaGameweekSchedule() : Promise.resolve<ScheduleData>({fixtures:[],status:"not-configured",source:null}),
   ]);
+  // The NBA score queries do not include fixtures. Enrich only fixture metadata
+  // after forecasting, without changing score predictions or Sorare queries.
+  const playersWithGames=sport==="nba"?attachNbaFixtures(projected,nbaSchedule):projected;
   return <ArcadeDashboard
     sport={sport}
     league={league}
     leagues={leagues}
     team={team}
     clubs={shownClubs}
-    players={projected}
+    players={playersWithGames}
     info={info}
     error={error}
     automaticMatchups={automaticMatchups}

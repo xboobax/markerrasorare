@@ -6,13 +6,14 @@ export type UpcomingFixture = {
   date: string; // YYYY-MM-DD, without an invented kickoff time
   home: string;
   away: string;
-  source: "Sorare" | "BALLDONTLIE";
+  source: "Sorare" | "BALLDONTLIE" | "ESPN";
+  tipoff?: string; // Verifizierter UTC-Zeitstempel, optional (niemals geschätzt)
   playerIds: string[];
 };
 export type ScheduleData = {
   fixtures: UpcomingFixture[];
   status: "available" | "not-configured" | "unavailable";
-  source: "BALLDONTLIE" | null;
+  source: "BALLDONTLIE" | "ESPN" | null;
   note?: string;
 };
 

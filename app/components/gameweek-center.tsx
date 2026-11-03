@@ -2,6 +2,7 @@
 
 import {useEffect,useMemo,useState} from "react";
 import type {Forecast,Sport} from "@/lib/model";
+import {canonicalNbaTeam} from "@/lib/nba-fixture-mapping";
 import {arcadeBoardKey,cardsSummary,filteredFixtures,freshArcadeBoard,
   readArcadeBoard,recordArcadeOutcome,setBoardTarget,undoArcadeOutcome,
   upcomingFootballFixtures,type ArcadeBoard,type ScheduleData,type UpcomingFixture} from "@/lib/gameweek-center";
@@ -11,6 +12,7 @@ type Props={sport:Sport;players:Forecast[];cardStore:CardRecord;nbaSchedule:Sche
   currentTarget:number|null;onApplyTarget:(target:number)=>void;
   onOpenPlayer:(id:string)=>void;onAddPlayer:(id:string)=>void;onExploreTeam:(team:string)=>void};
 
+const clock=(stamp?:string)=>stamp?new Intl.DateTimeFormat("de-DE",{timeZone:"Europe/Berlin",hour:"2-digit",minute:"2-digit"}).format(new Date(stamp)):null;
 const number=(v:number)=>v.toLocaleString("de-DE",{maximumFractionDigits:1});
 function dayLabel(day:string) {
   const d=new Date(`${day}T12:00:00Z`);
@@ -54,8 +56,12 @@ export default function GameweekCenter({sport,players,cardStore,nbaSchedule,curr
     return [...groups.entries()];
   },[visibleFixtures]);
   const selected=fixtureList.find(f=>f.id===selectedGame)??null;
-  const eligibleForGame=useMemo(()=>selected ? players.filter(p=>(p.team===selected.home||p.team===selected.away)&&p.hasGame!==false)
-    .sort((a,b)=>b.weighted-a.weighted).slice(0,5):[],[players,selected]);
+  const eligibleForGame=useMemo(()=>selected ? players.filter(p=>{
+      const same=sport==="nba" ? [selected.home,selected.away].some(name=>canonicalNbaTeam(name)!==null&&canonicalNbaTeam(p.team)===canonicalNbaTeam(name))
+        : p.team===selected.home||p.team===selected.away;
+      return same&&p.hasGame!==false;
+    })
+    .sort((a,b)=>b.weighted-a.weighted).slice(0,5):[],[players,selected,sport]);
   const summary=useMemo(()=>cardsSummary(cardStore,sport,new Set(players.map(p=>p.id))),[cardStore,sport,players]);
   const validGoal=goalDraft.trim()!==""&&Number.isInteger(Number(goalDraft))&&Number(goalDraft)>0&&Number(goalDraft)<=10000;
   const editGoal=()=>{
@@ -90,7 +96,7 @@ export default function GameweekCenter({sport,players,cardStore,nbaSchedule,curr
           </div>
           <p className="gw-source">{sport==="football"
             ? "Quelle: bereits geladene Sorare-Fixtures. Ohne bekannte Anstoßzeit zeigen wir nur das Datum."
-            : nbaSchedule.status==="available" ? "Quelle: BALLDONTLIE-Spielplan. Zeiten werden ohne verifizierte Uhrzeit nicht geschätzt."
+            : nbaSchedule.status==="available" ? `Quelle: ${nbaSchedule.source??"Spielplan"}. Angezeigte NBA-Uhrzeiten sind deutsche Ortszeit (MEZ/MESZ).`
               : nbaSchedule.note??"Der NBA-Spielplan ist aktuell nicht verfügbar."}</p>
           {dateGroups.length>0?<div className="gw-schedule" aria-label="Kommende Spiele">
             {dateGroups.map(([date,fixtures])=><div className="gw-date-group" key={date}>
@@ -99,13 +105,13 @@ export default function GameweekCenter({sport,players,cardStore,nbaSchedule,curr
                 aria-pressed={selectedGame===f.id} onClick={()=>setSelectedGame(selectedGame===f.id?null:f.id)}>
                 <span className="gw-fixture-icon">{sport==="nba"?"◉":"⚽"}</span>
                 <span className="gw-fixture-teams"><strong>{f.home}</strong><small>vs</small><strong>{f.away}</strong></span>
-                <span className="gw-fixture-side">{f.playerIds.length?`${f.playerIds.length} Spieler`:"Details"} <span aria-hidden="true">›</span></span>
+                <span className="gw-fixture-side">{clock(f.tipoff)?`${clock(f.tipoff)} Uhr · `:""}{f.playerIds.length?`${f.playerIds.length} Spieler`:"Details"} <span aria-hidden="true">›</span></span>
               </button>)}
             </div>)}
           </div>:<div className="gw-empty"><span aria-hidden="true">◇</span><strong>Keine bestätigten Begegnungen im geladenen Zeitraum</strong><p>{sport==="football"?
             "Die Sorare-API hat für diese Auswahl keine vollständigen kommenden Spielpaarungen geliefert. Wähle oben „Alle 4 Ligen“, um mehr Vereine zu laden. Es werden keine Termine erfunden.":
-            "Prüfe den BALLDONTLIE-Key und deinen API-Tarif. Der normale Sorare-Score-Abruf ist davon unabhängig."}</p></div>}
-          {selected&&<div className="gw-game-detail"><div className="gw-game-detail-head"><div><span className="gw-mini-label">MATCHUP FOCUS</span><h4>{selected.home} – {selected.away}</h4><small>{dayLabel(selected.date)} · {selected.source}</small></div><button type="button" className="gw-close" onClick={()=>setSelectedGame(null)} aria-label="Spieldetails schließen">×</button></div>
+            nbaSchedule.status==="available"?"Der Kalenderfeed meldet für diesen Zeitraum keine kommenden NBA-Spiele. Prüfe den Zeitraum oder aktualisiere später erneut.":nbaSchedule.note??"NBA-Spielplan derzeit nicht verfügbar. Scores bleiben unabhängig."}</p></div>}
+          {selected&&<div className="gw-game-detail"><div className="gw-game-detail-head"><div><span className="gw-mini-label">MATCHUP FOCUS</span><h4>{selected.home} – {selected.away}</h4><small>{dayLabel(selected.date)}{clock(selected.tipoff)?` · ${clock(selected.tipoff)} Uhr`:""} · {selected.source}</small></div><button type="button" className="gw-close" onClick={()=>setSelectedGame(null)} aria-label="Spieldetails schließen">×</button></div>
             {eligibleForGame.length?<div className="gw-game-players">{eligibleForGame.map(p=><div className="gw-game-player" key={p.id}>
               <Avatar p={p}/><button type="button" className="gw-game-name" onClick={()=>onOpenPlayer(p.id)}><strong>{p.name}</strong><span>{p.team} · {p.weighted>0?`${number(p.weighted)} Pkt. erwartet`:"Keine gültige Prognose"}</span></button>
               <button type="button" className="gw-mini-add" aria-label={`${p.name} ins Lineup aufnehmen`} onClick={()=>onAddPlayer(p.id)}>+</button>

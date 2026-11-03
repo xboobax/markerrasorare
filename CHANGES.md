@@ -47,3 +47,10 @@ Neu: Lineup Doctor (regelvalidierte Wechselideen), Hidden Gems Finder (NBA Punkt
 - Tatsächliche Karteneigentümerschaft/Editionen/Bonusstufen und NBA-Sterne müssen aus verifizierten Daten importiert werden; keine automatisch erfundenen Ratings.
 - Kein echtes Gegner-/Matchup-Modell, kein historisches Backtesting, kein Edge-Case für mehrere Editionen eines Spielers.
 - Volle Next.js-Buildprüfung muss lokal/bei Vercel erfolgen: npm-Pakete konnten in der Arbeitsumgebung wegen DNS/Netzwerk nicht installiert werden.
+
+## V2.4.1 – NBA Spielplan und Gegner
+
+- NBA-Spielplan-Daten werden den geladenen NBA-Spielern über eindeutige Teamnamen zugeordnet; Gegner, nächstes Spiel und bestätigte Uhrzeiten erscheinen auch im Team Builder.
+- BALLDONTLIE bleibt primär; ESPN-Webseitenfeed als optionaler, nicht offiziell unterstützter Ersatz, wenn kein Spielplan geliefert wird.
+- Datum/Uhrzeit in deutscher Zeitzone einschließlich US-zu-DE-Tageswechsel, echter 24-Stunden-Filter.
+- Keine Änderung an Sorare-Datenadapter und offiziellem NBA-Sterneabruf. Details: `UPDATE_V2_4_1_DE.md`.

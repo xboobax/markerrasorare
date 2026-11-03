@@ -18,6 +18,7 @@ export type Player = {
   injuries: number;
   hasGame: boolean | null;
   nextGame?: string;
+  nextGameTipoff?: string; // ISO 8601 / UTC, nur aus bestätigtem Spielplan
   opponent?: string;   // nächster Gegner, wenn Sorare ein Fixture liefert
 };
 

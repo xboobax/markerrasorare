@@ -54,13 +54,18 @@ export function placeInTeam(selection:ManualSelection,playerId:string,cards:Card
   }
   return {selection:next,index,reason:null};
 }
-export function gameDate(player:{nextGame?:string}):Date|null {
+export function gameDate(player:{nextGame?:string;nextGameTipoff?:string}):Date|null {
+  if(player.nextGameTipoff){
+    const exact=new Date(player.nextGameTipoff);
+    if(Number.isFinite(exact.getTime()))return exact;
+  }
   const value=player.nextGame?.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if(!value)return null;
   const date=new Date(`${value[1]}-${value[2]}-${value[3]}T00:00:00Z`);
   return Number.isFinite(date.getTime())&&date.toISOString().slice(0,10)===value[0]?date:null;
 }
-export function withinHorizon(date:Date|null,horizon:number|null,now:Date):boolean {
+export function withinHorizon(date:Date|null,horizon:number|null,now:Date,hasTime=false):boolean {
+  if(hasTime)return horizon===null?true:date!==null&&date.getTime()>=now.getTime()&&date.getTime()<=now.getTime()+horizon*3600000;
   if(horizon===null)return true;
   if(!date)return false;
   // Date-only Sorare fixtures have no verified kickoff: include the entire selected final day.

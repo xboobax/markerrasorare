@@ -15,6 +15,7 @@ type Props={sport:Sport;players:Forecast[];cardStore:Record<string,CardSettings>
   requestedPlayer?:{id:string;seq:number}|null;favorites:string[];onToggleFavorite:(id:string)=>void;
 };
 const fmt=(n:number)=>Number.isFinite(n)?n.toLocaleString("de-DE",{minimumFractionDigits:1,maximumFractionDigits:1}):"—";
+const fixtureTime=(p:Forecast)=>p.nextGameTipoff?new Intl.DateTimeFormat("de-DE",{timeZone:"Europe/Berlin",hour:"2-digit",minute:"2-digit"}).format(new Date(p.nextGameTipoff)):null;
 const short=(n:number)=>Number.isFinite(n)?n.toLocaleString("de-DE",{maximumFractionDigits:0}):"—";
 const slotNames:Record<string,string>={GK:"Torwart",DEF:"Verteidiger",MID:"Mittelfeld",FWD:"Stürmer",FLEX:"Extra",ANY:"NBA-Karte"};
 const positionNames:Record<string,string>={GK:"Torwart",DEF:"Verteidiger",MID:"Mittelfeld",FWD:"Stürmer",G:"Guard",F:"Forward",C:"Center"};
@@ -187,7 +188,7 @@ export default function BuilderWorkspace({sport,players,cardStore,updateCard,tar
       if(pool==="owned"&&!cardStore[p.id]?.owned)return false;
       if(pool==="favorites"&&!favoriteSet.has(p.id))return false;
       if(pool==="healthy"&&(!p.forecastSources.length||p.hasGame===false||p.playProb<.65))return false;
-      if(horizon!==null&&now&&!withinHorizon(gameDate(p),horizon,now))return false;
+      if(horizon!==null&&now&&!withinHorizon(gameDate(p),horizon,now,Boolean(p.nextGameTipoff)))return false;
       if(activeSlot!==null&&!slotAccepts(slots[activeSlot],p.position))return false;
       return true;
     }).sort((a,b)=>{
@@ -207,7 +208,7 @@ export default function BuilderWorkspace({sport,players,cardStore,updateCard,tar
   const poolCount=players.length;
   return <div className="workspace-v23" aria-label="V2.4 Obsidian Neon Builder Workspace">
     <header className="v23-toolbar">
-      <div className="v23-toolbar-brand"><span className="v23-mark">M<span>★</span></span><span><strong>NEON BUILDER</strong><small>{sport==="nba"?"NBA · OFFIZIELLE SORARE-STERNE":"FOOTBALL · 5 POSITIONEN"} / V2.4</small></span></div>
+      <div className="v23-toolbar-brand"><span className="v23-mark">M<span>★</span></span><span><strong>NEON BUILDER</strong><small>{sport==="nba"?"NBA · OFFIZIELLE SORARE-STERNE":"FOOTBALL · 5 POSITIONEN"} / V2.4.1</small></span></div>
       <label>Zeithorizont<select value={horizon===null?"all":horizon} onChange={e=>setHorizon(e.target.value==="all"?null:Number(e.target.value))}>
         <option value="all">Alle bekannten Spiele</option><option value="24">≈ Nächste 24 Std.*</option><option value="72">Nächste 3 Tage*</option><option value="168">Nächste 7 Tage*</option>
       </select></label>
@@ -215,7 +216,7 @@ export default function BuilderWorkspace({sport,players,cardStore,updateCard,tar
       <label>Optimierung<select value={strategy} onChange={e=>setStrategy(e.target.value as Strategy)}><option value="balanced">Ausgewogen</option><option value="safe">Sicher</option><option value="upside">Offensiv</option><option value="target" disabled={targetScore===null&&!teams.some(t=>t.goal!==null)}>Arcade-Ziel</option></select></label>
       <div className="v23-toolbar-actions"><button type="button" onClick={()=>autoFill(activeTeamId)} title="Nur freie Slots des aktiven Teams füllen">✦ Smart Auto-Fill</button><button type="button" onClick={()=>cloneTeam(activeTeamId)} title="Aktives Team kopieren">⧉ Team kopieren</button><button type="button" onClick={()=>{if(undoTeams){setTeams(undoTeams);setUndoTeams(null);setMsg("Letzte Teamänderung rückgängig gemacht.");}}} disabled={!undoTeams} title="Letzte Teamänderung rückgängig machen">↶ Undo</button></div>
     </header>
-    <div className="v23-subbar"><span className="v23-live-dot"/> <strong>{teams.length} Teams</strong><span>{poolCount} geladene Spieler</span><span className="v23-target-label">Aktives Team <b>{activeTeamId.replace("team-", "#")}</b> · {activeSlotLabel}</span><span className="v23-tiny-muted">Spieler rechts ziehen oder „+“ benutzen · Spieltermine ohne bestätigte Uhrzeit</span></div>
+    <div className="v23-subbar"><span className="v23-live-dot"/> <strong>{teams.length} Teams</strong><span>{poolCount} geladene Spieler</span><span className="v23-target-label">Aktives Team <b>{activeTeamId.replace("team-", "#")}</b> · {activeSlotLabel}</span><span className="v23-tiny-muted">Spieler rechts ziehen oder „+“ benutzen · NBA-Termine in deutscher Zeit (MEZ/MESZ)</span></div>
     {msg&&<div className="v23-message" role="status">{msg}<button type="button" onClick={()=>setMsg("")} aria-label="Hinweis schließen">×</button></div>}
     <div className="v23-layout">
       <div className="v23-team-column" aria-label="Meine Teams">
@@ -257,7 +258,7 @@ export default function BuilderWorkspace({sport,players,cardStore,updateCard,tar
                       </div>
                       <div className="v23-mini-grid second"><MiniStat label="Prognose" value={pick?fmt(pick.projectedScore):"—"}/><MiniStat label="Floor" value={pick?fmt(pick.floorScore):"—"}/><MiniStat label="Ceiling" value={pick?fmt(pick.ceilingScore):"—"}/></div>
                       <Bars player={player} compact/>
-                      <div className="v23-card-match"><strong>{player.opponent?`vs ${player.opponent}`:player.team}</strong><small>{gameDate(player)?gameDate(player)!.toLocaleDateString("de-DE"):"Termin unbekannt"}{player.hasGame===false?" · kein Spiel gemeldet":""}</small></div>
+                      <div className="v23-card-match"><strong>{player.opponent?`vs ${player.opponent}`:player.team}</strong><small>{gameDate(player)?gameDate(player)!.toLocaleDateString("de-DE",{timeZone:"Europe/Berlin"}):"Termin unbekannt"}{fixtureTime(player)?` · ${fixtureTime(player)} Uhr`:""}{player.hasGame===false?" · kein Spiel gemeldet":""}</small></div>
                     </>:<button type="button" className="v23-card-empty-content" onClick={()=>{setActiveTeamId(team.id);setActiveSlot(index);setMsg("");}}><span className="v23-plus-ring">+</span><strong>{team.selection[index]?"Spieler nicht geladen":sport==="nba"?"Karte wählen":slotNames[slot]}</strong><small>{team.selection[index]?"Team oder Liga prüfen":"Spieler rechts auswählen"}</small></button>}
                   </article>;
                 })}
@@ -312,7 +313,7 @@ export default function BuilderWorkspace({sport,players,cardStore,updateCard,tar
             const date=gameDate(p);
             return <tr key={p.id} draggable={!card.excluded} onDragStart={event=>beginDrag(event,{kind:"pool",playerId:p.id})} onDragEnd={()=>{dragRef.current=null;setDragTarget(null);}} className={selected?"v23-roster-picked":""}>
               <td><div className="v23-row-actions"><button type="button" title={`Zu Team ${teams.findIndex(t=>t.id===activeTeamId)+1} hinzufügen`} aria-label={`${p.name} zum Team hinzufügen`} onClick={()=>select(p.id)} disabled={selected||card.excluded===true}>+</button><button type="button" title="Für den Optimizer ausschließen" aria-label={`${p.name} ${card.excluded?"freigeben":"ausschließen"}`} aria-pressed={card.excluded===true} className={card.excluded?"is-blocked":""} onClick={()=>updateCard(p.id,{excluded:!card.excluded,locked:false})}>⊘</button></div></td>
-              <td className="v23-date">{date?date.toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit",year:"2-digit"}):"—"}<small>{date?"Datum bekannt":"Nicht verfügbar"}</small></td>
+              <td className="v23-date">{date?date.toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit",year:"2-digit",timeZone:"Europe/Berlin"}):"—"}<small>{date?(fixtureTime(p)?`${fixtureTime(p)} Uhr`:"Uhrzeit unbekannt"):"Nicht verfügbar"}</small></td>
               <td><div className="v23-roster-person"><button type="button" className="v23-roster-avatar" onClick={()=>onOpenProfile(p.id)}><Avatar player={p}/></button><div><button type="button" className="v23-roster-name" onClick={()=>onOpenProfile(p.id)}>{p.name}</button><small>{p.team} · {p.position} {p.opponent?`· vs ${p.opponent}`:""}</small><button type="button" className={`v23-inline-fav ${favoriteSet.has(p.id)?"is-on":""}`} onClick={()=>onToggleFavorite(p.id)}>{favoriteSet.has(p.id)?"★ Auf Watchlist":"☆ Merken"}</button></div></div></td>
               <td><Bars player={p}/></td>
               <td><span className={`v23-table-pill ${p.playProb<.6?"bad":p.playProb>=.8?"good":"mid"}`}>{short(p.playProb*100)}%</span></td>
@@ -328,7 +329,7 @@ export default function BuilderWorkspace({sport,players,cardStore,updateCard,tar
           })}</tbody></table></div>
         {!sortedPlayers.length&&<div className="v23-no-results">Keine passenden Spieler im aktuell geladenen Pool. Prüfe Liga, Filter, Slotposition oder Spieltermin.</div>}
         {showCount<sortedPlayers.length&&<button className="v23-load-more" type="button" onClick={()=>setShowCount(count=>count+80)}>Weitere 80 Spieler anzeigen · {sortedPlayers.length-showCount} verbleiben ↓</button>}
-        <div className="v23-pool-foot"><span>Die angezeigte Einsatzwahrscheinlichkeit, Floor/Ceiling und Zielchance sind <b>Modellschätzungen</b>, keine offiziellen Sorare-Werte. Datum ohne verlässliche Uhrzeit.</span><button type="button" onClick={()=>{
+        <div className="v23-pool-foot"><span>Die angezeigte Einsatzwahrscheinlichkeit, Floor/Ceiling und Zielchance sind <b>Modellschätzungen</b>, keine offiziellen Sorare-Werte. NBA-Spielzeiten nur bei verifizierter Uhrzeit, angezeigt in MEZ/MESZ.</span><button type="button" onClick={()=>{
           if(!currentResult?.picks.length){setMsg("Zum Speichern zuerst Spieler auswählen.");return;}
           onSavePredictions(currentResult.picks.map(p=>p.player));setMsg("Prognosen des aktiven Teams im Forecast Lab gespeichert.");
         }}>Prognosen sichern ↗</button></div>
