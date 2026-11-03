@@ -790,3 +790,32 @@ body { background:#090d17; color:var(--ink); -webkit-font-smoothing:antialiased;
 @media (max-width:850px) {.health-main{grid-template-columns:1fr;}.health-overview{grid-template-columns:repeat(2,minmax(0,1fr));}.doctor-recommendations{grid-template-columns:1fr;}}
 @media (max-width:640px) {.gem-center,.health-center {padding:17px;}.gem-heading,.health-heading{flex-direction:column;align-items:flex-start;}.gem-grid{grid-template-columns:1fr;}.gem-meta{margin-left:0;width:100%;}.health-overview {gap:7px;}.health-overview>div{padding:12px;}.health-buttons{flex-direction:column;}.health-buttons button{width:100%;}.doctor-swap-title{align-items:flex-start;flex-direction:column;}.doctor-status-row{flex-direction:column;align-items:flex-start;}}
 @media (prefers-reduced-motion:reduce) {.gem-card{transition:none;}.gem-card:hover{transform:none;}}
+
+/* V2.1.1 · Official NBA Stars: polished Obsidian live-sync surface */
+.nba-star-center{position:relative;isolation:isolate;overflow:hidden;border-color:#4b3b73;background:radial-gradient(ellipse 50% 100% at 100% 0%,rgba(121,94,229,.18),transparent 80%),linear-gradient(145deg,#17192c,#111827);box-shadow:0 18px 50px rgba(2,3,12,.2)}
+.nba-star-center:before{content:"";position:absolute;inset:0 0 auto 0;height:2px;background:linear-gradient(90deg,transparent,#c6a2ff,#70dfc4,transparent);opacity:.75;pointer-events:none}
+.nba-star-heading{display:flex;gap:16px;align-items:center;justify-content:space-between;margin-bottom:18px}
+.nba-star-heading h2{font-size:clamp(20px,2vw,26px);font-weight:900;letter-spacing:-.035em;margin:4px 0 5px}
+.nba-star-heading p{font-size:12px;color:#b0bed3;max-width:690px;margin:0;line-height:1.6}
+.nba-star-heading code{font-size:11px;color:#d9caff;background:#352c4e;padding:2px 5px;border-radius:5px}
+.nba-star-heading button{border:1px solid #745eae;color:#e9dfff;background:#322b51;padding:10px 15px;border-radius:11px;font-size:12px;font-weight:800;white-space:nowrap;box-shadow:0 6px 20px #100c2733;transition:background .2s,transform .2s}
+.nba-star-heading button:hover:not(:disabled){background:#493a72;transform:translateY(-1px)}
+.nba-star-heading button:disabled{opacity:.55;cursor:progress}
+.nba-star-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:11px}
+.nba-star-metrics>div{background:linear-gradient(140deg,rgba(37,36,65,.85),rgba(20,26,44,.86));border:1px solid #454361;border-radius:14px;padding:15px;min-width:0}
+.nba-star-metrics small{display:block;color:#a99bc7;font-weight:800;font-size:9px;letter-spacing:.13em}
+.nba-star-metrics strong{display:block;color:#e6fcf6;font-size:27px;line-height:1.3;letter-spacing:-.04em;margin-top:8px}
+.nba-star-metrics strong.nba-star-date{font-size:18px;color:#f2e9ff}
+.nba-star-metrics span{display:block;color:#a0aac5;font-size:10px;margin-top:3px}
+.nba-star-note,.nba-star-warning{font-size:11px;line-height:1.65;margin:14px 0 0;color:#aebbd1}
+.nba-star-warning{border:1px solid #8e6d42;background:#45322366;color:#f8d8a3;padding:10px 13px;border-radius:10px}
+.star-cell{display:flex;flex-direction:column;gap:2px;align-items:start}
+.star-cell .star-select:disabled{opacity:1;color:#b1ffe0;background:#163b3d;border-color:#448978;cursor:default}
+.star-source-official{color:#80eac8;font-size:10px;font-weight:850;white-space:nowrap}
+.star-source-fallback{color:#b0abc6;font-size:10px;white-space:nowrap}
+.manual-star-official{display:inline-block;color:#81ebc6;font-size:10px;font-weight:800;margin-top:3px}
+.nba-profile-star{display:flex;gap:12px;align-items:center;background:linear-gradient(110deg,#1a3c3d,#292447);border:1px solid #417e75;border-radius:13px;padding:11px 14px;margin:10px 0}
+.nba-profile-star strong{font-size:23px;letter-spacing:-.035em;color:#b4ffe0;white-space:nowrap}
+.nba-profile-star span{color:#bbcce1;font-size:11px;line-height:1.4}
+@media(max-width:900px){.nba-star-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:590px){.nba-star-heading{align-items:stretch;flex-direction:column}.nba-star-heading button{white-space:normal}.nba-star-metrics>div{padding:11px}.nba-star-metrics strong{font-size:23px}}

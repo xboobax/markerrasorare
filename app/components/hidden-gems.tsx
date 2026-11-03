@@ -18,9 +18,9 @@ export default function HiddenGems({sport,players,cardStore,watchlist,onOpenPlay
     <div className="gem-toolbar">
       <label>Position <select value={position} onChange={e=>setPosition(e.target.value)}><option value="all">Alle Positionen</option>{positions.map(p=><option value={p} key={p}>{p}</option>)}</select></label>
       <label className="gem-toggle"><input type="checkbox" checked={ownedOnly} onChange={e=>setOwnedOnly(e.target.checked)}/> Nur meine Karten</label>
-      <span className="gem-meta">{sport==="nba"?"Rangfolge: erwartete Punkte / manuell gesetzte Sterne":"Rangfolge: Form- und Stabilitätsindex"}</span>
+      <span className="gem-meta">{sport==="nba"?"Rangfolge: erwartete Punkte / offizielle Sorare-Sterne (sonst manueller Fallback)":"Rangfolge: Form- und Stabilitätsindex"}</span>
     </div>
-    {sport==="nba"&&result.missingStars>0&&<p className="gem-hint">★ {result.missingStars} Spieler ohne gültige, von dir eingetragene Sterne bleiben aus diesem Vergleich ausgeschlossen. Sterne kannst du im Spielerprofil bzw. Lineup Builder eintragen.</p>}
+    {sport==="nba"&&result.missingStars>0&&<p className="gem-hint">★ {result.missingStars} Spieler ohne verfügbare offizielle oder manuell ergänzte Sterne bleiben aus dem Vergleich ausgeschlossen.</p>}
     <div className="gem-grid">
       {result.gems.map(g=><article className="gem-card" key={g.player.id}>
         <div className="gem-card-top"><span className="gem-rank">#{String(g.rank).padStart(2,"0")}</span><span className="gem-card-type">{g.owned?"MEINE KARTE":"ENTDECKUNG"}</span><button type="button" aria-label={`${g.player.name} ${watchlist.includes(g.player.id)?"aus Favoriten entfernen":"favorisieren"}`} aria-pressed={watchlist.includes(g.player.id)} onClick={()=>onToggleFavorite(g.player.id)} className="gem-heart">{watchlist.includes(g.player.id)?"★":"☆"}</button></div>
@@ -33,8 +33,8 @@ export default function HiddenGems({sport,players,cardStore,watchlist,onOpenPlay
         <button type="button" className="gem-add" onClick={()=>onAddPlayer(g.player.id)}>+ In mein Lineup <span aria-hidden="true">↗</span></button>
       </article>)}
     </div>
-    {!result.gems.length&&<div className="empty-state">Keine ausreichend belegten Kandidaten für diese Filter. {sport==="nba"?"Trage Sterne ein oder deaktiviere den Kartenfilter.":"Wähle eine andere Position oder lade mehr Spieler."} Wir erfinden keine Hidden-Gem-Werte.</div>}
+    {!result.gems.length&&<div className="empty-state">Keine ausreichend belegten Kandidaten für diese Filter. {sport==="nba"?"Prüfe den Sterne-Sync oder deaktiviere den Kartenfilter.":"Wähle eine andere Position oder lade mehr Spieler."} Wir erfinden keine Hidden-Gem-Werte.</div>}
     {result.eligible>result.gems.length&&<button className="gem-more" type="button" onClick={()=>setShowAll(x=>!x)}>{showAll?"Weniger anzeigen":"Bis zu 20 Kandidaten anzeigen"} ↗</button>}
-    <p className="gem-disclaimer">Keine Marktpreis-, Seltenheits- oder Besitzbewertung. Die NBA-Sterne stammen ausschließlich aus deinen Eingaben. Der Fußball-Analyse-Index ist kein offizieller Sorare-Score; fehlende Daten und mögliche DNPs werden nicht kaschiert.</p>
+    <p className="gem-disclaimer">Keine Marktpreis-, Seltenheits- oder Besitzbewertung. NBA-Sterne stammen vorrangig direkt aus Sorare; manuell ergänzte Ersatzwerte können enthalten sein. Der Fußball-Analyse-Index ist kein offizieller Sorare-Score; fehlende Daten und mögliche DNPs werden nicht kaschiert.</p>
   </section>;
 }

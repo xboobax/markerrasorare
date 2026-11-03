@@ -116,8 +116,8 @@ export default function GameweekCenter({sport,players,cardStore,nbaSchedule,curr
         <div className="gw-card gw-collection">
           <div className="gw-card-header"><div><span className="gw-mini-label">COLLECTION PULSE</span><h3>Deine Karten – auf einen Blick</h3></div><span className="gw-collection-glyph">◈</span></div>
           <div className="gw-collection-stats"><div><strong>{summary.owned}</strong><small>Markierte Karten</small></div><div><strong>{summary.withBonus}</strong><small>Mit Kartenbonus</small></div><div><strong>{sport==="nba"?summary.missingStars:"5"}</strong><small>{sport==="nba"?"Sternwerte fehlen":"Positionen im Lineup"}</small></div></div>
-          {sport==="nba"&&summary.missingStars>0&&<p className="gw-collection-warning">{summary.missingStars} deiner markierten NBA-Karten haben noch keinen gültigen Sternwert. Der 16-Sterne-Optimizer kann sie bis zur Eingabe nicht zuverlässig bewerten.</p>}
-          <p className="gw-source">Kartenbesitz, Sterne und Boni sind deine lokalen Einträge – noch keine automatische Sorare-Kartensynchronisierung.</p>
+          {sport==="nba"&&summary.missingStars>0&&<p className="gw-collection-warning">{summary.missingStars} deiner markierten NBA-Karten haben noch keinen gültigen offiziellen oder manuellen Sternwert. Der 16-Sterne-Optimizer kann sie bis dahin nicht berücksichtigen.</p>}
+          <p className="gw-source">NBA-Sterne stammen wenn verfügbar aus dem separaten Sorare-Sync, sonst aus deinen lokalen Einträgen. Kartenbesitz und Boni bleiben manuell; kein automatischer Kartensync.</p>
           <div className="gw-actions"><a href="#spieler">Karten im Explorer verwalten <span>↗</span></a><a href="#lineup-builder">Zum Lineup Studio <span>↗</span></a></div>
         </div>
       </div>

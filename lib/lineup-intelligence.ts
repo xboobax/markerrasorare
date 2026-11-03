@@ -24,10 +24,10 @@ export function assessLineup(lineup:ManualLineupResult, sport:Sport, targetScore
   if(sport==="nba"){
     const budget=ARCADE.nba.maxStars;
     if(lineup.starsUsed>budget)findings.push({id:"budget",tone:"warning",title:"Sterne-Limit überschritten",description:`${lineup.starsUsed.toFixed(1)} von ${budget} Sternen. Passe die NBA-Karten an.`});
-    else if(lineup.complete && lineup.valid)findings.push({id:"budget",tone:"success",title:`Sterne-Budget eingehalten`,description:`${lineup.starsUsed.toFixed(1)} / ${budget} Sterne. Maßgeblich sind die manuell eingetragenen Sterne.`});
+    else if(lineup.complete && lineup.valid)findings.push({id:"budget",tone:"success",title:`Sterne-Budget eingehalten`,description:`${lineup.starsUsed.toFixed(1)} / ${budget} Sterne. Maßgeblich sind die synchronisierten Sorare-Sterne beziehungsweise manuelle Fallback-Werte.`});
   }
   if(lineup.errors.some(message=>/Sterne|Sternelimit/.test(message)) && !findings.some(f=>f.id==="budget")){
-    findings.push({id:"stars",tone:"warning",title:"Sterneangaben fehlen oder sind ungültig",description:"Trage bei jeder NBA-Karte einen gültigen Wert in 0,5er-Schritten ein. Die Berechnung nutzt deine Eingaben."});
+    findings.push({id:"stars",tone:"warning",title:"Sterneangaben fehlen oder sind ungültig",description:"Prüfe den offiziellen NBA-Sterne-Sync oder ergänze fehlende Werte manuell in 0,5er-Schritten."});
   }
   if(lineup.errors.some(message=>/Slot|mehrfach|nicht geladen/.test(message))){
     findings.push({id:"rules",tone:"warning",title:"Aufstellung noch nicht regelkonform",description:"Prüfe die Positions- und Dublettenhinweise unter deiner Aufstellung."});

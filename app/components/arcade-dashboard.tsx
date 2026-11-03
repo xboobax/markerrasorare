@@ -14,6 +14,7 @@ import { enrichForecast, matchupLabel, validDefenseRating, type OpponentRatings 
 import { optimizeArcadeLineups, isValidNbaStars, type CardInput } from "@/lib/arcade";
 import { ARCADE } from "@/config/divination";
 import type { Club } from "@/lib/sorare";
+import {nbaStarValue,officialStarValue,validatedRatings,type NbaStarRatings,type NbaStarSync} from "@/lib/nba-stars";
 import { createTrackedPrediction, upsertTracked, setActual, trackingMetrics, applyOfficialResults, parseTrackingBackup, calibrationSuggestion, type TrackedPrediction } from "@/lib/tracking";
 import { pendingForAutoCheck, type AutomaticResult } from "@/lib/tracking-auto";
 import {alignOpponentNames, type AutomaticMatchupData} from "@/lib/auto-matchups";
@@ -25,7 +26,7 @@ import {automaticSnapshotCandidates} from "@/lib/snapshot-policy";
 import type {TrackingModelSnapshot} from "@/lib/tracking";
 
 type CardSettings = {
-  owned?: boolean; stars?: number | null; bonusPercent?: number;
+  owned?: boolean; stars?: number | null; bonusPercent?: number; starSource?: "sorare";
   locked?: boolean; excluded?: boolean;
   expectedMinutes?: number | null; typicalMinutes?: number | null;
   xg?: number | null; xa?: number | null;
@@ -100,6 +101,44 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const [hideUnavailable, setHideUnavailable] = useState(false);
   const [hasForecastOnly, setHasForecastOnly] = useState(false);
   const [cardStore, setCardStore] = useState<CardStore>({});
+  const [officialStars,setOfficialStars] = useState<NbaStarRatings>({});
+  const [starSync,setStarSync] = useState<{phase:"idle"|"loading"|"ready"|"error";snapshot:NbaStarSync|null;message:string}>({phase:"idle",snapshot:null,message:""});
+  const starRequestSeq=useRef(0);
+  const playerStarSlugs=useMemo(()=>sport==="nba"?basePlayers.map(p=>p.id):[],[sport,basePlayers]);
+  const starScopeKey=playerStarSlugs.join("|");
+  const fetchOfficialStars=async (refresh=false,slugs=playerStarSlugs,scope=starScopeKey)=>{
+    const requestId=++starRequestSeq.current;
+    setStarSync(prev=>({phase:"loading",snapshot:prev.snapshot,message:""}));
+    try{
+      const response=await fetch("/api/nba-stars",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({slugs,refresh}),cache:"no-store"});
+      const data=await response.json();
+      if(!response.ok)throw new Error(typeof data?.error==="string"?data.error:"Sterneabruf nicht erreichbar");
+      if(requestId!==starRequestSeq.current||scope!==starScopeKey)return;
+      const ratings=validatedRatings(data?.ratings,new Set(slugs));
+      setOfficialStars(ratings);
+      setStarSync({phase:"ready",snapshot:{...data,ratings},message:data?.failedChunks?"Ein Teil des Sorare-Sterneabrufs ist fehlgeschlagen.":""});
+    }catch(e){
+      if(requestId!==starRequestSeq.current||scope!==starScopeKey)return;
+      // Keep earlier official values on a failed manual refresh; stored manual
+      // card settings remain untouched in either case.
+      setStarSync(prev=>({phase:"error",snapshot:prev.snapshot,message:e instanceof Error?e.message:"Sterneabruf nicht möglich."}));
+    }
+  };
+  useEffect(()=>{
+    if(sport!=="nba"||!playerStarSlugs.length){++starRequestSeq.current;setOfficialStars({});setStarSync({phase:"idle",snapshot:null,message:""});return;}
+    setOfficialStars({});setStarSync({phase:"loading",snapshot:null,message:""});
+    void fetchOfficialStars(false,playerStarSlugs,starScopeKey);
+    return ()=>{++starRequestSeq.current;};
+    // Scope key is stable across renders; a changed NBA roster starts a fresh sync.
+  },[sport,starScopeKey]);
+  const effectiveCardStore:CardStore=useMemo(()=>{
+    if(sport!=="nba"||!Object.keys(officialStars).length)return cardStore;
+    const merged:CardStore={...cardStore};
+    for(const [id,stars] of Object.entries(officialStars)){
+      if(officialStarValue(stars)!==null)merged[id]={...merged[id],stars,starSource:"sorare"};
+    }
+    return merged;
+  },[sport,cardStore,officialStars]);
   const [opponentRatings, setOpponentRatings] = useState<OpponentRatings>({});
   const [loadedRatingSport, setLoadedRatingSport] = useState<Sport | null>(null);
   const [loadedSport, setLoadedSport] = useState<Sport | null>(null);
@@ -354,13 +393,15 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const eligibleCards: CardInput[] = useMemo(() => players.map((p) => ({
     player: p,
     owned: cardStore[p.id]?.owned === true,
-    stars: cardStore[p.id]?.stars ?? null,
+    stars: effectiveCardStore[p.id]?.stars ?? null,
     bonusPercent: cardStore[p.id]?.bonusPercent ?? 0,
-  })), [players, cardStore]);
+  })), [players, cardStore, effectiveCardStore]);
 
   const favoriteSet=useMemo(()=>new Set(watchlist),[watchlist]);
   const ownedCount = players.filter(p => cardStore[p.id]?.owned).length;
-  const ratedCount = players.filter(p => isValidNbaStars(cardStore[p.id]?.stars)).length;
+  const ratedCount = players.filter(p => isValidNbaStars(effectiveCardStore[p.id]?.stars)).length;
+  const automaticStarCount=players.filter(p=>officialStarValue(officialStars[p.id])!==null).length;
+  const manualStarCount=ratedCount-automaticStarCount;
   const hasGameCount = players.filter(p => p.hasGame !== false && p.weighted > 0).length;
   const imageCount = players.filter(p => Boolean(p.imageUrl)).length;
   const totalTarget = Number(target);
@@ -456,7 +497,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
           <div className="metric-card"><span className="metric-label">Spieler im Datensatz</span><strong>{players.length.toLocaleString("de-DE")}</strong><small>Aktuell ausgewählter Datenbereich</small></div>
           <div className="metric-card"><span className="metric-label">Mögliche Einsätze</span><strong>{hasGameCount.toLocaleString("de-DE")}</strong><small>Spielerbilder: {imageCount} von {players.length}</small></div>
           <div className="metric-card"><span className="metric-label">Meine markierten Karten</span><strong>{ownedCount}</strong><small>Manuell erfasst, lokal gespeichert</small></div>
-          <div className="metric-card"><span className="metric-label">{sport === "nba" ? "Sterne zugewiesen" : "Aktuelle Zielmarke"}</span><strong>{sport === "nba" ? ratedCount : (validTarget ? totalTarget : "—")}</strong><small>{sport === "nba" ? "NBA-Karten mit gültigen Sternwerten" : "Veränderbar im Builder"}</small></div>
+          <div className="metric-card"><span className="metric-label">{sport === "nba" ? "Sterne zugewiesen" : "Aktuelle Zielmarke"}</span><strong>{sport === "nba" ? ratedCount : (validTarget ? totalTarget : "—")}</strong><small>{sport === "nba" ? `${automaticStarCount} offiziell · ${manualStarCount} manuell` : "Veränderbar im Builder"}</small></div>
         </div>
 
         {error && <div className="notice warning"><strong>Datenabruf fehlgeschlagen.</strong> {error}</div>}
@@ -479,10 +520,17 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
           )}
         </section>
 
-        <GameweekCenter sport={sport} players={players} cardStore={cardStore} nbaSchedule={nbaSchedule}
+        <GameweekCenter sport={sport} players={players} cardStore={effectiveCardStore} nbaSchedule={nbaSchedule}
           currentTarget={validTarget?totalTarget:null} onApplyTarget={applyArcadeGoal}
           onOpenPlayer={setSelectedPlayerId} onAddPlayer={queueManualPlayer} onExploreTeam={exploreGameweekTeam}/>
 
+        {sport==="nba"&&<section className="panel nba-star-center" id="nba-stars" aria-label="Offizielle NBA-Sterne">
+          <div className="nba-star-heading"><div><span className="section-kicker">SORARE OFFICIAL · NBA STAR SYNC</span><h2>Deine Sterne. Direkt von Sorare.</h2><p>Automatische aktuelle Spielerbewertung aus <code>gameplayTierStars</code> – ohne geschätzte Sterne.</p></div><button type="button" disabled={starSync.phase==="loading"||!basePlayers.length} onClick={()=>void fetchOfficialStars(true)}>{starSync.phase==="loading"?"↻ Synchronisiere …":"↻ Sterne jetzt aktualisieren"}</button></div>
+          <div className="nba-star-metrics"><div><small>OFFIZIELL VON SORARE</small><strong>{automaticStarCount}</strong><span>der geladenen NBA-Spieler</span></div><div><small>MANUELLER FALLBACK</small><strong>{manualStarCount}</strong><span>falls Sorare keine Bewertung liefert</span></div><div><small>OHNE STERNWERT</small><strong>{players.length-ratedCount}</strong><span>bewusst nicht geschätzt</span></div><div><small>LETZTER ABRUF</small><strong className="nba-star-date">{starSync.snapshot?new Date(starSync.snapshot.fetchedAt).toLocaleString("de-DE",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}):starSync.phase==="loading"?"Lädt …":"—"}</strong><span>Sorare-API · 15 Min. Cache</span></div></div>
+          {starSync.phase==="error"&&<p className="nba-star-warning" role="status">⚠ {starSync.message} Bisherige manuelle Sternwerte bleiben als Fallback verfügbar.</p>}
+          {starSync.phase==="ready"&&starSync.snapshot?.partial&&<p className="nba-star-warning">⚠ Einige Teile des Sterneabrufs sind fehlgeschlagen. Für fehlende Bewertungen gilt weiterhin der manuelle Fallback.</p>}
+          <p className="nba-star-note">Sorare aktualisiert Spieler-Tiers spieltagabhängig. Für bereits eröffnete Gameweeks kann der auf Sorare festgeschriebene Sternpreis vom aktuellen <em>gameplayTierStars</em>-Wert abweichen. Vor dem Einreichen bitte die konkrete Wettbewerbs-GW prüfen. Kartenbesitz und Boni bleiben manuell.</p>
+        </section>}
         <DataHealthCenter sport={sport} players={basePlayers} summary={fetchSummary}
           archiveBackend={archiveBackend} pendingResults={autoPending}
           matchupSource={automaticMatchups.source} scheduleStatus={nbaSchedule.status}/>
@@ -527,7 +575,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
           </div> : <p className="matchup-disclaimer">Bewerte mindestens einen Gegner, um ein transparentes Matchup-Ranking zu erhalten. Ohne belastbare Defensivdaten gibt es bewusst keine erfundenen Top-10-Matchups.</p>}
         </section>
 
-        <HiddenGems sport={sport} players={players} cardStore={cardStore} watchlist={watchlist}
+        <HiddenGems sport={sport} players={players} cardStore={effectiveCardStore} watchlist={watchlist}
           onOpenPlayer={setSelectedPlayerId} onAddPlayer={queueManualPlayer} onToggleFavorite={toggleFavorite}/>
 
         <section className="two-column">
@@ -542,7 +590,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
               <input id="manual-target" type="number" min="1" step="1" inputMode="numeric" value={target} placeholder="Score-Ziel eingeben" onChange={e=>setTarget(e.target.value)}/>
               {sport === "football" && <><button type="button" onClick={()=>setTarget("180")}>180 Pkt.</button><button type="button" onClick={()=>setTarget("360")}>360 Pkt.</button></>}
             </div>}
-            {builderMode === "manual" ? <ManualLineup sport={sport} players={players} cardStore={cardStore}
+            {builderMode === "manual" ? <ManualLineup sport={sport} players={players} cardStore={effectiveCardStore}
               updateCard={updateCard} targetScore={validTarget ? totalTarget : null}
               onOpenProfile={setSelectedPlayerId}
               onSavePredictions={items => items.forEach(saveTracked)} requestedPlayer={manualRequest}/> : <>
@@ -587,7 +635,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
             {chosen && validTarget && (
               <div className="target-progress"><div className="target-track"><div style={{width: `${progress}%`}}/></div><p>Modellprognose {fmt(chosen.projectedScore)} / {fmt(totalTarget)} · <strong>{chosen.projectedScore >= totalTarget ? "Prognose über Ziel" : `${fmt(Math.max(0,totalTarget - chosen.projectedScore))} Punkte unter Ziel`}</strong></p></div>
             )}
-            <p className="model-note">Mit „Fixieren“ zwingst du Spieler ins Lineup, mit „Sperren“ entfernst du sie aus der Auswahl. Verwende nur selbst geprüfte Sterne und Boni. {ownedOnly ? "Aufstellung nur aus markierten Karten." : "Theoretische Bestbesetzung aus dem geladenen Spielerpool – dein Kartenbesitz ist nicht geprüft."} NBA-Sterne und Boni müssen aktuell manuell eingetragen werden. Prognosen sind keine garantierten Ergebnisse.</p>
+            <p className="model-note">Mit „Fixieren“ zwingst du Spieler ins Lineup, mit „Sperren“ entfernst du sie aus der Auswahl. Sterne werden aus Sorare geladen, falls verfügbar; Boni bleiben manuell. {ownedOnly ? "Aufstellung nur aus markierten Karten." : "Theoretische Bestbesetzung aus dem geladenen Spielerpool – dein Kartenbesitz ist nicht geprüft."} Fehlende NBA-Sterne kannst du weiterhin manuell eintragen. Prognosen sind keine garantierten Ergebnisse.</p>
             {lineups.length > 1 && <div className="variants" role="group" aria-label="Aufstellungen vergleichen">{lineups.map((l, i) => <button key={i} className={Math.min(activeResult,lineups.length-1) === i ? "active" : ""} onClick={()=>setActiveResult(i)}>Lineup {i+1} <strong>{validTarget && l.targetProbability !== null ? `${Math.round(l.targetProbability * 100)} % Zielchance` : `${fmt(l.projectedScore)} Pkt.`}</strong></button>)}</div>}
             {lineups.length > 1 && <div className="lineup-compare"><h3>Lineups im direkten Vergleich</h3><div className="tracking-scroll"><table className="tracking-table"><thead><tr><th>Lineup</th><th>Prognose</th><th>Floor</th><th>Ceiling</th>{sport === "nba" && <th>Sterne</th>}{validTarget && <th>Zielchance*</th>}</tr></thead><tbody>{lineups.map((l,i) => <tr key={i} className={Math.min(activeResult,lineups.length-1)===i ? "compare-selected" : ""} onClick={() => setActiveResult(i)}><td><button type="button" onClick={() => setActiveResult(i)}>#{i+1} wählen</button></td><td>{fmt(l.projectedScore)}</td><td>{fmt(l.floorScore)}</td><td>{fmt(l.ceilingScore)}</td>{sport === "nba" && <td>{fmt(l.starsUsed)} ★</td>}{validTarget && <td>{l.targetProbability===null ? "—" : `${Math.round(l.targetProbability*100)} %`}</td>}</tr>)}</tbody></table></div><p className="profile-muted">* Zielchance: nicht kalibrierte Modellschätzung. Lineups sind nicht automatisch offiziell spielberechtigt; Kartenbesitz und aktuelle Set-Regeln prüfen.</p></div>}
             {!chosen && <div className="empty-state"><strong>Für dieses Regelset fehlt eine vollständige gültige Aufstellung.</strong><p>{sport === "nba" ? "Vergib im Spielertableau zunächst echte Sterne (1–5 in 0,5-Schritten) für mindestens fünf geeignete Karten. Zusammen dürfen sie höchstens 16 Sterne haben." : "Es werden je ein TW, VER, MF, FWD sowie ein zusätzlicher Feldspieler benötigt."}{ownedOnly ? " Markiere die Karten zusätzlich als in deinem Besitz." : ""} Fixierungen müssen zum Regelset passen; NBA zusammen höchstens 16 Sterne.</p></div>}
@@ -598,7 +646,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
             <div className="panel insight-panel"><span className="section-kicker">05 / PLAYER INTELLIGENCE</span><h2>Top-Prognosen</h2><p className="caption-small">Aktives Modell: {modelMode === "v18" ? "V1.8" : "V1.7"} · Sorare-Daten, L5/L10, Einsatzrisiko und optionale Scouting-Faktoren.</p>
               <div className="top-picks">{topPicks.map((p,i) => <div className="pick-row" key={p.id}><span className="pick-rank">{String(i+1).padStart(2,"0")}</span><PlayerAvatar player={p}/><span className="pick-name"><button type="button" className="player-open" onClick={() => setSelectedPlayerId(p.id)}>{p.name} ↗</button><small>{p.team}</small></span><span className="pick-score">{fmt(p.weighted)}<small>L5: {p.last5Avg === null ? "—" : fmt(p.last5Avg)}</small></span></div>)}</div>
             </div>
-            <div className="panel tip-panel"><span className="section-kicker">WICHTIG ZUM MODELL</span><h3>Was noch fehlt</h3><p>Die aktuellen Sorare-API-Spielerdaten enthalten hier keine verifizierten Arcade-Sterne und keine persönliche Kartensammlung. Deshalb erfassen wir diese vorerst manuell.</p><p>Floor, Ceiling und Zielchance sind heuristische Modellwerte, keine statistisch validierte Vorhersage. Gegnerstärke wird bei eingerichteten Datenzugängen aus echten Gegnerergebnissen abgeleitet, sonst aus deinen manuellen Bewertungen. Erwartete Minuten, Verletzungsaktualität und xG/xA sind nicht über einen eigenen Live-Feed abgesichert.</p></div>
+            <div className="panel tip-panel"><span className="section-kicker">WICHTIG ZUM MODELL</span><h3>Was noch fehlt</h3><p>Sorare stellt aktuelle NBA-Sterne über gameplayTierStars bereit; diese werden separat synchronisiert. Die offiziell festgeschriebenen Sterne einer bereits eröffneten Gameweek können abweichen. Deine persönliche Kartensammlung wird noch nicht automatisch synchronisiert.</p><p>Floor, Ceiling und Zielchance sind heuristische Modellwerte, keine statistisch validierte Vorhersage. Gegnerstärke wird bei eingerichteten Datenzugängen aus echten Gegnerergebnissen abgeleitet, sonst aus deinen manuellen Bewertungen. Erwartete Minuten, Verletzungsaktualität und xG/xA sind nicht über einen eigenen Live-Feed abgesichert.</p></div>
           </aside>
         </section>
 
@@ -648,14 +696,14 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
                   <button type="button" aria-pressed={card.excluded === true} className={card.excluded ? "excluded" : ""} title="Spieler aus Lineups ausschließen" onClick={()=>updateCard(p.id,{excluded:!card.excluded,locked:false})}>🚫</button>
                 </div></td>
                 <td><label className="owned-checkbox" title="Diese Spielerkarte ist in meinem Bestand"><input type="checkbox" checked={card.owned === true} onChange={e=>updateCard(p.id,{owned:e.target.checked})}/><span>{card.owned ? "Meine Karte" : "Merken"}</span></label></td>
-                {sport === "nba" && <td><select className="small-select star-select" value={isValidNbaStars(card.stars) ? String(card.stars) : ""} aria-label={`Sterne für ${p.name}`} onChange={e=>updateCard(p.id,{stars: e.target.value === "" ? null : Number(e.target.value)})}><option value="">—</option>{starOptions.map(s=><option value={String(s)} key={s}>{fmt(s)} ★</option>)}</select></td>}
+                {sport === "nba" && <td><div className="star-cell"><select className="small-select star-select" value={isValidNbaStars(effectiveCardStore[p.id]?.stars) ? String(effectiveCardStore[p.id]?.stars) : ""} disabled={officialStarValue(officialStars[p.id])!==null} aria-label={`Sterne für ${p.name}`} title={officialStarValue(officialStars[p.id])!==null?"Offizielle aktuelle Sorare-Spielerbewertung · nicht manuell überschreibbar":"Manueller Ersatzwert, solange keine offizielle Bewertung vorliegt"} onChange={e=>updateCard(p.id,{stars:e.target.value===""?null:Number(e.target.value)})}><option value="">—</option>{starOptions.map(s=><option value={String(s)} key={s}>{fmt(s)} ★</option>)}</select><small className={officialStarValue(officialStars[p.id])!==null?"star-source-official":"star-source-fallback"}>{nbaStarValue(officialStars[p.id],card.stars).source==="sorare"?"✓ Sorare":isValidNbaStars(card.stars)?"Manuell":"Fehlt"}</small></div></td>}
                 <td><select className="small-select" value={card.bonusPercent ?? 0} aria-label={`Kartenbonus für ${p.name}`} onChange={e=>updateCard(p.id,{bonusPercent:Number(e.target.value)})}>{bonuses.map(b=><option value={b} key={b}>+{b} %</option>)}</select></td>
               </tr>;
             })}</tbody></table></div>
           {!filtered.length && <div className="empty-state">Keine passenden Spieler im geladenen Datenbereich.</div>}
           {showCount < filtered.length && <button className="load-more" onClick={()=>setShowCount(n=>n+70)}>Weitere Spieler anzeigen ({Math.min(70,filtered.length-showCount)}) ↓</button>}
           {quickNotice && <p className="quick-add-notice" role="status">{quickNotice}</p>}
-          <div className="footnote">Klicke auf einen Spielernamen, um sein Detailprofil zu öffnen. Tipp: Mit „Meine Karte“ markierst du deinen Bestand. Sterne und Bonus stammen derzeit aus deinen Eingaben und bleiben nur in diesem Browser gespeichert. Spielerbilder stammen soweit vorhanden aus der Sorare-API; fehlt ein Foto oder lässt es sich nicht laden, werden Initialen gezeigt. Die Spannen und Zielchancen sind heuristisch und noch nicht gegen echte Spieltagsergebnisse kalibriert. xG/xA sind vorerst nur Informationsfelder (ohne rechnerischen Einfluss); für die Minutenkorrektur musst du übliche UND erwartete Minuten eingeben. Gegnerbewertungen basieren bei aktiviertem Feed auf realen Team-Gegentoren/-punkten oder ansonsten auf deinen manuellen Eingaben; die 1–5-Skala bleibt nur eine grobe Einordnung.</div>
+          <div className="footnote">Klicke auf einen Spielernamen, um sein Detailprofil zu öffnen. Tipp: Mit „Meine Karte“ markierst du deinen Bestand. NBA-Sterne werden nach Möglichkeit aktuell von Sorare abgerufen; gespeicherte manuelle Sterne dienen nur als Fallback. Kartenbonus und Besitz bleiben lokale Eingaben. Spielerbilder stammen soweit vorhanden aus der Sorare-API; fehlt ein Foto oder lässt es sich nicht laden, werden Initialen gezeigt. Die Spannen und Zielchancen sind heuristisch und noch nicht gegen echte Spieltagsergebnisse kalibriert. xG/xA sind vorerst nur Informationsfelder (ohne rechnerischen Einfluss); für die Minutenkorrektur musst du übliche UND erwartete Minuten eingeben. Gegnerbewertungen basieren bei aktiviertem Feed auf realen Team-Gegentoren/-punkten oder ansonsten auf deinen manuellen Eingaben; die 1–5-Skala bleibt nur eine grobe Einordnung.</div>
         </section>
         <section className="panel tracking-panel" id="tracking">
           <div className="section-top"><div><span className="section-kicker">07 / PROGNOSE-DATENBANK & BACKTESTING</span><h2>Prognose gegen Ergebnis</h2></div><span className="record-count">{metrics.count} ausgewertete Vorhersagen</span></div>
@@ -698,6 +746,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
           <div className="profile-dialog" role="dialog" aria-modal="true" aria-label={`Spielerprofil ${selectedPlayer.name}`}>
             <button className="profile-close" type="button" autoFocus onClick={() => setSelectedPlayerId(null)} aria-label="Profil schließen">×</button>
             <div className="profile-head"><PlayerAvatar player={selectedPlayer}/><div><span className="section-kicker">SPIELERPROFIL · {sport === "nba" ? "NBA" : league === "__all" ? "FUẞBALL" : league}</span><h2>{selectedPlayer.name}</h2><p>{selectedPlayer.team} · {POS_LABEL[selectedPlayer.position] ?? selectedPlayer.position}</p></div></div>
+            {sport==="nba"&&<div className="nba-profile-star"><strong>★ {isValidNbaStars(effectiveCardStore[selectedPlayer.id]?.stars)?fmt(effectiveCardStore[selectedPlayer.id].stars!):"—"}</strong><span>{nbaStarValue(officialStars[selectedPlayer.id],cardStore[selectedPlayer.id]?.stars).source==="sorare"?"Aktuelle Sorare-Spielersterne":isValidNbaStars(cardStore[selectedPlayer.id]?.stars)?"Manueller Fallback-Wert":"Sorare hat keinen gültigen Sternwert geliefert"} · Gameweek-Sternpreis kann abweichen</span></div>}
             <div className="profile-stats">
               <div><small>Erwarteter Score inkl. Einsatzrisiko</small><strong>{((selectedPlayer.sampleSize > 0 || selectedPlayer.proj !== null || selectedPlayer.avg !== null) ? fmt(selectedPlayer.weighted) : "—")}</strong></div>
               <div><small>Bei Einsatz</small><strong>{((selectedPlayer.sampleSize > 0 || selectedPlayer.proj !== null || selectedPlayer.avg !== null) ? fmt(selectedPlayer.expected) : "—")}</strong></div>
@@ -728,7 +777,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
             {profileScores.length ? <div className="score-bars">{[...profileScores].reverse().map((score,i) => <div key={i} title={`${fmt(score)} Punkte`}><span style={{height:`${Math.min(100, Math.max(4, score / Math.max(1,...profileScores) * 100))}%`}}/><small>{fmt(score)}</small></div>)}</div> : <p className="profile-muted">{historyLoading ? "Historische Scores werden geladen …" : historyError ? "Einzelscores konnten aktuell nicht geladen werden. L5/L10-Durchschnittswerte bleiben nutzbar, sofern Sorare sie liefert." : "Keine historischen Einzelscores von Sorare verfügbar."}</p>}
             <div className="profile-detail-grid"><p><strong>Nächstes Spiel:</strong> {selectedPlayer.nextGame ?? "Nicht verfügbar"}</p><p><strong>Gegner:</strong> {selectedPlayer.opponent ?? "Nicht verfügbar"}</p><p><strong>Form L5 / L10:</strong> {selectedPlayer.last5Avg === null ? "—" : fmt(selectedPlayer.last5Avg)} / {selectedPlayer.last10Avg === null ? "—" : fmt(selectedPlayer.last10Avg)}</p><p><strong>Datenabdeckung:</strong> {selectedPlayer.confidence} ({profileScores.length} Einzelscores; ggf. separate L5/L10-Mittelwerte)</p><p><strong>Bewertung Gegner:</strong> {matchupLabel(selectedPlayer.opponentRating)} {selectedPlayer.opponentRating !== null ? (opponentRatings[selectedPlayer.opponent ?? ""] ? "· manuell" : "· automatisch") : ""}</p><p><strong>Verletzungseinträge:</strong> {selectedPlayer.injuries}</p></div>
             <div className="profile-actions"><button type="button" className="action-primary" onClick={()=>queueManualPlayer(selectedPlayer.id)}>+ Direkt in mein Lineup</button><button type="button" className="profile-favorite" aria-pressed={watchlist.includes(selectedPlayer.id)} onClick={()=>toggleFavorite(selectedPlayer.id)}>{watchlist.includes(selectedPlayer.id)?"★ Favorit entfernen":"☆ Zu Favoriten"}</button><button className="action-primary" type="button" onClick={() => saveTracked(selectedPlayer)}>{tracked.some(t=>t.key===createTrackedPrediction(selectedPlayer,sport).key) ? "Prognose gespeichert ✓" : "Prognose merken"}</button><button type="button" onClick={() => updateCard(selectedPlayer.id,{locked:!selectedCard.locked, excluded:false})}>{selectedCard.locked ? "Fixierung lösen" : "Für Lineup fixieren"}</button><button type="button" onClick={() => updateCard(selectedPlayer.id,{owned:!selectedCard.owned})}>{selectedCard.owned ? "Aus Kartenbestand entfernen" : "Als eigene Karte markieren"}</button></div>
-            <p className="profile-muted">Für den Lineup Builder zählen weiterhin die eingetragenen NBA-Sterne und Kartenboni. Für Spieler ohne aktuelle Sorare-Projektion sind Prognosen nicht belastbar.</p>
+            <p className="profile-muted">Für NBA gelten vorrangig die offiziell synchronisierten Sorare-Sterne; sonst deine manuellen Sternwerte. Kartenboni bleiben manuell. Für Spieler ohne aktuelle Sorare-Projektion sind Prognosen nicht belastbar.</p>
           </div>
         </div>}
         <footer className="app-footer"><strong>MARKERRAS SORARE HELPER</strong><span>Independent Sorare companion · Nicht mit Sorare verbunden · Kein automatisches Einreichen von Lineups</span></footer>

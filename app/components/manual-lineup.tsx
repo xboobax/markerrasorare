@@ -9,7 +9,7 @@ import {assessLineup, duplicateToFreePreset, firstEligibleEmptySlot} from "@/lib
 import {diagnoseLineup} from "@/lib/lineup-doctor";
 import type {Forecast, Sport} from "@/lib/model";
 
-type CardSettings = {owned?:boolean; stars?:number|null; bonusPercent?:number};
+type CardSettings = {owned?:boolean; stars?:number|null; bonusPercent?:number;starSource?:"sorare"};
 type Props = {
   sport: Sport;
   players: Forecast[];
@@ -162,7 +162,7 @@ export default function ManualLineup({sport,players,cardStore,updateCard,targetS
             <div className="manual-slot-buttons"><button type="button" className="manual-pick-button" onClick={()=>{setActiveSlot(active?null:index);setSearch("");}}>{id?"Ändern":"+ Hinzufügen"}</button>{id&&<button type="button" className="manual-remove" aria-label={`Spieler aus Slot ${index+1} entfernen`} onClick={()=>{const next=selection.slice();next[index]=null;setSelection(next);setMessage("");}}>×</button>}</div>
           </div>
           {pick&&<div className="manual-card-options">
-            {sport==="nba"&&<label>Sterne <select aria-label={`Sterne von ${pick.player.name}`} value={isValidNbaStars(cardStore[pick.player.id]?.stars)?String(cardStore[pick.player.id]?.stars):""} onChange={e=>updateCard(pick.player.id,{stars:e.target.value?Number(e.target.value):null})}><option value="">Bitte wählen</option>{starOptions.map(star=><option key={star} value={star}>{fmt(star)} ★</option>)}</select></label>}
+            {sport==="nba"&&<label>Sterne <select aria-label={`Sterne von ${pick.player.name}`} disabled={cardStore[pick.player.id]?.starSource==="sorare"} title={cardStore[pick.player.id]?.starSource==="sorare"?"Aktueller Sorare-Sternwert":"Manueller Ersatzwert"} value={isValidNbaStars(cardStore[pick.player.id]?.stars)?String(cardStore[pick.player.id]?.stars):""} onChange={e=>updateCard(pick.player.id,{stars:e.target.value?Number(e.target.value):null})}><option value="">Bitte wählen</option>{starOptions.map(star=><option key={star} value={star}>{fmt(star)} ★</option>)}</select>{cardStore[pick.player.id]?.starSource==="sorare"&&<small className="manual-star-official">✓ Sorare</small>}</label>}
             <label>Kartenbonus <select aria-label={`Kartenbonus von ${pick.player.name}`} value={cardStore[pick.player.id]?.bonusPercent??0} onChange={e=>updateCard(pick.player.id,{bonusPercent:Number(e.target.value)})}>{[0,5,10,15,20,25,30].map(b=><option value={b} key={b}>+{b} %</option>)}</select></label>
             <label className="manual-owned"><input type="checkbox" checked={cardStore[pick.player.id]?.owned===true} onChange={e=>updateCard(pick.player.id,{owned:e.target.checked})}/> Meine Karte</label>
           </div>}
@@ -231,6 +231,6 @@ export default function ManualLineup({sport,players,cardStore,updateCard,targetS
     {missing>0&&<p className="manual-hint">{missing} gespeicherte Spieler sind in der aktuellen Liga-/Team-Auswahl nicht geladen. {sport === "football" && <Link href="/?sport=football&league=__all">Alle vier Ligen anzeigen</Link>}</p>}
     {lineup.warnings.length>0&&<details className="manual-warnings"><summary>{lineup.warnings.length} Hinweise zu Daten oder Kartenbesitz</summary>{lineup.warnings.map((warning,i)=><p key={i}>• {warning}</p>)}</details>}
     {lineup.valid&&<button type="button" className="action-primary manual-save-predictions" onClick={()=>{onSavePredictions(lineup.picks.map(p=>p.player));setMessage("Die fünf Modellprognosen wurden für das Tracking gespeichert.");}}>Prognosen für diese Aufstellung merken</button>}
-    <p className="manual-footnote">* Scores und Zielchancen sind Modellschätzungen, keine garantierten Ergebnisse. Sterne und Kartenbonus trägst du selbst ein. Der Builder reicht kein Lineup bei Sorare ein. Aufstellungen bleiben lokal in deinem Browser gespeichert.</p>
+    <p className="manual-footnote">* Scores und Zielchancen sind Modellschätzungen, keine garantierten Ergebnisse. NBA-Sterne kommen nach Möglichkeit direkt von Sorare, sonst aus deinen manuellen Ersatzwerten. Kartenboni trägst du selbst ein. Der Builder reicht kein Lineup bei Sorare ein. Aufstellungen bleiben lokal in deinem Browser gespeichert.</p>
   </div>;
 }
