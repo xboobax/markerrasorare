@@ -1,3 +1,5 @@
+> **V1.6.1:** Spielerfoto-Fix: `avatarPictureUrl` für NBA und Fußball in allen Sorare-Abfragestufen. Siehe `UPDATE_V1_6_1_FOTOS_DE.md`.
+
 # Markerras Sorare Helper — Football & NBA Arcade
 
 This is an updated version of the uploaded Next.js 14 repository. Nothing is deployed automatically.

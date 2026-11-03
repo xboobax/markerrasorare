@@ -43,30 +43,28 @@ export async function getNbaTeams(): Promise<Club[]> {
 // Die Felder sind in Stufen angelegt: Falls Sorare ein Feld nicht (mehr) kennt,
 // fällt der Abruf automatisch auf die nächstkleinere Stufe zurück.
 const GAME = "activeInjuries { __typename } nextGame { date homeTeam { name } awayTeam { name } }";
-const FOOT_CORE = "slug displayName position playingStatus";
-const FOOT_IMAGE = 'pictureUrl(derivative: "avatar")';
-// NBA photo availability depends on the current API schema. A field error
-// falls back to identical stats without the photo field.
-// Aggregated scores below are documented Sorare player fields (including NBA).
-// Legacy rawPlayerGameScores is tried first but MUST NOT be required for the
-// working player score. If that field is absent, retain last-5 / last-10 averages.
+// Offizielles Sorare-GraphQL-Schema (Nov. 2026): Beide Sportarten stellen
+// avatarPictureUrl: String! bereit. NBAPlayer hat dagegen KEIN pictureUrl.
+// Der Bildwert bleibt in jeder Fallback-Stufe enthalten, damit bei einem
+// Schema-Downgrade (z.B. historische Scores) nicht sämtliche Fotos verschwinden.
+// Niemals die funktionierende Score-Fallback-Logik für die Fotos aufgeben.
+const FOOT_CORE = "slug displayName position playingStatus avatarPictureUrl";
 const FOOT_ODDS = "nextClassicFixturePlayingStatusOdds { starterOddsBasisPoints substituteOddsBasisPoints nonPlayingOddsBasisPoints }";
-const NBA_CORE = "slug displayName anyPositions";
-const NBA_IMAGE = "pictureUrl";
+const NBA_CORE = "slug displayName anyPositions avatarPictureUrl";
 const FOOT_AVERAGES = "lastFiveSo5AverageScore lastTenPlayedSo5AverageScore lastFiveSo5Appearances nextClassicFixtureProjectedScore";
 const NBA_AVERAGES = "lastFiveSo5AverageScore lastTenPlayedSo5AverageScore lastFiveSo5Appearances nextClassicFixtureProjectedScore nextDailyFixtureProjectedScore";
 const TIERS: Record<Sport, string[]> = {
   football: [
-    `${FOOT_CORE} ${FOOT_IMAGE} rawPlayerGameScores(last: 10) ${FOOT_AVERAGES} ${GAME} ${FOOT_ODDS}`,
-    `${FOOT_CORE} ${FOOT_IMAGE} ${FOOT_AVERAGES} ${GAME} ${FOOT_ODDS}`,
+    `${FOOT_CORE} rawPlayerGameScores(last: 10) ${FOOT_AVERAGES} ${GAME} ${FOOT_ODDS}`,
+    `${FOOT_CORE} ${FOOT_AVERAGES} ${GAME} ${FOOT_ODDS}`,
     `${FOOT_CORE} ${FOOT_AVERAGES} ${GAME} ${FOOT_ODDS}`,
     `${FOOT_CORE} ${FOOT_AVERAGES}`,
     `${FOOT_CORE} nextClassicFixtureProjectedScore`,
     FOOT_CORE,
   ],
   nba: [
-    `${NBA_CORE} ${NBA_IMAGE} rawPlayerGameScores(last: 10) ${NBA_AVERAGES} ${GAME}`,
-    `${NBA_CORE} ${NBA_IMAGE} ${NBA_AVERAGES} ${GAME}`,
+    `${NBA_CORE} rawPlayerGameScores(last: 10) ${NBA_AVERAGES} ${GAME}`,
+    `${NBA_CORE} ${NBA_AVERAGES} ${GAME}`,
     `${NBA_CORE} ${NBA_AVERAGES} ${GAME}`,
     `${NBA_CORE} ${NBA_AVERAGES}`,
     `${NBA_CORE} nextClassicFixtureProjectedScore nextDailyFixtureProjectedScore`,
@@ -122,7 +120,7 @@ function toPlayer(n: any, club: Club, sport: Sport): Player {
     name: String(n.displayName),
     team: club.name,
     teamSlug: club.slug,
-    imageUrl: safeImageUrl(n.pictureUrl),
+    imageUrl: safeImageUrl(n.avatarPictureUrl) ?? safeImageUrl(n.pictureUrl),
     recentScores: raw,
     position: mapPosition(sport, n),
     avg,
