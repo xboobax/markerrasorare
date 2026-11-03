@@ -1,0 +1,22 @@
+{
+  "name": "divisorare",
+  "version": "0.2.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "test:arcade": "tsc --target ES2020 --module commonjs --moduleResolution node --strict --skipLibCheck --outDir .test-build lib/model.ts lib/arcade.ts config/divination.ts && node tests/arcade.test.js"
+  },
+  "dependencies": {
+    "next": "14.2.35",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "typescript": "5.6.3",
+    "@types/node": "20.16.11",
+    "@types/react": "18.3.11",
+    "@types/react-dom": "18.3.1"
+  }
+}
