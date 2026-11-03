@@ -1,11 +1,12 @@
 "use client";
 
-import {useEffect,useMemo,useState} from "react";
+import {useEffect,useMemo,useRef,useState,type DragEvent} from "react";
 import {ARCADE} from "@/config/divination";
-import {isValidNbaStars,optimizeArcadeLineups,slotAccepts,type CardInput,type Strategy} from "@/lib/arcade";
+import {isValidNbaStars,slotAccepts,type CardInput,type Strategy} from "@/lib/arcade";
 import {evaluateManualLineup} from "@/lib/manual-lineup";
 import {diagnoseLineup} from "@/lib/lineup-doctor";
 import {gameDate,initialTeams,placeInTeam,restoreWorkspace,withinHorizon,workspaceKey,type WorkspaceTeam} from "@/lib/builder-workspace";
+import {goalMeter,moveBetweenSelections,quickSwapsForSlot,smartFillEmptySlots} from "@/lib/builder-neon";
 import type {Forecast,Sport} from "@/lib/model";
 
 type CardSettings={owned?:boolean;stars?:number|null;bonusPercent?:number;starSource?:"sorare";locked?:boolean;excluded?:boolean};
@@ -24,15 +25,15 @@ function Avatar({player}:{player:Forecast}){
   return player.imageUrl&&!failed?<img src={player.imageUrl} loading="lazy" referrerPolicy="no-referrer" alt={`Foto: ${player.name}`} onError={()=>setFailed(true)}/>
     :<span className="v23-avatar-empty">{player.name.split(/\s+/).slice(0,2).map(part=>part[0]??"").join("")}</span>;
 }
-function Bars({player}:{player:Forecast}){
+function Bars({player,compact=false}:{player:Forecast;compact?:boolean}){
   const values=(player.recentScores??[]).filter(n=>Number.isFinite(n)&&n>=0).slice(0,10).reverse();
   if(!values.length)return <span className="v23-no-form">Keine Einzel-Scores</span>;
   const max=Math.max(10,...values);
-  return <div className="v23-form-bars" title={`Letzte ${values.length} Sorare-Scores · historische Form, keine Live-Werte`} aria-label={`Letzte ${values.length} Scores: ${values.map(short).join(", ")}`}>
+  return <div className={`v23-form-bars ${compact?"v24-card-form":""}`} title={`Letzte ${values.length} Sorare-Scores · historische Form, keine Live-Werte`} aria-label={`Letzte ${values.length} Scores: ${values.map(short).join(", ")}`}>
     {values.map((value,i)=><i key={i} style={{height:`${Math.max(9,Math.round(value/max*100))}%`}} className={value>=60?"positive":value<25?"negative":"neutral"}/>)}
   </div>;
 }
-function MiniStat({label,value,tone}:{label:string;value:string;tone?:"good"|"warn"}){
+function MiniStat({label,value,tone}:{label:string;value:string;tone?:"good"|"warn"|"star"}){
   return <div className="v23-mini-stat"><small>{label}</small><strong className={tone?`tone-${tone}`:""}>{value}</strong></div>;
 }
 export default function BuilderWorkspace({sport,players,cardStore,updateCard,targetScore,onOpenProfile,onSavePredictions,requestedPlayer,favorites,onToggleFavorite}:Props){
@@ -50,6 +51,9 @@ export default function BuilderWorkspace({sport,players,cardStore,updateCard,tar
   const [undoTeams,setUndoTeams]=useState<WorkspaceTeam[]|null>(null);
   const [strategy,setStrategy]=useState<Strategy>("balanced");
   const [now,setNow]=useState<Date|null>(null);
+  const [swapTarget,setSwapTarget]=useState<{teamId:string;slot:number}|null>(null);
+  const [dragTarget,setDragTarget]=useState<string|null>(null);
+  const dragRef=useRef<{kind:"pool"|"slot";playerId:string;teamId?:string;slot?:number}|null>(null);
   useEffect(()=>setNow(new Date()),[]);
   const activeTeam=teams.find(t=>t.id===activeTeamId)??teams[0];
   const slots=sport==="nba"?ARCADE.nba.slots:ARCADE.football.slots;
@@ -65,7 +69,7 @@ export default function BuilderWorkspace({sport,players,cardStore,updateCard,tar
   const activeSlotLabel=activeSlot===null?"Nächsten freien Slot belegen":`Slot ${activeSlot+1}: ${slotNames[slots[activeSlot]]}`;
 
   useEffect(()=>{
-    setLoadedSport(null);setActiveSlot(null);setMsg("");setLastRequest(null);setUndoTeams(null);
+    setLoadedSport(null);setActiveSlot(null);setSwapTarget(null);setMsg("");setLastRequest(null);setUndoTeams(null);
     try{
       const raw=window.localStorage.getItem(workspaceKey(sport));
       const legacy=window.localStorage.getItem(`markerras.sorare.manual-lineup.v1.${sport}`);
@@ -80,7 +84,7 @@ export default function BuilderWorkspace({sport,players,cardStore,updateCard,tar
   },[teams,activeTeamId,sport,loadedSport]);
 
   const changeTeams=(fn:(previous:WorkspaceTeam[])=>WorkspaceTeam[])=>{
-    setUndoTeams(teams.map(t=>({...t,selection:t.selection.slice()})));
+    setUndoTeams(teams.map(t=>({...t,selection:t.selection.slice(),locks:[...t.locks]})));
     setTeams(fn);
   };
   const changeTeam=(id:string,fn:(current:WorkspaceTeam)=>WorkspaceTeam)=>changeTeams(old=>old.map(t=>t.id===id?fn(t):t));
@@ -88,9 +92,13 @@ export default function BuilderWorkspace({sport,players,cardStore,updateCard,tar
     const team=teams.find(t=>t.id===teamId);
     if(!team)return;
     if(cardStore[id]?.excluded){setMsg("Dieser Spieler ist ausgeschlossen. Entferne erst die Sperre in der Spielerliste.");return;}
+    const targetIndex=slot===null?team.selection.findIndex((v,i)=>!v&&slotAccepts(slots[i],byId.get(id)?.position??"")):slot;
+    if(targetIndex!==null&&targetIndex>=0&&team.selection[targetIndex]&&team.locks.includes(team.selection[targetIndex]!)){
+      setMsg("Dieser Slot ist fixiert. Bitte erst das Schloss öffnen.");return;
+    }
     const placed=placeInTeam(team.selection,id,cards,sport,slot);
     if(placed.reason){setMsg(placed.reason);return;}
-    changeTeam(team.id,old=>({...old,selection:placed.selection}));
+    changeTeam(team.id,old=>({...old,selection:placed.selection,locks:old.locks.filter(lock=>placed.selection.includes(lock))}));
     setActiveTeamId(team.id);setActiveSlot(null);
     setMsg(`${byId.get(id)?.name??"Spieler"} in Team ${teams.indexOf(team)+1} · Slot ${(placed.index??0)+1} aufgenommen.`);
   };
@@ -105,14 +113,14 @@ export default function BuilderWorkspace({sport,players,cardStore,updateCard,tar
     const team=teams.find(t=>t.id===id);
     if(!team)return;
     if(team.selection.some(Boolean)&&!window.confirm("Alle fünf Spieler dieses Teams entfernen?"))return;
-    changeTeam(id,t=>({...t,selection:[null,null,null,null,null]}));setMsg("Team geleert.");
+    changeTeam(id,t=>({...t,selection:[null,null,null,null,null],locks:[]}));setMsg("Team geleert.");
   };
   const cloneTeam=(id:string)=>{
     if(teams.length>=6){setMsg("Maximal sechs Teams gleichzeitig. Lösche eines, um Platz zu schaffen.");return;}
     const source=teams.find(t=>t.id===id);
     if(!source)return;
     const nextId=`team-${Math.max(...teams.map(t=>Number(t.id.split("-")[1])||0))+1}`;
-    changeTeams(old=>[...old,{...source,id:nextId,selection:source.selection.slice(),collapsed:false}]);
+    changeTeams(old=>[...old,{...source,id:nextId,selection:source.selection.slice(),locks:[...source.locks],collapsed:false}]);
     setActiveTeamId(nextId);setMsg("Team als neue Variante dupliziert.");
   };
   const removeTeam=(id:string)=>{
@@ -123,23 +131,45 @@ export default function BuilderWorkspace({sport,players,cardStore,updateCard,tar
     setMsg("Team entfernt.");
   };
   const autoFill=(id:string)=>{
-    const team=teams.find(t=>t.id===id);
-    if(!team)return;
-    if(team.selection.some(Boolean)&&!window.confirm("Die Spieler dieses Teams durch eine automatisch optimierte Aufstellung ersetzen?"))return;
+    const team=teams.find(t=>t.id===id);if(!team)return;
     const target=team.goal??targetScore;
-    const poolCards=cards.filter(c=>pool==="owned"?c.owned:pool==="favorites"?favoriteSet.has(c.player.id):pool==="healthy"?
+    const allowed=cards.filter(c=>pool==="owned"?c.owned:pool==="favorites"?favoriteSet.has(c.player.id):pool==="healthy"?
       c.player.forecastSources.length>0&&c.player.hasGame!==false&&c.player.playProb>=.65:true);
-    const result=optimizeArcadeLineups(poolCards,{sport,strategy:strategy==="target"&&!target?"balanced":strategy,
-      targetScore:target,ownedOnly:pool==="owned",limit:1,beamWidth:260,maxCandidatesPerSlot:120,
-      excludedPlayerIds:Object.keys(cardStore).filter(playerId=>cardStore[playerId]?.excluded),
-      lockedPlayerIds:Object.keys(cardStore).filter(playerId=>cardStore[playerId]?.locked)});
-    const best=result[0];
-    if(!best||best.picks.length!==5){setMsg("Keine vollständige gültige Auto-Aufstellung gefunden. Prüfe Positionen, NBA-Sterne und deine Filter.");return;}
-    const assigned=slots.map((slot,i)=>best.picks[i]?.player.id??null);
-    const check=evaluateManualLineup(assigned,cards,sport,target);
-    if(!check.valid){setMsg("Die berechnete Aufstellung hat eine Regelprüfung nicht bestanden und wurde nicht übernommen.");return;}
-    changeTeam(id,t=>({...t,selection:assigned}));setActiveTeamId(id);
-    setMsg(`Team automatisch befüllt: ${fmt(check.projectedScore)} prognostizierte Punkte. Kartenbesitz und Gameweek-Regeln prüfen.`);
+    const filled=smartFillEmptySlots(team.selection,cards,sport,{
+      strategy:strategy==="target"&&!target?"balanced":strategy,targetScore:target,
+      allowedIds:allowed.map(c=>c.player.id),excludedIds:Object.keys(cardStore).filter(k=>cardStore[k]?.excluded),
+    });
+    if(filled.reason){setMsg(filled.reason);return;}
+    const check=evaluateManualLineup(filled.selection,cards,sport,target);
+    if(!check.valid){setMsg("Regelprüfung fehlgeschlagen. Die bisherige Aufstellung bleibt erhalten.");return;}
+    changeTeam(id,t=>({...t,selection:filled.selection,locks:t.locks.filter(lock=>filled.selection.includes(lock))}));
+    setActiveTeamId(id);setActiveSlot(null);setSwapTarget(null);
+    setMsg(`Smart Auto-Fill: ${filled.added} freie Slots ergänzt. Alle vorhandenen Spieler bleiben erhalten. ${fmt(check.projectedScore)} Punkte Prognose.`);
+  };
+  const toggleLock=(teamId:string,id:string)=>{
+    changeTeam(teamId,t=>({...t,locks:t.locks.includes(id)?t.locks.filter(v=>v!==id):[...t.locks,id]}));
+    setMsg("Spieler-Fixierung für dieses Team aktualisiert.");
+  };
+  const beginDrag=(event:DragEvent<HTMLElement>,payload:{kind:"pool"|"slot";playerId:string;teamId?:string;slot?:number})=>{
+    dragRef.current=payload;event.dataTransfer.effectAllowed="move";
+    event.dataTransfer.setData("application/x-markerras-player",JSON.stringify(payload));
+    event.dataTransfer.setData("text/plain",payload.playerId);
+  };
+  const dropOnSlot=(event:DragEvent<HTMLElement>,teamId:string,index:number)=>{
+    event.preventDefault();setDragTarget(null);
+    let payload=dragRef.current;
+    if(!payload){try{payload=JSON.parse(event.dataTransfer.getData("application/x-markerras-player"));}catch{}}
+    dragRef.current=null;
+    if(!payload||typeof payload.playerId!=="string")return;
+    if(payload.kind==="pool"){select(payload.playerId,index,teamId);return;}
+    const from=teams.find(t=>t.id===payload.teamId),to=teams.find(t=>t.id===teamId);
+    if(!from||!to||typeof payload.slot!=="number")return;
+    const changed=moveBetweenSelections({source:from.selection,target:to.selection,sourceSlot:payload.slot,targetSlot:index,
+      sameTeam:from.id===to.id,sport,cards,sourceLocks:from.locks,targetLocks:to.locks});
+    if(changed.reason){setMsg(changed.reason);return;}
+    if(from.id===to.id)changeTeam(from.id,t=>({...t,selection:changed.source}));
+    else changeTeams(old=>old.map(t=>t.id===from.id?{...t,selection:changed.source}:t.id===to.id?{...t,selection:changed.target}:t));
+    setActiveTeamId(teamId);setActiveSlot(null);setSwapTarget(null);setMsg("Spieler per Drag & Drop verschoben. Beide Teams wurden auf gültige Positionen und Sterne geprüft.");
   };
   const copyTeam=async(id:string)=>{
     const team=teams.find(t=>t.id===id);if(!team)return;
@@ -167,68 +197,105 @@ export default function BuilderWorkspace({sport,players,cardStore,updateCard,tar
       return sort==="name"?a.name.localeCompare(b.name,"de"):(weight(b)-weight(a)||a.name.localeCompare(b.name,"de"));
     });
   },[players,query,position,pool,cardStore,favoriteSet,horizon,now,activeSlot,slots,sort]);
+  const quickSwaps=useMemo(()=>{
+    if(!swapTarget)return [];
+    const team=teams.find(t=>t.id===swapTarget.teamId);if(!team)return [];
+    return quickSwapsForSlot(team.selection,swapTarget.slot,cards,sport,Object.keys(cardStore).filter(id=>cardStore[id]?.excluded),5);
+  },[swapTarget,teams,cards,sport,cardStore]);
   const [showCount,setShowCount]=useState(80);
   useEffect(()=>setShowCount(80),[sport,query,position,pool,horizon,sort,activeSlot]);
   const poolCount=players.length;
-  return <div className="workspace-v23" aria-label="V2.3 Builder Workspace">
+  return <div className="workspace-v23" aria-label="V2.4 Obsidian Neon Builder Workspace">
     <header className="v23-toolbar">
-      <div className="v23-toolbar-brand"><span className="v23-mark">M<span>★</span></span><span><strong>BUILDER WORKSPACE</strong><small>{sport==="nba"?"NBA · OFFIZIELLE SORARE-STERNE":"FOOTBALL · 5 POSITIONEN"} / V2.3</small></span></div>
+      <div className="v23-toolbar-brand"><span className="v23-mark">M<span>★</span></span><span><strong>NEON BUILDER</strong><small>{sport==="nba"?"NBA · OFFIZIELLE SORARE-STERNE":"FOOTBALL · 5 POSITIONEN"} / V2.4</small></span></div>
       <label>Zeithorizont<select value={horizon===null?"all":horizon} onChange={e=>setHorizon(e.target.value==="all"?null:Number(e.target.value))}>
         <option value="all">Alle bekannten Spiele</option><option value="24">≈ Nächste 24 Std.*</option><option value="72">Nächste 3 Tage*</option><option value="168">Nächste 7 Tage*</option>
       </select></label>
       <label>Spielerpool<select value={pool} onChange={e=>setPool(e.target.value as typeof pool)}><option value="all">Alle Spieler</option><option value="owned">Meine Karten</option><option value="favorites">Watchlist</option><option value="healthy">Gute Datenlage</option></select></label>
       <label>Optimierung<select value={strategy} onChange={e=>setStrategy(e.target.value as Strategy)}><option value="balanced">Ausgewogen</option><option value="safe">Sicher</option><option value="upside">Offensiv</option><option value="target" disabled={targetScore===null&&!teams.some(t=>t.goal!==null)}>Arcade-Ziel</option></select></label>
-      <div className="v23-toolbar-actions"><button type="button" onClick={()=>autoFill(activeTeamId)} title="Aktives Team automatisch befüllen">✦ Auto-Builder</button><button type="button" onClick={()=>cloneTeam(activeTeamId)} title="Aktives Team kopieren">⧉ Team kopieren</button><button type="button" onClick={()=>{if(undoTeams){setTeams(undoTeams);setUndoTeams(null);setMsg("Letzte Teamänderung rückgängig gemacht.");}}} disabled={!undoTeams} title="Letzte Teamänderung rückgängig machen">↶ Undo</button></div>
+      <div className="v23-toolbar-actions"><button type="button" onClick={()=>autoFill(activeTeamId)} title="Nur freie Slots des aktiven Teams füllen">✦ Smart Auto-Fill</button><button type="button" onClick={()=>cloneTeam(activeTeamId)} title="Aktives Team kopieren">⧉ Team kopieren</button><button type="button" onClick={()=>{if(undoTeams){setTeams(undoTeams);setUndoTeams(null);setMsg("Letzte Teamänderung rückgängig gemacht.");}}} disabled={!undoTeams} title="Letzte Teamänderung rückgängig machen">↶ Undo</button></div>
     </header>
-    <div className="v23-subbar"><span className="v23-live-dot"/> <strong>{teams.length} Teams</strong><span>{poolCount} geladene Spieler</span><span className="v23-target-label">Aktives Team <b>{activeTeamId.replace("team-", "#")}</b> · {activeSlotLabel}</span><span className="v23-tiny-muted">* Nur Spiele mit bekanntem Datum; Uhrzeit unbekannt</span></div>
+    <div className="v23-subbar"><span className="v23-live-dot"/> <strong>{teams.length} Teams</strong><span>{poolCount} geladene Spieler</span><span className="v23-target-label">Aktives Team <b>{activeTeamId.replace("team-", "#")}</b> · {activeSlotLabel}</span><span className="v23-tiny-muted">Spieler rechts ziehen oder „+“ benutzen · Spieltermine ohne bestätigte Uhrzeit</span></div>
     {msg&&<div className="v23-message" role="status">{msg}<button type="button" onClick={()=>setMsg("")} aria-label="Hinweis schließen">×</button></div>}
     <div className="v23-layout">
       <div className="v23-team-column" aria-label="Meine Teams">
         {assessment.map(({team,result},teamIndex)=>{
           const active=team.id===activeTeamId;
           const d=active?doctor:null;
-          return <section key={team.id} className={`v23-team ${active?"is-current":""}`} aria-label={`Team ${teamIndex+1}`}>
+          const meter=goalMeter(result.projectedScore,team.goal??targetScore);
+          const missing=Math.max(0,5-team.selection.filter(Boolean).length);
+          const riskCount=result.errors.length+result.warnings.length+(d?.issues.length??0)+Number(missing>0);
+          return <section key={team.id} className={`v23-team v24-team ${active?"is-current":""}`} aria-label={`Team ${teamIndex+1}`}>
             <div className="v23-team-top">
               <button type="button" className="v23-collapse" onClick={()=>changeTeam(team.id,t=>({...t,collapsed:!t.collapsed}))} aria-label={`Team ${teamIndex+1} ${team.collapsed?"ausklappen":"einklappen"}`}>{team.collapsed?"▸":"⌄"}</button>
               <button type="button" className="v23-team-name" onClick={()=>{setActiveTeamId(team.id);setActiveSlot(null);}}>TEAM {teamIndex+1}</button>
               <span className={`v23-team-state ${result.valid?"good":result.errors.length?"bad":"idle"}`} title={result.errors.join(" · ")||"Noch nicht vollständig"}>{result.valid?"✓ Gültig":result.errors.length?"! Prüfen":`${result.picks.length}/5`}</span>
               <div className="v23-team-score"><span>{sport==="nba"?"STERNE":"PS"}<b className={sport==="nba"&&result.starsUsed>16?"danger":""}>{sport==="nba"?fmt(result.starsUsed):short(result.projectedScore)}</b></span><span>PROG.<b>{fmt(result.projectedScore)}</b></span><label>ZIEL<input type="number" min="1" max="10000" placeholder={targetScore===null?"—":String(targetScore)} value={team.goal??""} aria-label={`Zielscore Team ${teamIndex+1}`} onChange={e=>changeTeam(team.id,t=>({...t,goal:e.target.value?Math.max(1,Math.min(10000,Number(e.target.value))):null}))}/></label></div>
-              <div className="v23-team-tools"><button type="button" onClick={()=>autoFill(team.id)} title="Auto-Builder für Team">✦</button><button type="button" onClick={()=>cloneTeam(team.id)} title="Team duplizieren">⧉</button><button type="button" onClick={()=>void copyTeam(team.id)} title="Team kopieren">▣</button><button type="button" onClick={()=>clearTeam(team.id)} title="Team leeren">⌫</button>{teams.length>1&&<button type="button" onClick={()=>removeTeam(team.id)} title="Team löschen">×</button>}</div>
+              <div className="v23-team-tools"><button type="button" onClick={()=>autoFill(team.id)} title="Nur freie Slots ergänzen – vorhandene Spieler bleiben stehen">✦</button><button type="button" onClick={()=>cloneTeam(team.id)} title="Team duplizieren">⧉</button><button type="button" onClick={()=>void copyTeam(team.id)} title="Team kopieren">▣</button><button type="button" onClick={()=>clearTeam(team.id)} title="Team leeren">⌫</button>{teams.length>1&&<button type="button" onClick={()=>removeTeam(team.id)} title="Team löschen">×</button>}</div>
             </div>
             {!team.collapsed&&<>
-              <div className="v23-card-row">
+              <div className="v23-card-row v24-card-row">
                 {slots.map((slot,index)=>{
                   const pick=result.slots[index];const player=pick?.player??byId.get(team.selection[index]??"");
                   const isSelected=active&&activeSlot===index;
-                  return <article key={`${slot}-${index}`} className={`v23-card ${player?"filled":"empty"} ${isSelected?"focused":""}`}>
-                    <div className="v23-card-top"><span>{sport==="nba"?`#${index+1}`:({GK:"TW",DEF:"VER",MID:"MF",FWD:"ST",FLEX:"EX"} as Record<string,string>)[slot]}</span><div><button type="button" aria-label={`Slot ${index+1} wählen`} onClick={()=>{setActiveTeamId(team.id);setActiveSlot(index);setMsg("");}}>✎</button>{player&&<><button type="button" title={cardStore[player.id]?.excluded?"Spieler freigeben":"Spieler für den Auto-Builder sperren"} aria-label={`${player.name} für Auto-Builder ${cardStore[player.id]?.excluded?"freigeben":"sperren"}`} onClick={()=>{updateCard(player.id,{excluded:!cardStore[player.id]?.excluded,locked:false});setMsg("Auto-Builder-Sperre aktualisiert. Der Spieler bleibt in diesem manuellen Team, bis du ihn entfernst.");}}>⊘</button><button type="button" aria-label={`${player.name} entfernen`} onClick={()=>changeTeam(team.id,t=>({...t,selection:t.selection.map((id,i)=>i===index?null:id)}))}>−</button></>}</div></div>
+                  const locked=!!player&&team.locks.includes(player.id);
+                  const dragHere=dragTarget===`${team.id}:${index}`;
+                  return <article key={`${slot}-${index}`} className={`v23-card v24-card ${player?"filled":"empty"} ${isSelected?"focused":""} ${locked?"v24-locked":""} ${dragHere?"v24-drop-target":""}`}
+                    draggable={!!player&&!locked} onDragStart={event=>player&&beginDrag(event,{kind:"slot",playerId:player.id,teamId:team.id,slot:index})}
+                    onDragEnd={()=>{dragRef.current=null;setDragTarget(null);}}
+                    onDragOver={event=>{event.preventDefault();event.dataTransfer.dropEffect="move";setDragTarget(`${team.id}:${index}`);}}
+                    onDragLeave={()=>setDragTarget(key=>key===`${team.id}:${index}`?null:key)}
+                    onDrop={event=>dropOnSlot(event,team.id,index)}>
+                    <div className="v23-card-top"><span>{sport==="nba"?`#${index+1}`:({GK:"TW",DEF:"VER",MID:"MF",FWD:"ST",FLEX:"EX"} as Record<string,string>)[slot]}</span><div><button type="button" aria-label={`Slot ${index+1} wählen`} onClick={()=>{setActiveTeamId(team.id);setActiveSlot(index);setMsg("");}}>✎</button>{player&&<><button type="button" className={locked?"v24-lock-active":""} title={locked?"Spieler entsperren":"Spieler in diesem Team fixieren"} aria-label={`${player.name} ${locked?"entsperren":"fixieren"}`} aria-pressed={locked} onClick={()=>toggleLock(team.id,player.id)}>{locked?"🔒":"♧"}</button><button type="button" title="Quick Swap: passende Alternativen zeigen" aria-label={`Quick Swap für ${player.name}`} onClick={()=>{setActiveTeamId(team.id);setActiveSlot(index);setSwapTarget(v=>v?.teamId===team.id&&v.slot===index?null:{teamId:team.id,slot:index});}}>⇄</button><button type="button" title={cardStore[player.id]?.excluded?"Spieler freigeben":"Spieler für den Auto-Builder sperren"} aria-label={`${player.name} für Auto-Builder ${cardStore[player.id]?.excluded?"freigeben":"sperren"}`} disabled={locked} onClick={()=>{updateCard(player.id,{excluded:!cardStore[player.id]?.excluded,locked:false});setMsg("Auto-Builder-Sperre aktualisiert. Der Spieler bleibt in diesem manuellen Team, bis du ihn entfernst.");}}>⊘</button><button type="button" aria-label={`${player.name} entfernen`} disabled={locked} onClick={()=>changeTeam(team.id,t=>({...t,selection:t.selection.map((id,i)=>i===index?null:id),locks:t.locks.filter(v=>v!==player.id)}))}>−</button></>}</div></div>
                     {player?<>
                       <button type="button" className="v23-portrait" onClick={()=>onOpenProfile(player.id)} title={`${player.name} Profil öffnen`}><Avatar player={player}/></button>
                       <button type="button" className="v23-player-name" onClick={()=>onOpenProfile(player.id)} title={player.name}>{player.name}</button>
                       <span className="v23-role">{positionNames[player.position]??player.position}</span>
                       <div className="v23-mini-grid">
-                        {sport==="nba"?<><MiniStat label="L5" value={player.last5Avg===null?"—":short(player.last5Avg)}/><MiniStat label="Ø" value={player.avg===null?"—":short(player.avg)}/><MiniStat label="★" value={isValidNbaStars(cardStore[player.id]?.stars)?fmt(cardStore[player.id]!.stars!):"—"}/></>
-                          :<><MiniStat label="Einsatz*" value={`${short(player.playProb*100)}%`} tone={player.playProb<.65?"warn":"good"}/><MiniStat label="L5" value={player.last5Avg===null?"—":short(player.last5Avg)}/><MiniStat label="Bonus" value={`+${pick?.bonusPercent??0}%`}/></>}
+                        {sport==="nba"?<><MiniStat label="L5" value={player.last5Avg===null?"—":short(player.last5Avg)}/><MiniStat label="Ø" value={player.avg===null?"—":short(player.avg)}/><MiniStat label="★" tone="star" value={isValidNbaStars(cardStore[player.id]?.stars)?fmt(cardStore[player.id]!.stars!):"—"}/></>
+                          :<><MiniStat label="Einsatz*" value={`${short(player.playProb*100)}%`} tone={player.playProb<.65?"warn":"good"}/><MiniStat label="L5" value={player.last5Avg===null?"—":short(player.last5Avg)}/><MiniStat label="Bonus" tone="star" value={`+${pick?.bonusPercent??0}%`}/></>}
                       </div>
                       <div className="v23-mini-grid second"><MiniStat label="Prognose" value={pick?fmt(pick.projectedScore):"—"}/><MiniStat label="Floor" value={pick?fmt(pick.floorScore):"—"}/><MiniStat label="Ceiling" value={pick?fmt(pick.ceilingScore):"—"}/></div>
+                      <Bars player={player} compact/>
                       <div className="v23-card-match"><strong>{player.opponent?`vs ${player.opponent}`:player.team}</strong><small>{gameDate(player)?gameDate(player)!.toLocaleDateString("de-DE"):"Termin unbekannt"}{player.hasGame===false?" · kein Spiel gemeldet":""}</small></div>
                     </>:<button type="button" className="v23-card-empty-content" onClick={()=>{setActiveTeamId(team.id);setActiveSlot(index);setMsg("");}}><span className="v23-plus-ring">+</span><strong>{team.selection[index]?"Spieler nicht geladen":sport==="nba"?"Karte wählen":slotNames[slot]}</strong><small>{team.selection[index]?"Team oder Liga prüfen":"Spieler rechts auswählen"}</small></button>}
                   </article>;
                 })}
               </div>
+              {meter&&<div className="v24-goal-meter" aria-label={`Arcade-Ziel: ${Math.round(meter.percentage)} Prozent des Punkteziels prognostiziert`}>
+                <div className="v24-goal-line"><span>◎ Arcade Goal Meter <b>{fmt(result.projectedScore)} / {fmt(team.goal??targetScore??0)} PS</b></span><strong className={meter.difference>=0?"v24-positive":"v24-pending"}>{meter.difference>=0?`+${fmt(meter.difference)}`:`−${fmt(meter.remaining)}`} PS</strong></div>
+                <div className="v24-goal-track"><span style={{width:`${meter.percentage}%`}}/></div>
+                <small>{result.valid&&result.targetProbability!==null?`Geschätzte Zielchance ${short(result.targetProbability*100)} % · nicht kalibriert`:"Zielchance erst mit einem gültigen Team und belastbaren Sorare-Daten"}</small>
+              </div>}
               <footer className="v23-team-footer"><span><b>{result.picks.length}/5</b> Spieler</span><span>Floor <b>{fmt(result.floorScore)}</b></span><span>Ceiling <b>{fmt(result.ceilingScore)}</b></span>{sport==="nba"&&<span>Budget <b className={result.starsUsed>16?"v23-danger":""}>{fmt(result.starsUsed)}/16 ★</b></span>}<span>Zielchance* <b>{result.targetProbability===null?"—":`${short(result.targetProbability*100)} %`}</b></span></footer>
+              {active&&<details className={`v24-risk-radar ${result.errors.length?"v24-risk-critical":riskCount?"v24-risk-warning":"v24-risk-clear"}`} open={result.errors.length>0}>
+                <summary><span>◈ LINEUP RISK RADAR</span><b>{result.errors.length?`${result.errors.length} Regelprobleme`:missing?`${missing} freie Slots · ${riskCount} Hinweise`:riskCount?`${riskCount} Hinweise`:"Keine Warnungen"}</b></summary>
+                <div className="v24-risk-content">
+                  {missing>0&&<p>{missing} freie Slots: Das Team ist noch nicht vollständig. Die Zielchance kann erst danach berechnet werden.</p>}
+                  {result.errors.map((item,i)=><p key={`error-${i}`} className="v24-risk-error">✕ {item}</p>)}
+                  {result.warnings.slice(0,5).map((item,i)=><p key={`warn-${i}`}>! {item}</p>)}
+                  {d?.issues.slice(0,5).map(issue=><p key={issue.id}><b>{issue.title}:</b> {issue.description}</p>)}
+                  {!riskCount&&<p>Keine Probleme aus den verfügbaren Daten festgestellt. Prüfe vor dem Sorare-Lock trotzdem Kartenberechtigung und Gameweek-Sternpreis.</p>}
+                </div>
+              </details>}
+              {active&&swapTarget?.teamId===team.id&&team.selection[swapTarget.slot]&&<div className="v24-quick-swap">
+                <div className="v24-swap-header"><b>⇄ QUICK SWAP · Slot {swapTarget.slot+1}</b><button type="button" onClick={()=>setSwapTarget(null)} aria-label="Quick Swap schließen">×</button></div>
+                {team.locks.includes(team.selection[swapTarget.slot]!)?<p>Spieler ist fixiert. Bitte zuerst entsperren.</p>:quickSwaps.length?quickSwaps.map(candidate=><button key={candidate.id} type="button" className="v24-swap-pick" onClick={()=>{select(candidate.id,swapTarget.slot,team.id);setSwapTarget(null);}}>
+                  <span><b>{candidate.name}</b><small>{candidate.team} {candidate.stars!==null?` · ${fmt(candidate.stars)} ★`:""}</small></span><strong className={candidate.delta>=0?"v24-positive":"v24-pending"}>{candidate.delta>=0?"+":""}{fmt(candidate.delta)} PS</strong><span>Übernehmen ↗</span>
+                </button>):<p>Keine zulässigen Alternativen mit den aktuell geladenen Daten gefunden.</p>}
+              </div>}
               {active&&result.errors.length>0&&<p className="v23-team-alert">{result.errors.slice(0,2).join(" · ")}</p>}
               {active&&d&&d.issues.length>0&&<details className="v23-doctor"><summary>✦ Lineup Doctor · {d.issues.length} Hinweise</summary><div>{d.issues.slice(0,4).map(item=><p key={item.id}><b>{item.title}</b> – {item.description}</p>)}</div></details>}
-              {active&&d&&d.swaps.length>0&&<details className="v23-doctor v23-doctor-swaps"><summary>✦ Lineup Doctor · {d.swaps.length} geprüfte Wechselideen</summary><div>{d.swaps.map(swap=><div className="v23-swap" key={`${swap.slotIndex}-${swap.toId}`}><span><b>{swap.fromName}</b> → <b>{swap.toName}</b><small>{swap.kind==="safer"?"Weniger Modellrisiko":swap.kind==="repair"?"Regelreparatur":"Höhere Prognose"} · {swap.delta>=0?"+":""}{fmt(swap.delta)} Punkte</small></span><button type="button" onClick={()=>select(swap.toId,swap.slotIndex,team.id)}>Wechsel übernehmen</button></div>)}</div></details>}
+              {active&&d&&d.swaps.length>0&&<details className="v23-doctor v23-doctor-swaps"><summary>✦ Lineup Doctor · {d.swaps.length} geprüfte Wechselideen</summary><div>{d.swaps.map(swap=><div className="v23-swap" key={`${swap.slotIndex}-${swap.toId}`}><span><b>{swap.fromName}</b> → <b>{swap.toName}</b><small>{swap.kind==="safer"?"Weniger Modellrisiko":swap.kind==="repair"?"Regelreparatur":"Höhere Prognose"} · {swap.delta>=0?"+":""}{fmt(swap.delta)} Punkte</small></span><button type="button" disabled={team.locks.includes(swap.fromId)} onClick={()=>select(swap.toId,swap.slotIndex,team.id)}>Wechsel übernehmen</button></div>)}</div></details>}
             </>}
           </section>;
         })}
         <button type="button" className="v23-add-team" onClick={()=>{
           if(teams.length>=6){setMsg("Maximal 6 Teams.");return;}
           const nextId=`team-${Math.max(...teams.map(t=>Number(t.id.split("-")[1])||0))+1}`;
-          changeTeams(old=>[...old,{id:nextId,selection:[null,null,null,null,null],goal:null,collapsed:false}]);setActiveTeamId(nextId);
+          changeTeams(old=>[...old,{id:nextId,selection:[null,null,null,null,null],goal:null,collapsed:false,locks:[]}]);setActiveTeamId(nextId);
         }} disabled={teams.length>=6}>+ Neues Team hinzufügen <span>{teams.length} / 6</span></button>
-        <div className="v23-team-note">Autospeicherung auf diesem Gerät · Alte V2.2-Aufstellungen werden beim ersten Öffnen übernommen. Kartenbesitz ist weiterhin manuell zu prüfen.</div>
+        <div className="v23-team-note">Autospeicherung inklusive Fixierungen auf diesem Gerät · V2.3-Teams werden übernommen. Kartenbesitz ist weiterhin manuell zu prüfen.</div>
       </div>
       <section className="v23-pool" aria-label="Spielerpool und Suche">
         <div className="v23-pool-head"><div><span className="v23-kicker">PLAYER DATABASE / SCOUTING</span><h3>Spielerpool <small>{sortedPlayers.length.toLocaleString("de-DE")} Treffer</small></h3></div><span className="v23-active-team-chip">◉ Team {teams.findIndex(t=>t.id===activeTeamId)+1} aktiv</span></div>
@@ -243,7 +310,7 @@ export default function BuilderWorkspace({sport,players,cardStore,updateCard,tar
             const stars=isValidNbaStars(card.stars)?card.stars:null;
             const selected=selectedIds.has(p.id);
             const date=gameDate(p);
-            return <tr key={p.id} className={selected?"v23-roster-picked":""}>
+            return <tr key={p.id} draggable={!card.excluded} onDragStart={event=>beginDrag(event,{kind:"pool",playerId:p.id})} onDragEnd={()=>{dragRef.current=null;setDragTarget(null);}} className={selected?"v23-roster-picked":""}>
               <td><div className="v23-row-actions"><button type="button" title={`Zu Team ${teams.findIndex(t=>t.id===activeTeamId)+1} hinzufügen`} aria-label={`${p.name} zum Team hinzufügen`} onClick={()=>select(p.id)} disabled={selected||card.excluded===true}>+</button><button type="button" title="Für den Optimizer ausschließen" aria-label={`${p.name} ${card.excluded?"freigeben":"ausschließen"}`} aria-pressed={card.excluded===true} className={card.excluded?"is-blocked":""} onClick={()=>updateCard(p.id,{excluded:!card.excluded,locked:false})}>⊘</button></div></td>
               <td className="v23-date">{date?date.toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit",year:"2-digit"}):"—"}<small>{date?"Datum bekannt":"Nicht verfügbar"}</small></td>
               <td><div className="v23-roster-person"><button type="button" className="v23-roster-avatar" onClick={()=>onOpenProfile(p.id)}><Avatar player={p}/></button><div><button type="button" className="v23-roster-name" onClick={()=>onOpenProfile(p.id)}>{p.name}</button><small>{p.team} · {p.position} {p.opponent?`· vs ${p.opponent}`:""}</small><button type="button" className={`v23-inline-fav ${favoriteSet.has(p.id)?"is-on":""}`} onClick={()=>onToggleFavorite(p.id)}>{favoriteSet.has(p.id)?"★ Auf Watchlist":"☆ Merken"}</button></div></div></td>

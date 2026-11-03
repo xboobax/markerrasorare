@@ -960,3 +960,96 @@ body { background:#090d17; color:var(--ink); -webkit-font-smoothing:antialiased;
 .v23-swap{display:flex;gap:8px;justify-content:space-between;align-items:center;border:1px solid #3f5760;background:#122b35;padding:8px;border-radius:7px;margin-top:6px}
 .v23-swap>span{display:grid;gap:3px;min-width:0}.v23-swap b{color:#e2effb;font-weight:750}.v23-swap small{font-size:9px;color:#a4bcd1}
 .v23-swap>button{white-space:nowrap;border-radius:6px;border:1px solid #458d7d;background:#1c4a44;color:#b0f8e3;font-size:9px;font-weight:800;padding:7px}
+
+/* V2.4 OBISIDIAN NEON — screenshot-faithful five-card builder with consistent semantic accents.
+   Colors: purple = selection, mint = valid projection, cyan = form, gold = Sorare stars/bonuses,
+   coral = warnings. All changes are scoped to the Builder Workspace. */
+.workspace-v23{--v24-purple:#a855f7;--v24-mint:#2ee6b5;--v24-cyan:#22d3ee;--v24-gold:#fbbf24;--v24-coral:#fb7185;--v24-paper:#eef4ff;--v24-night:#0b1020;--v24-border:#554974}
+.builder-zone-v23 .builder-panel{background:linear-gradient(143deg,#110e22,#0b1020 78%);border-color:#483765;box-shadow:0 23px 60px #02031090}
+.workspace-v23 .v23-toolbar{border-color:#7c43bc;background:radial-gradient(ellipse at 3% -10%,#a855f730,transparent 48%),radial-gradient(ellipse at 100% 10%,#22d3ee10,transparent 45%),linear-gradient(120deg,#1b1530,#101526);box-shadow:inset 0 2px 0 #a855f766,0 12px 38px #0005}
+.workspace-v23 .v23-mark{background:linear-gradient(140deg,#bd5fff,#6b40d7);box-shadow:0 0 28px #a855f759;color:#fff}
+.workspace-v23 .v23-toolbar-brand strong{font-weight:950;letter-spacing:.1em;color:#f4eaff}
+.workspace-v23 .v23-toolbar label{color:#cfb5f5}
+.workspace-v23 select,.workspace-v23 input{background:#0e172b;border-color:#64517e;color:#f8f6ff}
+.workspace-v23 .v23-toolbar-actions button{border-color:#745397;background:#302143;color:#f3e6ff}
+.workspace-v23 .v23-toolbar-actions button:first-child{background:linear-gradient(115deg,#8d3de5,#552ee2);border-color:#cd83ff;box-shadow:0 4px 18px #a855f737;color:#fff}
+.workspace-v23 .v23-subbar{background:#121529;border-color:#4a3769;color:#bcbad7}
+.workspace-v23 .v23-target-label b{color:#deabff}
+.workspace-v23 .v23-live-dot{background:#2ee6b5;box-shadow:0 0 13px #2ee6b5a0}
+.workspace-v23 .v23-team{border-color:#66428b;background:radial-gradient(ellipse at 85% 0%,#7b35c91b,transparent 50%),linear-gradient(155deg,#191729,#0f1728 88%);box-shadow:0 12px 36px #03020d8f}
+.workspace-v23 .v23-team.is-current{border-color:#b45ef7;box-shadow:0 0 0 1px #a855f766,0 0 28px #a855f721,0 12px 36px #03020dae}
+.workspace-v23 .v23-team-top{padding-bottom:10px}
+.workspace-v23 .v23-team-name{font-size:12px;color:#f6e9ff;letter-spacing:.055em}
+.workspace-v23 .v23-team-state.good{color:#65ffd0;background:#0d493b;border-color:#239e7a}
+.workspace-v23 .v23-team-state.bad{color:#ff8eac;background:#552239;border-color:#a5496e}
+.workspace-v23 .v23-team-score>span,.workspace-v23 .v23-team-score label{background:#0d1427;border-color:#584071}
+.workspace-v23 .v23-team-score>span:nth-child(2) b{color:#2ee6b5;text-shadow:0 0 11px #2ee6b54b}
+.workspace-v23 .v23-team-score>span:first-child b{color:#fbbf24}
+.workspace-v23 .v23-team-score input{color:#fbbf24}
+.workspace-v23 .v23-team-tools button{background:#2b2245;border-color:#6e4b9f;color:#e9ceff}
+.workspace-v23 .v24-card{min-height:277px;background:radial-gradient(ellipse at 50% 10%,#7c45bf29,transparent 57%),linear-gradient(#24203b,#151c31);border-color:#695b89;transition:border-color .15s,box-shadow .15s,transform .15s;cursor:grab}
+.workspace-v23 .v24-card:active{cursor:grabbing}
+.workspace-v23 .v24-card.filled:hover{border-color:#b475ff;box-shadow:0 0 0 1px #a855f744,0 8px 24px #0005}
+.workspace-v23 .v24-card.focused{border-color:#b65fff;box-shadow:0 0 0 2px #a855f777,0 0 23px #a855f735}
+.workspace-v23 .v24-card.v24-locked{border-color:#fbbf24;box-shadow:inset 0 0 0 1px #fbbf2436;cursor:default}
+.workspace-v23 .v24-card.v24-drop-target{border:2px dashed #2ee6b5;box-shadow:0 0 0 2px #2ee6b556,0 0 32px #2ee6b544;background:linear-gradient(155deg,#13372d,#1b2240)}
+.workspace-v23 .v24-card.empty{border-color:#684a93;cursor:default}
+.workspace-v23 .v23-portrait>img,.workspace-v23 .v23-portrait>.v23-avatar-empty{border-color:#b375ed;box-shadow:0 0 14px #a855f726;background:#28213d}
+.workspace-v23 .v23-player-name{color:#fff;letter-spacing:-.012em}
+.workspace-v23 .v23-role{color:#dcc5ff}
+.workspace-v23 .v23-mini-stat strong{background:#263251;color:#cde5ff}
+.workspace-v23 .v23-mini-grid:first-of-type .v23-mini-stat:last-child strong{color:#fbbf24;background:#493815}
+.workspace-v23 .v23-mini-grid.second .v23-mini-stat:first-child strong{color:#2ee6b5;background:#124537}
+.workspace-v23 .v23-mini-grid.second .v23-mini-stat:nth-child(2) strong{color:#9eeaff;background:#173c53}
+.workspace-v23 .v23-mini-grid.second .v23-mini-stat:nth-child(3) strong{color:#e5b7ff;background:#39234c}
+.workspace-v23 .v23-mini-stat strong.tone-star{background:#554018;color:#ffd06e;box-shadow:inset 0 0 0 1px #ae822b55}
+.workspace-v23 .v23-mini-stat strong.tone-good{background:#125443;color:#78f9d1}
+.workspace-v23 .v23-mini-stat strong.tone-warn{background:#552b39;color:#ff9bb0}
+.workspace-v23 .v23-card-top button{border-color:#5c547c;background:#1e1a33;color:#e8d7ff;font-size:10px;width:16px;height:17px}
+.workspace-v23 .v23-card-top button.v24-lock-active{background:#704710;border-color:#fbbf24;color:#ffeb99}
+.workspace-v23 .v23-card-top>div{gap:2px;max-width:84px}
+.workspace-v23 .v23-card-match{border-color:#674b75}
+.workspace-v23 .v23-card-match strong{color:#f2dcff}
+.workspace-v23 .v23-plus-ring{color:#e9baff;border-color:#a855f7;background:#45215a70}
+.workspace-v23 .v24-card-form{width:calc(100% - 4px);height:19px;min-height:19px;margin-top:3px;padding:3px 4px;border-color:#43576e;background:#0c1527;gap:2px}
+.workspace-v23 .v24-card-form i{min-width:2px;border-radius:2px 2px 0 0}
+.workspace-v23 .v23-form-bars i.positive{background:#2ee6b5}.workspace-v23 .v23-form-bars i.neutral{background:#22d3ee}.workspace-v23 .v23-form-bars i.negative{background:#fb7185}
+.workspace-v23 .v24-card .v23-no-form{font-size:8px;color:#8293af;text-align:center;min-height:19px}
+.workspace-v23 .v23-roster-table th{background:#29213f;border-color:#544168;color:#e4d1fc}
+.workspace-v23 .v23-roster-table tbody tr:hover{background:#302348}
+.workspace-v23 .v23-roster-table tbody tr[draggable="true"]{cursor:grab}
+.workspace-v23 .v23-roster-table .v23-table-pill.featured{background:#0e5643;color:#82ffce;border:1px solid #249775}
+.workspace-v23 .v23-roster-table .v23-table-pill.star{background:#513815;color:#ffd876;border:1px solid #9a741c}
+.workspace-v23 .v23-roster-table .v23-table-pill.mid{background:#17455b;color:#82eaff}
+.workspace-v23 .v23-roster-name{color:#d8adff}
+.workspace-v23 .v23-row-actions button:first-child{border-color:#3dcbaa;background:#124c3d;color:#7cffd0}
+.workspace-v23 .v23-pool{border-color:#67448d;background:linear-gradient(155deg,#1c1832,#11192b 80%);box-shadow:0 14px 38px #0007}
+.workspace-v23 .v23-pool-head h3{color:#f5eaff}
+.workspace-v23 .v23-kicker{color:#c788ff}
+.workspace-v23 .v23-active-team-chip{background:#144f43;border-color:#3cbd97;color:#8cffe0}
+.workspace-v23 .v23-add-team{border-color:#9860d0;color:#e9baff}
+.v24-positive{color:#2ee6b5!important}.v24-pending{color:#fbbf24!important}
+.v24-goal-meter{padding:10px 11px;border:1px solid #3c655e;border-radius:11px;background:linear-gradient(115deg,#13293a,#1d1b38);margin-top:9px;display:grid;gap:6px}
+.v24-goal-line{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;color:#bdcbdf;font-size:10px}
+.v24-goal-line span{font-weight:850;color:#d7c6ff}.v24-goal-line b{color:#e3f4ff;font-size:10px;margin-left:4px}.v24-goal-line strong{font-size:12px}
+.v24-goal-track{height:8px;overflow:hidden;border-radius:16px;background:#293049;box-shadow:inset 0 1px 3px #0008}
+.v24-goal-track span{height:100%;display:block;max-width:100%;border-radius:16px;background:linear-gradient(90deg,#a855f7 0%,#22d3ee 55%,#2ee6b5 100%);box-shadow:0 0 15px #2ee6b599}
+.v24-goal-meter small{font-size:9px;color:#91b0bd;line-height:1.4}
+.v24-risk-radar{margin-top:9px;border:1px solid #795779;border-radius:10px;background:#211e35;padding:0 10px;color:#e5dff4}
+.v24-risk-radar summary{display:flex;cursor:pointer;justify-content:space-between;align-items:center;gap:9px;padding:10px 0;font-size:10px;list-style:none}
+.v24-risk-radar summary::-webkit-details-marker{display:none}.v24-risk-radar summary span{font-weight:950;letter-spacing:.09em;color:#e0c4ff}.v24-risk-radar summary b{color:#e9d3ff;font-weight:800}
+.v24-risk-radar.v24-risk-critical{border-color:#ce5074;background:#432234}.v24-risk-radar.v24-risk-critical summary b{color:#ff9cad}
+.v24-risk-radar.v24-risk-warning{border-color:#a7772b;background:#382b24}.v24-risk-radar.v24-risk-warning summary b{color:#ffcb7b}
+.v24-risk-radar.v24-risk-clear{border-color:#2c9477;background:#12352f}.v24-risk-radar.v24-risk-clear summary b{color:#85ffd7}
+.v24-risk-content{border-top:1px solid #ffffff24;padding:7px 0 11px}.v24-risk-content p{margin:6px 0;line-height:1.5;font-size:10px;color:#d9d4e2}.v24-risk-content .v24-risk-error{color:#ffc0cb}
+.v24-quick-swap{border:1px solid #6c4caa;border-radius:11px;padding:9px;margin-top:9px;background:radial-gradient(circle at 100% 0%,#a855f721,transparent 60%),#15152a;display:grid;gap:6px}
+.v24-swap-header{display:flex;align-items:center;justify-content:space-between;color:#e7c5ff;font-size:10px;letter-spacing:.05em}.v24-swap-header button{font-size:15px;padding:2px 6px;border:1px solid #70498f;border-radius:6px;background:#312144;color:#fff}
+.v24-swap-pick{display:flex;align-items:center;text-align:left;gap:10px;width:100%;border:1px solid #484269;background:#202038;border-radius:8px;padding:8px;color:#f3e9ff}
+.v24-swap-pick>span:first-child{flex:1;min-width:0;display:grid;gap:3px}.v24-swap-pick>span:first-child b{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.v24-swap-pick>span:first-child small{color:#ada7c7;font-size:9px}
+.v24-swap-pick>strong{font-size:12px}.v24-swap-pick>span:last-child{color:#c4a2ff;font-size:9px;white-space:nowrap}
+.v24-quick-swap>p{font-size:10px;color:#c7b9df;line-height:1.5;margin:4px}
+@media(min-width:1450px){.workspace-v23 .v23-layout{grid-template-columns:minmax(555px,1fr) minmax(0,1.12fr)}}
+@media(max-width:1330px){.workspace-v23 .v23-layout{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:620px){.workspace-v23 .v24-card{min-height:280px}.workspace-v23 .v23-card-top button{width:15px;height:16px;font-size:9px}.workspace-v23 .v24-card-form{height:17px;min-height:17px}.v24-goal-line{font-size:9px}}
+@media(max-width:420px){.workspace-v23 .v24-card{min-width:92px;min-height:280px}.workspace-v23 .v23-card-row{grid-template-columns:repeat(5,minmax(92px,1fr))}.v24-risk-radar summary{font-size:9px}}
+@media(prefers-reduced-motion:reduce){.workspace-v23 .v24-card{transition:none}.v24-goal-track span{transition:none}}

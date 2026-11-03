@@ -1,3 +1,11 @@
+# Markerras Sorare Helper V2.4 – Obsidian Neon Builder
+
+**Aktuelle Version: V2.4.** Neuer farbkräftiger Team Builder auf Basis der vier Nutzer-Vorlagen. **Spieler pro Team fixieren**, **nur leere Slots mit Smart Auto-Fill ergänzen**, Drag & Drop zwischen Spielerpool und Teams, **Quick Swap**, **Arcade Goal Meter**, historische Formkurven auf den Karten und **Lineup Risk Radar**. Die offizielle NBA-Sterne-Synchronisierung und die bestehenden Sorare-Score-Abfragen sind unverändert. Die Spieler werden weiterhin in NBA oder Fußball getrennt dargestellt.
+
+**Installation:** [`UPDATE_V2_4_DE.md`](UPDATE_V2_4_DE.md). Die V2.3-Team-Speicherungen bleiben erhalten. Prozentangaben zu Zielchance und Einsatzzeit sind Prognosemodellschätzungen, keine garantierten oder extern bestätigten Werte.
+
+---
+
 # Markerras Sorare Helper V2.3 – Builder Workspace Redesign
 
 **Aktuelle Version:** V2.3 baut den manuellen Lineup Builder nach vier Nutzer-Screenshots neu: mehrere Teams links, umfangreicher Spielerpool rechts, kompakte NBA- und Fußball-Spielerkarten, Direktauswahl, Filter, Auto-Fill, Undo, lokaler Team-Speicher und Dark-Mode-Politur. V2.2 Arcade Intelligence bleibt über den zweiten Builder-Tab vorhanden. **Sorare-Datenabruf und offizieller NBA-Sterne-Sync bleiben unverändert.**

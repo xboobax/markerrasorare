@@ -1,0 +1,40 @@
+const assert=require('node:assert/strict');
+const {smartFillEmptySlots,checkPartial,moveBetweenSelections,quickSwapsForSlot,goalMeter}=require('../.test-build/lib/builder-neon.js');
+const {restoreWorkspace}=require('../.test-build/lib/builder-workspace.js');
+function player(id,position='G',weighted=40,playProb=.85){return {id,name:id,position,team:'Team'+id,weighted,expected:weighted/Math.max(.1,playProb),playProb,hasGame:true,injuries:0,confidence:'hoch',forecastSources:[{label:'L5',value:weighted,share:1,origin:'Sorare'}],floor:weighted*.7,ceiling:weighted*1.3,variability:10,recentScores:[24,48],avg:weighted,last5Avg:weighted,last10Avg:weighted,sampleSize:5,proj:null,status:'STARTER'};}
+const nba=[...Array.from({length:22},(_,i)=>({player:player('n'+i,'G',65-i),stars:1+(i%9)*.5,owned:true}))];
+const empty=[null,null,null,null,null];
+const team=['n0','n1',null,null,null];
+const filled=smartFillEmptySlots(team,nba,'nba',{strategy:'balanced'});
+assert.equal(filled.reason,null);assert.equal(filled.added,3);
+assert.deepEqual(filled.selection.slice(0,2),team.slice(0,2),'existing order must be frozen');
+assert.equal(new Set(filled.selection).size,5);assert.equal(checkPartial(filled.selection,nba,'nba'),null);
+assert.equal(smartFillEmptySlots(filled.selection,nba,'nba').added,0);
+assert.equal(smartFillEmptySlots(team,nba,'nba',{allowedIds:['n2']}).reason!==null,true);
+assert.equal(checkPartial(['n8','n8',null,null,null],nba,'nba')!==null,true);
+const blocked=moveBetweenSelections({source:filled.selection,target:empty,sourceSlot:0,targetSlot:0,sameTeam:false,sport:'nba',cards:nba,sourceLocks:['n0']});
+assert(blocked.reason.includes('entsperren'));
+const moved=moveBetweenSelections({source:filled.selection,target:empty,sourceSlot:0,targetSlot:0,sameTeam:false,sport:'nba',cards:nba});
+assert.equal(moved.reason,null);assert.equal(moved.target[0],'n0');assert.equal(moved.source[0],null);
+const same=moveBetweenSelections({source:filled.selection,target:filled.selection,sourceSlot:0,targetSlot:1,sameTeam:true,sport:'nba',cards:nba});
+assert.equal(same.reason,null);assert.equal(same.source[0],'n1');assert.equal(same.source[1],'n0');
+const candidates=quickSwapsForSlot(filled.selection,0,nba,'nba',[],5);
+assert(candidates.every(c=>!filled.selection.includes(c.id)));
+for(const c of candidates){const next=filled.selection.slice();next[0]=c.id;assert.equal(checkPartial(next,nba,'nba'),null);}
+assert.equal(goalMeter(250,200).percentage,100);assert.equal(goalMeter(100,200).remaining,100);assert.equal(goalMeter(100,null),null);
+const football=[{player:player('gk','GK',45)},{player:player('def','DEF',40)},{player:player('mid','MID',50)},
+{player:player('fwd','FWD',43)},{player:player('def2','DEF',32)},{player:player('mid2','MID',38)},{player:player('fwd2','FWD',38)}];
+const filledFootball=smartFillEmptySlots(['gk',null,'mid',null,null],football,'football');
+assert.equal(filledFootball.reason,null);assert.equal(filledFootball.selection[0],'gk');assert.equal(filledFootball.selection[2],'mid');
+assert.equal(checkPartial(filledFootball.selection,football,'football'),null);
+const invalidFootball=moveBetweenSelections({source:filledFootball.selection,target:filledFootball.selection,sourceSlot:0,targetSlot:1,sameTeam:true,sport:'football',cards:football});
+assert(invalidFootball.reason.includes('passt'));
+const migrated=restoreWorkspace({teams:[{id:'team-1',selection:['n0','n1'],locks:['n1','stale','n1'],goal:360,collapsed:false}],activeTeamId:'team-1'},null);
+assert.deepEqual(migrated.teams[0].locks,['n1']);
+assert.equal(restoreWorkspace({teams:[{id:'team-1',selection:['n0'],goal:360}],activeTeamId:'team-1'},null).teams[0].locks.length,0);
+const fs=require('node:fs');const path=require('node:path');
+const component=fs.readFileSync(path.join(__dirname,'../app/components/builder-workspace.tsx'),'utf8');
+const css=fs.readFileSync(path.join(__dirname,'../app/globals.css'),'utf8');
+for(const target of ['v24-goal-meter','v24-quick-swap','v24-risk-radar','smartFillEmptySlots','moveBetweenSelections','onDragStart','onDrop','toggleLock','compact/>']) assert(component.includes(target),target);
+for(const target of ['#a855f7','#2ee6b5','#22d3ee','#fbbf24','#fb7185','v24-drop-target']) assert(css.includes(target),target);
+console.log('V2.4 Neon Builder tests: locks, pin-safe auto fill, 16 stars, position swap, workspace restore and neon UI passed');

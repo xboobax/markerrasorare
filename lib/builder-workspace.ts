@@ -3,11 +3,11 @@ import {isValidNbaStars,slotAccepts,type CardInput} from "./arcade";
 import {emptyManualSelection,normalizeManualSelection,type ManualSelection} from "./manual-lineup";
 import type {Sport} from "./model";
 
-export type WorkspaceTeam = {id:string;selection:ManualSelection;goal:number|null;collapsed:boolean};
+export type WorkspaceTeam = {id:string;selection:ManualSelection;goal:number|null;collapsed:boolean;locks:string[]};
 export type WorkspaceData = {teams:WorkspaceTeam[];activeTeamId:string};
 const isGoal=(v:unknown):v is number=>typeof v==="number"&&Number.isFinite(v)&&v>0&&v<=10000;
 export const workspaceKey=(sport:Sport)=>`markerras.sorare.builder-workspace.v23.${sport}`;
-export const initialTeams=():WorkspaceTeam[]=>Array.from({length:4},(_,i)=>({id:`team-${i+1}`,selection:emptyManualSelection(),goal:null,collapsed:false}));
+export const initialTeams=():WorkspaceTeam[]=>Array.from({length:4},(_,i)=>({id:`team-${i+1}`,selection:emptyManualSelection(),goal:null,collapsed:false,locks:[]}));
 export function restoreWorkspace(raw:unknown,legacy:unknown):WorkspaceData {
   const fallback=initialTeams();
   if(raw&&typeof raw==="object"&&!Array.isArray(raw)) {
@@ -20,7 +20,8 @@ export function restoreWorkspace(raw:unknown,legacy:unknown):WorkspaceData {
         const id=usedIds.has(parsedId)?`team-${index+7}`:parsedId;
         usedIds.add(id);
         return {id,selection:normalizeManualSelection(obj.selection),
-          goal:isGoal(obj.goal)?obj.goal:null,collapsed:obj.collapsed===true};
+          goal:isGoal(obj.goal)?obj.goal:null,collapsed:obj.collapsed===true,
+          locks:Array.isArray(obj.locks)?[...new Set(obj.locks.filter((id:unknown)=>typeof id==="string"&&normalizeManualSelection(obj.selection).includes(id)))].slice(0,5) as string[]:[]};
       });
       return {teams,activeTeamId:teams.some(t=>t.id===input.activeTeamId)?String(input.activeTeamId):teams[0].id};
     }
