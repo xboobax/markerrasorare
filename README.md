@@ -161,3 +161,7 @@ Die NBA-Spielkarten und die Spielerpool-Tabelle nutzen jetzt den getrennt gelade
 ## V2.8 – My Sorare Collection
 
 Offizieller Sorare-OAuth-Login und automatische Synchronisierung eigener NBA-/Fußballkarten. Einrichtung: **UPDATE_V2_8_DE.md**.
+
+### V2.8.2 – Fix für „Field anyCards doesn't exist on CurrentUser“
+
+Bei bereits installiertem V2.8.1 das kleine V2.8.2-Update einspielen. Der Sorare-Sammlungsabruf verwendet jetzt das offiziell dokumentierte paginierte Root-Feld `cardsWhere(ownedByMe: true)`. Die bisherige OAuth-Konfiguration und alle gespeicherten Teams bleiben erhalten. Siehe `UPDATE_V2_8_2_DE.md`.

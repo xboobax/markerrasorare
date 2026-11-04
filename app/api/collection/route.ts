@@ -2,13 +2,13 @@ import {NextRequest,NextResponse} from "next/server";
 import {sessionForRequest,setSessionCookie,graphQl} from "@/lib/sorare-oauth-session";
 export const dynamic="force-dynamic";
 const QUERY=`query MarkerrasOwnedCollection($after: String) {
-  currentUser {
-    slug
-    anyCards(first: 50, after: $after, ownedByMe: true) {
-      nodes { assetId slug sport rarityTyped seasonYear serialNumber anyPlayer { slug displayName } }
-      pageInfo { hasNextPage endCursor }
-      totalCount
-    }
+  currentUser { slug }
+  # "cardsWhere" is a paginated root field. CurrentUser has NO "anyCards" field.
+  # "ownedByMe" is scoped to the authenticated Sorare OAuth user.
+  cardsWhere(first: 50, after: $after, ownedByMe: true) {
+    nodes { assetId slug sport rarityTyped seasonYear serialNumber anyPlayer { slug displayName } }
+    pageInfo { hasNextPage endCursor }
+    totalCount
   }
 }`;
 export async function GET(request:NextRequest){
@@ -18,9 +18,10 @@ export async function GET(request:NextRequest){
   if(after&&after.length>1024)return NextResponse.json({error:"Ungültiger Cursor."},{status:400});
   try{
     const result=await graphQl(user.session.accessToken,QUERY,{after:after||null});
-    const current=result.currentUser as {slug?:string;anyCards?:{nodes?:unknown[];pageInfo?:{hasNextPage?:boolean;endCursor?:string};totalCount?:number}}|null;
-    if(!current?.slug||!Array.isArray(current.anyCards?.nodes))throw new Error("Sorare hat keine lesbare Kartensammlung geliefert.");
-    const data=current.anyCards;
+    const current=result.currentUser as {slug?:string}|null;
+    const data=result.cardsWhere as {nodes?:unknown[];pageInfo?:{hasNextPage?:boolean;endCursor?:string};totalCount?:number}|null;
+    // Never treat a failed / partial provider response as an empty, successfully synced collection.
+    if(!current?.slug||!data||!Array.isArray(data.nodes))throw new Error("Sorare hat keine lesbare Kartensammlung geliefert.");
     const nodes=data.nodes!;
     const cards=nodes.filter((n):n is Record<string,unknown>=>!!n&&typeof n==="object").map(c=>{
       const p=c.anyPlayer as Record<string,unknown>|null;

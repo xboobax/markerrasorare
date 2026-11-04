@@ -88,3 +88,9 @@ Neu: Lineup Doctor (regelvalidierte Wechselideen), Hidden Gems Finder (NBA Punkt
 - Sammlungsanzeige, manueller/15-Minuten-Sync bei geöffneter Seite, sicherer Fallback bei Abbrüchen
 - verifizierter Kartenbesitz für den Team Builder, manuelle Browsermarkierungen als Backup behalten
 - Sorare-Score-Adapter, offizielle NBA-Sterne und Forecast unverändert
+
+## V2.8.2 – Sorare Collection Sync Hotfix
+
+- `app/api/collection/route.ts`: `CurrentUser.anyCards` durch dokumentiertes `Query.cardsWhere(first, after, ownedByMe: true)` ersetzt und die paginierte Antwort auf Root-Ebene ausgewertet.
+- Fehlerfälle behalten den bisherigen bestätigten lokalen Sammlungsstand bei; keine Änderungen am OAuth-Login, den Sorare-Scores oder dem NBA-Sterne-Feed.
+- V2.8.2-Schema-Regressionsschutz und deutsche Update-Anleitung ergänzt.
