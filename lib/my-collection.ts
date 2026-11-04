@@ -2,6 +2,12 @@
 export type OwnedSorareCard={assetId:string;slug:string;sport:"NBA"|"FOOTBALL";rarity:string;seasonYear:number|null;serialNumber:number|null;playerSlug:string;playerName:string};
 export type OwnedCollection={slug:string;cards:OwnedSorareCard[];syncedAt:string;complete:boolean};
 export function collectionKey(slug:string){return `markerras.sorare.verified-collection.v1.${slug}`;}
+/** Preference is independent for NBA and football. It never changes or deletes saved cards. */
+export function ownedViewKey(sport:"nba"|"football"){return `markerras.sorare.only-my-cards.v1.${sport}`;}
+/** In verified-only mode never treat a locally checked box as proof of Sorare ownership. */
+export function isInSelectedCollection(id:string,store:Record<string,{owned?:boolean}>,onlyMine:boolean,verifiedReady:boolean){
+  return !onlyMine||(verifiedReady&&store[id]?.owned===true);
+}
 export function ownedSlugs(collection:OwnedCollection,sport:"nba"|"football"){
   return new Set(collection.cards.filter(card=>card.sport===(sport==="nba"?"NBA":"FOOTBALL")).map(card=>card.playerSlug));
 }

@@ -1,3 +1,9 @@
+# Markerras Sorare Helper V2.8.3 – Meine Karten für NBA und Fußball
+
+**Neu:** Im Lineup Builder lässt sich über einen deutlich hervorgehobenen Schalter „Nur meine NBA-Karten“ bzw. „Nur meine Fußball-Karten“ aktivieren. Der Schalter gilt für manuelle und automatische Aufstellungen, bleibt pro Sportart separat gespeichert und verwendet ausschließlich vollständig synchronisierten Sorare-Kartenbesitz. Siehe [`UPDATE_V2_8_3_DE.md`](UPDATE_V2_8_3_DE.md).
+
+---
+
 # Markerras Sorare Helper V2.7 – Prediction Lab Pro
 
 **Aktuelle Version V2.7**, aufbauend auf V2.6. Ein neues Obsidian-Neon-Analyseboard vergleicht eingefrorene Vor-Spiel-Prognosen mit späteren offiziellen Sorare-Ergebnissen. Es zeigt MAE, Bias und Intervallabdeckung, Fehler nach Spieltag, Punktbereich, Position und Verein sowie die größten Ausreißer. Experimentelle Modellmischungen werden auf älteren Daten gewählt und nur auf späteren Spieltagen getestet. **Keine automatische Änderung der aktiven Prognosen**, keine neuen API-Abhängigkeiten und keine Umrechnung älterer Vorhersagen. Die Archivdaten bleiben lokal.

@@ -1,3 +1,14 @@
+## V2.8.3 – Deutlich sichtbarer „Nur meine Karten“-Schalter
+
+- Ein gemeinsamer, prominenter Schalter im Team Builder statt zweier widersprüchlicher Menüs; NBA und Fußball speichern ihre Auswahl separat.
+- Der Filter gilt gleichzeitig für Spielertabelle, automatische Optimierung, Smart Auto-Fill, Quick Swap und manuelle Spielerübernahme.
+- Besitz basiert im Modus AN ausschließlich auf einer vollständig synchronisierten Sorare-Sammlung; keine irreführenden manuellen Eigentümermarkierungen.
+- Vorhandene Teams bleiben gespeichert, Fremdspieler werden sichtbar gewarnt; keine heimlichen Änderungen.
+- OAuth, Sorare-Scores, NBA-Sterne, Spielplan und Verletzungsfeeds bleiben unverändert.
+- Anleitung: `UPDATE_V2_8_3_DE.md`.
+
+---
+
 ## V2.7 – Prediction Lab Pro
 
 - NBA- und Fußball-Prognosen aus dem bestehenden IndexedDB-Archiv nach offiziellen Spieltags-Ergebnissen bewerten; keine neuen API-Zugänge erforderlich.

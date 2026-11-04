@@ -1172,3 +1172,27 @@ body { background:#090d17; color:var(--ink); -webkit-font-smoothing:antialiased;
 .v28-status{border-left:3px solid #22d3ee;padding:9px 12px;background:rgba(34,211,238,.07);border-radius:6px;color:#a9ecf8!important}
 .v28-note{font-size:.78rem!important;color:#94a4c3!important}
 @media(max-width:650px){.v28-metrics{grid-template-columns:1fr}.v28-buttons button,.v28-buttons .v28-login{flex:1}}
+
+/* V2.8.3 – visible, synchronized collection filter for NBA and football */
+.v283-collection-switch{display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin:0 0 14px;padding:15px 17px;border:1px solid #63458f;border-radius:14px;background:linear-gradient(110deg,#241536,#151c30 60%,#112c2b);box-shadow:inset 0 1px 0 #a855f733}
+.v283-collection-switch.is-on{border-color:#2ee6b5;box-shadow:0 0 24px #2ee6b51b,inset 0 1px 0 #2ee6b544;background:linear-gradient(110deg,#1d2940,#122b2a 75%,#102523)}
+.v283-collection-copy{display:flex;flex-direction:column;gap:4px;min-width:190px;flex:1}
+.v283-collection-eyebrow{font-size:10px;font-weight:900;letter-spacing:.11em;color:#c593ff}
+.v283-collection-switch.is-on .v283-collection-eyebrow{color:#2ee6b5}
+.v283-collection-copy>strong{font-size:16px;color:#f3efff;line-height:1.4}
+.v283-collection-copy>small{font-size:12px;color:#bac6d8;line-height:1.45}
+.v283-collection-controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.v283-collection-controls>a{color:#d9baff;font-size:12px;font-weight:800;text-decoration:underline;text-underline-offset:3px}
+.v283-toggle{display:flex;align-items:center;gap:10px;cursor:pointer;padding:6px 8px;border-radius:99px;position:relative}
+.v283-toggle:focus-within{outline:2px solid #2ee6b5;outline-offset:3px}
+.v283-toggle>input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
+.v283-toggle-track{display:flex;align-items:center;height:29px;width:53px;padding:4px;border-radius:99px;background:#334155;border:1px solid #61708a;transition:background .2s}
+.v283-toggle-track>span{display:block;height:20px;width:20px;border-radius:50%;background:#f1f5f9;transition:transform .2s;box-shadow:0 2px 4px #0007}
+.v283-toggle input:checked + .v283-toggle-track{background:#159b83;border-color:#2ee6b5;box-shadow:0 0 16px #2ee6b533}
+.v283-toggle input:checked + .v283-toggle-track>span{transform:translateX(23px);background:#fff}
+.v283-toggle-state{font-size:12px;font-weight:900;letter-spacing:.09em;color:#bdc8dc;min-width:27px}
+.v283-collection-switch.is-on .v283-toggle-state{color:#2ee6b5}
+.v283-collection-warning,.v283-team-owned-warning{padding:11px 13px;border:1px solid #fbbf2455;border-radius:10px;color:#ffdda0;background:#6b421522;font-size:12px;line-height:1.5;margin:0 0 13px}
+.v283-collection-warning>a{color:#fbbf24;text-decoration:underline}
+.v283-auto-scope{margin:0 0 13px;font-size:12px;color:#b2e9e0;padding:8px 10px;border-radius:8px;background:#11352d88;border-left:3px solid #2ee6b5}
+@media(max-width:620px){.v283-collection-switch{padding:12px;gap:10px}.v283-collection-copy>strong{font-size:14px}.v283-collection-copy>small{font-size:11px}.v283-collection-controls{width:100%;justify-content:space-between}}

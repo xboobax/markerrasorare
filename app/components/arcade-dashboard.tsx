@@ -1,7 +1,7 @@
 "use client";
 
 import MySorareCollection from "@/app/components/my-sorare-collection";
-import {ownedSlugs,mergeVerifiedOwned,type OwnedCollection} from "@/lib/my-collection";
+import {ownedSlugs,mergeVerifiedOwned,ownedViewKey,isInSelectedCollection,type OwnedCollection} from "@/lib/my-collection";
 
 import Link from "next/link";
 import BuilderWorkspace from "@/app/components/builder-workspace";
@@ -110,10 +110,20 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const [sortBy, setSortBy] = useState("weighted");
   const [showCount, setShowCount] = useState(70);
   const [ownedOnly, setOwnedOnly] = useState(false);
+  // One clear choice for manual and automatic builders; stored separately per sport.
+  useEffect(()=>{
+    try{setOwnedOnly(window.localStorage.getItem(ownedViewKey(sport))==="true");}
+    catch{setOwnedOnly(false);}
+  },[sport]);
+  const setCollectionOnly=(enabled:boolean)=>{
+    setOwnedOnly(enabled);setActiveResult(0);setIntelligencePickKey(null);
+    try{window.localStorage.setItem(ownedViewKey(sport),String(enabled));}catch{}
+  };
   const [hideUnavailable, setHideUnavailable] = useState(false);
   const [hasForecastOnly, setHasForecastOnly] = useState(false);
   const [cardStore, setCardStore] = useState<CardStore>({});
   const [verifiedCollection,setVerifiedCollection]=useState<OwnedCollection|null>(null);
+  const verifiedOwnedReady=verifiedCollection?.complete===true;
   const [officialStars,setOfficialStars] = useState<NbaStarRatings>({});
   const [starSync,setStarSync] = useState<{phase:"idle"|"loading"|"ready"|"error";snapshot:NbaStarSync|null;message:string}>({phase:"idle",snapshot:null,message:""});
   const starRequestSeq=useRef(0);
@@ -405,14 +415,16 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const ratedOpponents = opponents.filter(([name]) => validDefenseRating(effectiveRatings[name])).length;
   const matchupPicks = players.filter(p => p.opponentRating !== null && p.hasGame !== false && p.weighted > 0)
     .sort((a,b) => b.matchupAdjustmentPct - a.matchupAdjustmentPct || b.weighted - a.weighted).slice(0, 8);
-  const lockedIds = useMemo(() => players.filter(p => cardStore[p.id]?.locked&&!isConfirmedOut(injuryById[p.id])).map(p => p.id), [players, cardStore,injuryById]);
+  const lockedIds = useMemo(() => players.filter(p => cardStore[p.id]?.locked&&!isConfirmedOut(injuryById[p.id])&&
+    isInSelectedCollection(p.id,effectiveCardStore,ownedOnly,verifiedOwnedReady)).map(p => p.id), [players,cardStore,injuryById,effectiveCardStore,ownedOnly,verifiedOwnedReady]);
   const excludedIds = useMemo(() => players.filter(p => cardStore[p.id]?.excluded||isConfirmedOut(injuryById[p.id])).map(p => p.id), [players, cardStore,injuryById]);
   const eligibleCards: CardInput[] = useMemo(() => players.map((p) => ({
     player: p,
-    owned: effectiveCardStore[p.id]?.owned === true,
+    // No manual fallback while the synced-collection-only filter is active.
+    owned: effectiveCardStore[p.id]?.owned === true && (!ownedOnly || verifiedOwnedReady),
     stars: effectiveCardStore[p.id]?.stars ?? null,
     bonusPercent: cardStore[p.id]?.bonusPercent ?? 0,
-  })), [players, cardStore, effectiveCardStore]);
+  })), [players, cardStore, effectiveCardStore, ownedOnly, verifiedOwnedReady]);
 
   const favoriteSet=useMemo(()=>new Set(watchlist),[watchlist]);
   const ownedCount = players.filter(p => effectiveCardStore[p.id]?.owned).length;
@@ -464,7 +476,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
       if (position !== "all" && p.position !== position) return false;
       if (hideUnavailable && (p.hasGame === false || p.playProb < .3)) return false;
       if (hasForecastOnly && p.forecastSources.length === 0) return false;
-      if (ownedOnly && !effectiveCardStore[p.id]?.owned) return false;
+      if (!isInSelectedCollection(p.id,effectiveCardStore,ownedOnly,verifiedOwnedReady)) return false;
       if (favoritesOnly && !favoriteSet.has(p.id)) return false;
       if (needle && !normalize(`${p.name} ${p.team} ${p.position}`).includes(needle)) return false;
       return true;
@@ -481,7 +493,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
         default: return b.weighted - a.weighted;
       }
     });
-  }, [players, position, hideUnavailable, hasForecastOnly, ownedOnly, favoritesOnly, favoriteSet, effectiveCardStore, search, sortBy]);
+  }, [players, position, hideUnavailable, hasForecastOnly, ownedOnly, verifiedOwnedReady, favoritesOnly, favoriteSet, effectiveCardStore, search, sortBy]);
   const positions = Array.from(new Set(players.map(p => p.position))).sort();
   const topPicks = players.filter(p => p.hasGame !== false && p.weighted > 0).slice().sort((a,b) => b.weighted - a.weighted).slice(0, 4);
   const title = sport === "football" ? "Football Arcade" : "NBA Arcade";
@@ -605,6 +617,24 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
         <section className="two-column builder-zone-v23">
           <div className="panel builder-panel" id="lineup-builder">
             <div className="section-top"><div><span className="section-kicker">04 / LINEUP STUDIO</span><h2>Arcade Lineup Workspace</h2></div><span className="live-pill">5 POSITIONEN</span></div>
+            <div className={`v283-collection-switch ${ownedOnly?"is-on":""}`} aria-label={`${sport==="nba"?"NBA":"Fußball"} Kartenfilter`}>
+              <div className="v283-collection-copy">
+                <span className="v283-collection-eyebrow">✦ MY SORARE COLLECTION · {sport==="nba"?"NBA":"FUSSBALL"}</span>
+                <strong>Nur meine {sport==="nba"?"NBA":"Fußball"}-Karten</strong>
+                <small>{verifiedOwnedReady
+                  ? `${ownedCount} Spieler aus deiner synchronisierten Sammlung im aktuellen Datenbereich · gilt für beide Builder-Modi`
+                  : "Noch keine vollständig synchronisierte Sammlung geladen. Aktivierung wartet auf den erfolgreichen Sync."}</small>
+              </div>
+              <div className="v283-collection-controls">
+                <label className="v283-toggle" htmlFor={`only-owned-${sport}`}>
+                  <input id={`only-owned-${sport}`} type="checkbox" checked={ownedOnly} onChange={e=>setCollectionOnly(e.target.checked)}/>
+                  <span className="v283-toggle-track" aria-hidden="true"><span/></span>
+                  <span className="v283-toggle-state">{ownedOnly?"AN":"AUS"}</span>
+                </label>
+                <a href="#meine-karten">Sammlung / Sync ↗</a>
+              </div>
+            </div>
+            {ownedOnly&&!verifiedOwnedReady&&<p className="v283-collection-warning" role="status">Der Kartenfilter ist aktiviert, aber die Sorare-Sammlung ist noch nicht vollständig geladen. Bis zum erfolgreichen Sync werden keine Spieler als verifiziert eigene Karten gewertet. <a href="#meine-karten">Jetzt synchronisieren</a>.</p>}
             <div className="builder-mode-tabs" role="group" aria-label="Lineup Builder Modus">
               <button type="button" className={builderMode === "manual" ? "active" : ""} aria-pressed={builderMode === "manual"} onClick={() => setBuilderMode("manual")}>✋ Selbst aufstellen</button>
               <button type="button" className={builderMode === "automatic" ? "active" : ""} aria-pressed={builderMode === "automatic"} onClick={() => setBuilderMode("automatic")}>✦ Automatisch optimieren</button>
@@ -620,16 +650,13 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
               <input id="manual-target" type="number" min="1" step="1" inputMode="numeric" value={target} placeholder="Score-Ziel eingeben" onChange={e=>setTarget(e.target.value)}/>
               {sport === "football" && <><button type="button" onClick={()=>setTarget("180")}>180 Pkt.</button><button type="button" onClick={()=>setTarget("360")}>360 Pkt.</button></>}
             </div>}
-            {builderMode === "manual" ? <BuilderWorkspace sport={sport} league={league} availability={availability} availabilityById={injuryById} players={players} cardStore={effectiveCardStore}
+            {builderMode === "manual" ? <BuilderWorkspace sport={sport} league={league} availability={availability} availabilityById={injuryById} players={players} cardStore={effectiveCardStore} ownedOnly={ownedOnly} verifiedOwnedReady={verifiedOwnedReady}
               updateCard={updateCard} targetScore={validTarget ? totalTarget : null}
               onOpenProfile={setSelectedPlayerId}
               onSavePredictions={items => items.forEach(saveTracked)} requestedPlayer={manualRequest}
               favorites={watchlist} onToggleFavorite={toggleFavorite}
               nbaSchedule={nbaSchedule} matchupRatings={effectiveRatings} matchupSource={automaticMatchups.source}/> : <>
-            <div className="mode-switch" role="group" aria-label="Spielerauswahl">
-              <button type="button" className={!ownedOnly ? "active" : ""} onClick={() => {setOwnedOnly(false); setActiveResult(0);setIntelligencePickKey(null);}}>Alle Spieler · theoretisch</button>
-              <button type="button" className={ownedOnly ? "active" : ""} onClick={() => {setOwnedOnly(true); setActiveResult(0);setIntelligencePickKey(null);}}>Nur meine Karten</button>
-            </div>
+            <p className="v283-auto-scope">{ownedOnly?"✓ Automatische Aufstellungen ausschließlich aus verifiziert eigenen Karten":"Alle Spieler im Datenbereich · theoretische Aufstellungen"} · Einstellung oben ändern.</p>
             <div className="strategy-bar">
               <div className="strategy-title"><strong>Optimierung</strong><small>Ausgewogen = Erwartungswert · Sicher = Floor · Offensiv = Ceiling · Zielchance = geschätzte Zielerreichung</small></div>
               <div className="strategy-options" role="group" aria-label="Lineup-Strategie">
@@ -671,10 +698,10 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
             {chosen && validTarget && (
               <div className="target-progress"><div className="target-track"><div style={{width: `${progress}%`}}/></div><p>Modellprognose {fmt(chosen.projectedScore)} / {fmt(totalTarget)} · <strong>{chosen.projectedScore >= totalTarget ? "Prognose über Ziel" : `${fmt(Math.max(0,totalTarget - chosen.projectedScore))} Punkte unter Ziel`}</strong></p></div>
             )}
-            <p className="model-note">Mit „Fixieren“ zwingst du Spieler ins Lineup, mit „Sperren“ entfernst du sie aus der Auswahl. Sterne werden aus Sorare geladen, falls verfügbar; Boni bleiben manuell. {ownedOnly ? "Aufstellung nur aus markierten Karten." : "Theoretische Bestbesetzung aus dem geladenen Spielerpool – dein Kartenbesitz ist nicht geprüft."} Fehlende NBA-Sterne kannst du weiterhin manuell eintragen. Prognosen sind keine garantierten Ergebnisse.</p>
+            <p className="model-note">Mit „Fixieren“ zwingst du Spieler ins Lineup, mit „Sperren“ entfernst du sie aus der Auswahl. Sterne werden aus Sorare geladen, falls verfügbar; Boni bleiben manuell. {ownedOnly ? "Aufstellung nur aus vollständig synchronisierten Sorare-Karten." : "Theoretische Bestbesetzung aus dem geladenen Spielerpool – dein Kartenbesitz ist nicht geprüft."} Fehlende NBA-Sterne kannst du weiterhin manuell eintragen. Prognosen sind keine garantierten Ergebnisse.</p>
             {lineups.length > 1 && <div className="variants" role="group" aria-label="Aufstellungen vergleichen">{lineups.map((l, i) => <button key={i} className={Math.min(activeResult,lineups.length-1) === i ? "active" : ""} onClick={()=>{setActiveResult(i);setIntelligencePickKey(null);}}>Lineup {i+1} <strong>{validTarget && l.targetProbability !== null ? `${Math.round(l.targetProbability * 100)} % Zielchance` : `${fmt(l.projectedScore)} Pkt.`}</strong></button>)}</div>}
             {lineups.length > 1 && <div className="lineup-compare"><h3>Lineups im direkten Vergleich</h3><div className="tracking-scroll"><table className="tracking-table"><thead><tr><th>Lineup</th><th>Prognose</th><th>Floor</th><th>Ceiling</th>{sport === "nba" && <th>Sterne</th>}{validTarget && <th>Zielchance*</th>}</tr></thead><tbody>{lineups.map((l,i) => <tr key={i} className={Math.min(activeResult,lineups.length-1)===i ? "compare-selected" : ""} onClick={() => {setActiveResult(i);setIntelligencePickKey(null);}}><td><button type="button" onClick={() => {setActiveResult(i);setIntelligencePickKey(null);}}>#{i+1} wählen</button></td><td>{fmt(l.projectedScore)}</td><td>{fmt(l.floorScore)}</td><td>{fmt(l.ceilingScore)}</td>{sport === "nba" && <td>{fmt(l.starsUsed)} ★</td>}{validTarget && <td>{l.targetProbability===null ? "—" : `${Math.round(l.targetProbability*100)} %`}</td>}</tr>)}</tbody></table></div><p className="profile-muted">* Zielchance: nicht kalibrierte Modellschätzung. Lineups sind nicht automatisch offiziell spielberechtigt; Kartenbesitz und aktuelle Set-Regeln prüfen.</p></div>}
-            {!chosen && <div className="empty-state"><strong>Für dieses Regelset fehlt eine vollständige gültige Aufstellung.</strong><p>{sport === "nba" ? "Vergib im Spielertableau zunächst echte Sterne (1–5 in 0,5-Schritten) für mindestens fünf geeignete Karten. Zusammen dürfen sie höchstens 16 Sterne haben." : "Es werden je ein TW, VER, MF, FWD sowie ein zusätzlicher Feldspieler benötigt."}{ownedOnly ? " Markiere die Karten zusätzlich als in deinem Besitz." : ""} Fixierungen müssen zum Regelset passen; NBA zusammen höchstens 16 Sterne.</p></div>}
+            {!chosen && <div className="empty-state"><strong>Für dieses Regelset fehlt eine vollständige gültige Aufstellung.</strong><p>{sport === "nba" ? "Vergib im Spielertableau zunächst echte Sterne (1–5 in 0,5-Schritten) für mindestens fünf geeignete Karten. Zusammen dürfen sie höchstens 16 Sterne haben." : "Es werden je ein TW, VER, MF, FWD sowie ein zusätzlicher Feldspieler benötigt."}{ownedOnly ? " Prüfe den vollständig synchronisierten Kartenbestand, den gewählten Datenbereich und die NBA-Sterne." : ""} Fixierungen müssen zum Regelset passen; NBA zusammen höchstens 16 Sterne.</p></div>}
             </>}
           </div>
 
