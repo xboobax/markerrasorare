@@ -23,6 +23,7 @@ import {canonicalNbaTeam} from "@/lib/nba-fixture-mapping";
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import {presetStorageKey,readOptimizerPresets,saveOptimizerPreset,deleteOptimizerPreset,type OptimizationPreset} from "@/lib/qol-presets";
 import {compareOptimizedLineups} from "@/lib/lineup-compare-v35";
+import {gamedayPulse,neonSmartAdvisor,portfolioPulse,diversifyPortfolio,predictionRealityCheck} from "@/lib/neon-v39";
 import type { Forecast, Sport } from "@/lib/model";
 import {availabilityForPlayers,isConfirmedOut} from "@/lib/availability";
 import {useAvailability} from "@/app/hooks/use-availability";
@@ -199,6 +200,8 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const [loadedRatingSport, setLoadedRatingSport] = useState<Sport | null>(null);
   const [loadedSport, setLoadedSport] = useState<Sport | null>(null);
   const [activeResult, setActiveResult] = useState(0);
+  const [portfolioDiversity,setPortfolioDiversity]=useState(false);
+  const [showQuickActions,setShowQuickActions]=useState(false);
   const [builderMode, setBuilderMode] = useState<"automatic" | "manual">("manual");
   const [strategy, setStrategy] = useState<Strategy>("balanced");
   const [nbaStarsMode,setNbaStarsMode]=useState<NbaStarsMode>("max");
@@ -253,7 +256,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
     try {window.localStorage.setItem(watchlistKey(sport),JSON.stringify(watchlist));} catch {}
   }, [sport,loadedWatchSport,watchlist]);
   const navigate=(tab:typeof activeTab,anchor?:string)=>{
-    setActiveTab(tab);
+    setActiveTab(tab);setShowQuickActions(false);
     window.requestAnimationFrame(()=>window.requestAnimationFrame(()=>{
       if(anchor)document.getElementById(anchor)?.scrollIntoView({behavior:"smooth",block:"start"});
       else window.scrollTo({top:0,behavior:"smooth"});
@@ -262,6 +265,8 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   useEffect(() => {
     const handler=(e:KeyboardEvent)=>{
       const target=e.target as HTMLElement|null;
+      if((e.key.toLowerCase()==='k')&&(e.ctrlKey||e.metaKey)) {e.preventDefault();setShowQuickActions(open=>!open);return;}
+      if(e.key==='Escape')setShowQuickActions(false);
       if(e.key==="/" && !e.altKey && !e.ctrlKey && !e.metaKey && target?.tagName!=="INPUT" && target?.tagName!=="TEXTAREA" && target?.tagName!=="SELECT" && !target?.isContentEditable){
         e.preventDefault();setActiveTab("players");window.requestAnimationFrame(()=>window.requestAnimationFrame(()=>{searchRef.current?.focus();document.getElementById("spieler")?.scrollIntoView({behavior:"smooth",block:"start"});}));
       }
@@ -518,6 +523,8 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
     return new Set(Object.entries(effectiveCardStore).filter(([,card])=>card.owned===true).map(([id])=>id));
   },[effectiveCardStore,sport,verifiedOwnedReady]);
   const dailyMissionExcludedIds=useMemo(()=>new Set(excludedIds),[excludedIds]);
+  const gameday=useMemo(()=>gamedayPulse(players,sport,nbaSchedule,dailyMissionOwnedIds,new Date()),[players,sport,nbaSchedule,dailyMissionOwnedIds]);
+  const smartAdvice=useMemo(()=>neonSmartAdvisor(players,dailyMissionOwnedIds,sport),[players,dailyMissionOwnedIds,sport]);
   const favoriteSet=useMemo(()=>new Set(watchlist),[watchlist]);
   const ownedCount = players.filter(p => effectiveCardStore[p.id]?.owned).length;
   const ratedCount = players.filter(p => isValidNbaStars(effectiveCardStore[p.id]?.stars)).length;
@@ -591,7 +598,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
       const settings=v30State.global;
       const lines=sport==="nba"&&nbaStarBoard?nbaProfileLines(nbaStarBoard,settings):
         sport==="nba"?[]:optimizeArcadeLineups(poolFor(settings),v30Options(settings));
-      return limitLineupReuse(lines,settings.maxUses,5);
+      return portfolioDiversity?diversifyPortfolio(lines,settings.maxUses,5,.9):limitLineupReuse(lines,settings.maxUses,5);
     }
     const picked:ReturnType<typeof optimizeArcadeLineups>=[],usage=new Map<string,number>();
     const cache=new Map<string,ReturnType<typeof optimizeArcadeLineups>>();
@@ -606,7 +613,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
       picked.push(chosen);for(const pick of chosen.picks)usage.set(pick.player.id,(usage.get(pick.player.id)??0)+1);
     }
     return picked;
-  }, [eligibleCards,sport,ownedOnly,strategy,validTarget,totalTarget,lockedIds,excludedIds,v30State,league,nbaStarsMode,nbaVariantKey,nbaStarBoard,builderMode,nbaDiversity]);
+  }, [eligibleCards,sport,ownedOnly,strategy,validTarget,totalTarget,lockedIds,excludedIds,v30State,league,nbaStarsMode,nbaVariantKey,nbaStarBoard,builderMode,nbaDiversity,portfolioDiversity]);
   // The older Intelligence Lab builds independent candidates without V3 rules.
   // Hide it when any advanced constraints are active rather than bypassing them.
   const intelligence=useMemo(()=>builderMode==="automatic"&&sport==="football"&&!v30AnyChanged ? buildArcadeIntelligence(eligibleCards,{
@@ -628,10 +635,12 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const nbaChosenLoss=nbaStarBoard&&chosen?nbaStarBoard.referenceScore-chosen.projectedScore:null;
   const shownLineups=useMemo(()=>lineups.map(l=>automaticCaptainLineup(l,sport,injuryById,validTarget?totalTarget:null).lineup!),[lineups,sport,injuryById,validTarget,totalTarget]);
   const autoLineupDiff=shownLineups.length>1&&chosen?compareOptimizedLineups(shownLineups[0],chosen):null;
+  const portfolioReport=useMemo(()=>portfolioPulse(shownLineups),[shownLineups]);
   const selectedPlayer = players.find(p => p.id === selectedPlayerId) ?? null;
   const selectedCard = selectedPlayer ? cardStore[selectedPlayer.id] ?? {} : {};
   const profileScores = selectedPlayer ? ((selectedPlayer.recentScores?.length ?? 0) > 0 ? selectedPlayer.recentScores! : profileHistories[selectedPlayer.id] ?? []) : [];
   const metrics = trackingMetrics(tracked);
+  const realityCheck=useMemo(()=>predictionRealityCheck(tracked),[tracked]);
   const backtest = backtestForecasts(tracked);
   const v2Backtest = backtestPredictionV2(tracked);
   const withV2 = players.filter(p=>p.modelV2.applicable).length;
@@ -688,7 +697,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   return (
     <div className="app-shell">
       <header className="app-topbar v35-topbar">
-        <Link href={activeTab==="missions"?"/?sport=football&tab=missions":"/?sport=football"} className="brand" aria-label="Neon Builder Pro Startseite"><span className="brand-logo">N<span>◆</span></span><span className="brand-text"><strong>NEON BUILDER PRO</strong><small>V3.7 · DAILY MISSION INTELLIGENCE · SYNC FIX 3.7.1</small></span></Link>
+        <Link href={activeTab==="missions"?"/?sport=football&tab=missions":"/?sport=football"} className="brand" aria-label="Neon Builder Pro Startseite"><span className="brand-logo">N<span>◆</span></span><span className="brand-text"><strong>NEON BUILDER PRO</strong><small>V3.9 · NEON INTELLIGENCE</small></span></Link>
         <nav className="sport-switch" aria-label="Sportart wählen"><Link href={activeTab==="missions"?"/?sport=football&tab=missions":"/?sport=football"} aria-current={sport==="football"?"page":undefined}>⚽ Fußball</Link><Link href={activeTab==="missions"?"/?sport=nba&tab=missions":"/?sport=nba"} aria-current={sport==="nba"?"page":undefined}>🏀 NBA</Link></nav>
         <span className="topbar-pill"><span className="status-dot" style={error?{background:"#d9a06f"}:undefined}/>{error?"API prüfen":players.length?`${players.length} Spieler geladen`:"Sorare verbindet"}</span>
       </header>
@@ -696,8 +705,20 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
       <nav className="v35-tabs" aria-label="Arbeitsbereiche" role="tablist">
         {([ ["builder","◈","Builder"], ["players","⌕","Spieler"], ["analytics","▥","Analyse"], ["collection","▣","Sammlung"], ["missions","⚡","Daily Missions"] ] as const).map(([id,icon,label])=><button type="button" role="tab" key={id} aria-selected={activeTab===id} className={activeTab===id?"is-active":""} onClick={()=>navigate(id)}><span aria-hidden="true">{icon}</span> {label}</button>)}
       </nav>
+      <div className="v39-quick-actions">
+        <button type="button" aria-expanded={showQuickActions} aria-controls="neon-command-panel" onClick={()=>setShowQuickActions(v=>!v)}>⌘ NEON Quick Actions <small>Ctrl+K</small></button>
+        <span>5 Arbeitsbereiche · Profi-Funktionen bleiben einklappbar</span>
+        {showQuickActions&&<div id="neon-command-panel" className="v39-command-panel" role="group" aria-label="NEON Schnellaktionen">
+          <button type="button" onClick={()=>navigate('missions')}>⚡ Daily Mission</button>
+          <button type="button" onClick={()=>navigate('builder','lineup-builder')}>◈ Lineup Studio</button>
+          <button type="button" onClick={()=>navigate('players','hidden-gems')}>◆ Hidden Gems</button>
+          <button type="button" onClick={()=>{navigate('players','spieler');window.requestAnimationFrame(()=>searchRef.current?.focus());}}>⌕ Spieler suchen</button>
+          <button type="button" onClick={()=>navigate('analytics','tracking')}>▥ Reality Check</button>
+          <button type="button" onClick={()=>navigate('collection','meine-karten')}>▣ Karten-Sync</button>
+        </div>}
+      </div>
       <main className="dashboard-main v35-main" data-workspace={activeTab}>
-        <div className="v35-workspace-title" data-tab="builder"><div><span className="section-kicker">NEON STUDIO / V3.8</span><h1>{sport==="nba"?"NBA":"Fußball"} Lineup Studio</h1></div><div className="v36-title-actions"><button type="button" className="v37-mission-link" onClick={()=>navigate("missions")}>⚡ Daily Missions öffnen</button><span className="v35-title-hint">{sport==="nba"?"5 Karten · max. 16 ★":"5 Karten · Captain +50 %"}</span></div></div>
+        <div className="v35-workspace-title" data-tab="builder"><div><span className="section-kicker">NEON STUDIO / V3.9</span><h1>{sport==="nba"?"NBA":"Fußball"} Lineup Studio</h1></div><div className="v36-title-actions"><button type="button" className="v37-mission-link" onClick={()=>navigate("missions")}>⚡ Daily Missions öffnen</button><span className="v35-title-hint">{sport==="nba"?"5 Karten · max. 16 ★":"5 Karten · Captain +50 %"}</span></div></div>
         <div className="metric-grid v35-metrics" data-tab="builder">
           <div className="metric-card"><span className="metric-label">Spieler im Datensatz</span><strong>{players.length.toLocaleString("de-DE")}</strong><small>Aktuell ausgewählter Datenbereich</small></div>
           <div className="metric-card"><span className="metric-label">Mögliche Einsätze</span><strong>{hasGameCount.toLocaleString("de-DE")}</strong><small>Spielerbilder: {imageCount} von {players.length}</small></div>
@@ -710,6 +731,10 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
         {error && <div className="notice warning"><strong>Datenabruf fehlgeschlagen.</strong> {error}</div>}
         {info && <div className="notice"><span className="status-dot"/> {info}</div>}
 
+        <div className="v39-intelligence-strip" data-tab="builder" aria-label="Smart Gameday Center">
+          <div><strong>◷ Gameday Center</strong><span>{gameday.playing} Spieler heute · {verifiedOwnedReady?`${gameday.ownedPlaying} aus meiner Sammlung`:'Besitz nicht verifiziert'} · {gameday.nextKickoff?`Nächster Start ${new Date(gameday.nextKickoff).toLocaleTimeString('de-DE',{timeZone:'Europe/Berlin',hour:'2-digit',minute:'2-digit'})}`:'Anstoßzeit offen'}</span></div>
+          <details><summary>◈ Smart Advisor</summary><p><strong>{smartAdvice.headline}</strong> – {smartAdvice.detail}</p><p>Hinweis: Kein bestätigter Start, keine offiziellen Missions-Lock-Zeiten.</p></details>
+        </div>
         <section className="panel scope-panel" data-tab="builder">
           <div className="section-top"><div><span className="section-kicker">01 / DATENBEREICH</span><h2>Liga & Team auswählen</h2></div><span className="caption-small">Suche im geladenen Kader · Alle 4 Ligen für ligaübergreifende Suche auswählen</span></div>
           {sport === "football" && leagues.length > 0 && (
@@ -729,7 +754,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
 
         <section className="v35-tab-section v37-mission-workspace" data-tab="missions" id="daily-mission">
           <div className="v37-mission-title">
-            <div><span className="section-kicker">NEON / DAILY MISSIONS · V3.8</span><h1>⚡ Daily Missions</h1><p>Die besten verfügbaren Picks für deine tägliche Sorare-Mission – kostenlos, ohne Zusatz-API oder Datenbank.</p></div>
+            <div><span className="section-kicker">NEON / DAILY MISSIONS · V3.9</span><h1>⚡ Daily Missions</h1><p>Die besten verfügbaren Picks für deine tägliche Sorare-Mission – kostenlos, ohne Zusatz-API oder Datenbank.</p></div>
             <span className="v37-mission-coverage">{players.length.toLocaleString("de-DE")} Spieler geladen · {sport==="nba"?"NBA":"Fußball"}</span>
           </div>
           <div className="v37-mission-scope">
@@ -801,7 +826,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
           </div> : <p className="matchup-disclaimer">Bewerte mindestens einen Gegner, um ein transparentes Matchup-Ranking zu erhalten. Ohne belastbare Defensivdaten gibt es bewusst keine erfundenen Top-10-Matchups.</p>}
         </section>
 
-        <div className="v35-tab-section" data-tab="players"><HiddenGems sport={sport} players={players} cardStore={effectiveCardStore} watchlist={watchlist}
+        <div className="v35-tab-section" data-tab="players"><HiddenGems sport={sport} players={players} cardStore={effectiveCardStore} verifiedOwnedReady={verifiedOwnedReady} watchlist={watchlist}
           onOpenPlayer={setSelectedPlayerId} onAddPlayer={queueManualPlayer} onToggleFavorite={toggleFavorite}/></div>
 
         <section data-tab="builder" className="two-column builder-zone-v23">
@@ -947,6 +972,14 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
             <p className="model-note">Mit „Fixieren“ zwingst du Spieler ins Lineup, mit „Sperren“ entfernst du sie aus der Auswahl. Sterne werden aus Sorare geladen, falls verfügbar; Kartenboni kommen aus Sorare, soweit verfügbar; sonst manuelle Ersatzwerte. {ownedOnly ? "Aufstellung nur aus vollständig synchronisierten Sorare-Karten." : "Theoretische Bestbesetzung aus dem geladenen Spielerpool – dein Kartenbesitz ist nicht geprüft."} Fehlende NBA-Sterne kannst du weiterhin manuell eintragen. Prognosen sind keine garantierten Ergebnisse.</p>
             {shownLineups.length > 1 && <div className="variants" role="group" aria-label="Aufstellungen vergleichen">{shownLineups.map((l, i) => <button key={i} className={Math.min(activeResult,lineups.length-1) === i ? "active" : ""} onClick={()=>{setActiveResult(i);setIntelligencePickKey(null);}}>Lineup {i+1} <strong>{validTarget && l.targetProbability !== null ? `${Math.round(l.targetProbability * 100)} % Zielchance` : `${fmt(l.projectedScore)} Pkt.`}</strong></button>)}</div>}
             {autoLineupDiff&&<div className="v35-auto-diff" aria-live="polite"><strong>Gegenüber Lineup 1:</strong><span>{autoLineupDiff.changed} andere Spieler · {autoLineupDiff.pointsDifference>=0?"+":""}{fmt(autoLineupDiff.pointsDifference)} PS</span>{autoLineupDiff.added.length>0&&<small>Neu: {autoLineupDiff.added.join(" · ")}</small>}{autoLineupDiff.removed.length>0&&<small>Statt: {autoLineupDiff.removed.join(" · ")}</small>}</div>}
+            {shownLineups.length > 0 && <details className="v39-portfolio-details">
+              <summary>▥ Multi-Lineup Portfolio 2.0 · {portfolioReport.teams} Teams · {portfolioReport.differentPlayers} verschiedene Spieler</summary>
+              <div className="v39-portfolio-body"><span>Ø Prognose: <strong>{fmt(portfolioReport.averageScore)} PS</strong></span><span>Ø Überschneidung: <strong>{fmt(portfolioReport.averageShared)}/5</strong></span><span>Max. Wiederverwendung: <strong>{portfolioReport.maxReuse}×</strong></span></div>
+              <label className="v39-portfolio-toggle"><input type="checkbox" checked={portfolioDiversity} onChange={e=>{setPortfolioDiversity(e.target.checked);setActiveResult(0);setNbaVariantKey(null);}}/> Mehr Vielfalt suchen (mind. 90 % Max-Prognose, globale Team-Regeln bleiben verbindlich)</label>
+              {v30State.scope==='team'&&<small>Pro-Team-Einstellungen haben Vorrang: Diversifizierung beeinflusst nur den globalen Modus.</small>}
+              {portfolioReport.warning&&<small>{portfolioReport.warning}</small>}
+              <small>Nur Vorschläge aus bereits regelgeprüften Aufstellungen; keine Karten bei Sorare reserviert oder eingereicht.</small>
+            </details>}
             {shownLineups.length > 1 && <div className="lineup-compare"><h3>Lineups im direkten Vergleich</h3><div className="tracking-scroll"><table className="tracking-table"><thead><tr><th>Lineup</th><th>Prognose</th><th>Floor</th><th>Ceiling</th>{sport === "nba" && <th>Sterne</th>}{validTarget && <th>Zielchance*</th>}</tr></thead><tbody>{shownLineups.map((l,i) => <tr key={i} className={Math.min(activeResult,lineups.length-1)===i ? "compare-selected" : ""} onClick={() => {setActiveResult(i);setIntelligencePickKey(null);}}><td><button type="button" onClick={() => {setActiveResult(i);setIntelligencePickKey(null);}}>#{i+1} wählen</button></td><td>{fmt(l.projectedScore)}</td><td>{fmt(l.floorScore)}</td><td>{fmt(l.ceilingScore)}</td>{sport === "nba" && <td>{fmt(l.starsUsed)} ★</td>}{validTarget && <td>{l.targetProbability===null ? "—" : `${Math.round(l.targetProbability*100)} %`}</td>}</tr>)}</tbody></table></div><p className="profile-muted">* Zielchance: nicht kalibrierte Modellschätzung. Lineups sind nicht automatisch offiziell spielberechtigt; Kartenbesitz und aktuelle Set-Regeln prüfen.</p></div>}
             {!chosen && <div className="empty-state"><strong>Für dieses Regelset fehlt eine vollständige gültige Aufstellung.</strong><p>{sport === "nba" ? "Vergib im Spielertableau zunächst echte Sterne (1–5 in 0,5-Schritten) für mindestens fünf geeignete Karten. Zusammen dürfen sie höchstens 16 Sterne haben." : "Es werden je ein TW, VER, MF, FWD sowie ein zusätzlicher Feldspieler benötigt."}{ownedOnly ? " Prüfe den vollständig synchronisierten Kartenbestand, den gewählten Datenbereich und die NBA-Sterne." : ""} Fixierungen müssen zum Regelset passen; NBA zusammen höchstens 16 Sterne.</p></div>}
             </>}
@@ -1021,6 +1054,9 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
         </section>
         <section data-tab="analytics" className="panel tracking-panel" id="tracking">
           <div className="section-top"><div><span className="section-kicker">07 / PROGNOSE-DATENBANK & BACKTESTING</span><h2>Prognose gegen Ergebnis</h2></div><span className="record-count">{metrics.count} lokal ausgewertete Vorhersagen</span></div>
+          <div className="v39-reality-strip" aria-label="Prediction Reality Check">
+            <strong>◈ Reality Check</strong><span>{realityCheck.matched} bestätigte Vor-Spiel-Paare · MAE {realityCheck.mae===null?'—':`${fmt(realityCheck.mae)} PS`} · Bias {realityCheck.bias===null?'—':`${fmt(realityCheck.bias)} PS`}</span><small>{realityCheck.message}</small>
+          </div>
           <div className="v35-optional-cloud"><button type="button" aria-expanded={showCloudLearning} onClick={()=>setShowCloudLearning(v=>!v)}>☁ {showCloudLearning?"Cloud-Labor ausblenden":"Optionales Cloud-Labor anzeigen"} (Upstash nicht erforderlich)</button>{showCloudLearning&&<PredictionLearningCloud sport={sport}/>}</div>
           <p className="matchup-disclaimer">Dein <strong>persönliches Browser-Archiv</strong> bleibt ohne Upstash nutzbar. Hier kannst du bisherige Aufzeichnungen bearbeiten und JSON-Dateien sichern. Das Cloud-Labor arbeitet unabhängig im Hintergrund; deine privaten Karten- und Browser-Einstellungen werden nicht übertragen.</p>
           <div className="archive-banner">

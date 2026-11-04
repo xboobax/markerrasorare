@@ -5,6 +5,7 @@ import type {Sport} from '@/lib/model';
 import type {ScheduleData} from '@/lib/gameweek-center';
 import type {AvailabilityReport,AvailabilitySnapshot} from '@/lib/availability';
 import {offsetBerlinDay} from '@/lib/builder-pool';
+import {nbaBreakoutFinder,footballActionHunter,gamedayPulse} from '@/lib/neon-v39';
 import {missionDescription,rankDailyMissionPlayers,pickOneClickDailyMission,reviewDailyMissionPool,
   type DailyMissionCandidate,type MissionWindow,type MissionRow,type MissionOptions} from '@/lib/daily-mission';
 
@@ -65,6 +66,8 @@ export default function DailyMissionPicker({sport,players,nbaSchedule,ownedIds,e
   }:null,[sport,windowMode,now,nbaSchedule,ownedOnly,ownedIds,excludedIds,availabilityById,availabilitySnapshot]);
   const ranked=useMemo(()=>options?rankDailyMissionPlayers(players,options):[],[players,options]);
   const audit=useMemo(()=>options?reviewDailyMissionPool(players,options):null,[players,options]);
+  const scouts=useMemo(()=>sport==='nba'?nbaBreakoutFinder(ranked):footballActionHunter(ranked),[sport,ranked]);
+  const gameday=useMemo(()=>now?gamedayPulse(players,sport,nbaSchedule,ownedIds,now):null,[players,sport,nbaSchedule,ownedIds,now]);
   const oneClick=useMemo(()=>pickOneClickDailyMission(ranked,ownedIds,verifiedOwned),[ranked,ownedIds,verifiedOwned]);
   const sections=sport==='football'?[{title:'Feldspieler · entscheidende Aktion',kind:'field' as const},{title:'Torhüter · Clean Sheet / Elfmeter',kind:'goalkeeper' as const}]:[{title:'Beste NBA Daily Picks',kind:'nba' as const}];
   const labelDay=now?offsetBerlinDay(now,windowMode==='tomorrow'?1:0):'—';
@@ -74,7 +77,7 @@ export default function DailyMissionPicker({sport,players,nbaSchedule,ownedIds,e
     onSendToBuilder(oneClick.row.player.id);
   };
   return <section className="panel v36-mission v38-mission" id="daily-mission-picker" aria-label="Daily Mission Picker">
-    <div className="v36-mission-head"><div><span className="section-kicker">DAILY MISSION INTELLIGENCE · V3.8</span><h2>{sport==='nba'?'🏀 NBA Daily Picker':'⚽ Entscheidender-Spieler-Picker'}</h2><p>{missionDescription(sport)}</p></div><span className="v36-mission-source">Kostenlose Daten · aktueller Spielerpool</span></div>
+    <div className="v36-mission-head"><div><span className="section-kicker">DAILY MISSION INTELLIGENCE · V3.9</span><h2>{sport==='nba'?'🏀 NBA Daily Picker':'⚽ Entscheidender-Spieler-Picker'}</h2><p>{missionDescription(sport)}</p></div><span className="v36-mission-source">Kostenlose Daten · aktueller Spielerpool</span></div>
     <div className="v36-mission-tools">
       <label>Spielzeitraum <select aria-label="Daily Mission Zeitraum" value={windowMode} onChange={e=>{setWindowMode(e.target.value as MissionWindow);setNotice('');}}>
         <option value="today">Heute (Berlin)</option><option value="tomorrow">Morgen (Berlin)</option>
@@ -83,6 +86,11 @@ export default function DailyMissionPicker({sport,players,nbaSchedule,ownedIds,e
       <label className="v36-mission-owned"><input type="checkbox" checked={ownedOnly} onChange={e=>setOwnedOnly(e.target.checked)}/> Nur meine Karten</label>
       <button type="button" onClick={()=>{setNow(new Date());setNotice('');}}>↻ Aktualisieren</button>
       <small>{windowMode==='next24'?'Ab jetzt bis +24h':labelDay} · {scope}</small>
+    </div>
+    <div className="v39-mission-radar" aria-label="Mission Spielbeginn Radar">
+      <strong>◷ Mission Radar</strong>
+      <span>{gameday?.nextKickoff?`Nächster bestätigter Spielbeginn: ${new Date(gameday.nextKickoff).toLocaleString('de-DE',{timeZone:'Europe/Berlin',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}`:'Keine genaue kommende Anstoßzeit bestätigt'}</span>
+      <small>Spielbeginn ≠ offizielle Sorare-Abgabefrist. Mission-Lock in Sorare prüfen.</small>
     </div>
     <div className="v38-mission-hero">
       <div className="v38-mission-hero-copy"><strong>⚡ One-Click Mission Pick · Top Pick aus deiner Sammlung</strong>
@@ -106,6 +114,17 @@ export default function DailyMissionPicker({sport,players,nbaSchedule,ownedIds,e
       {sport==='nba'&&<span>{audit.missingL10} ohne offizielles L10</span>}
       {audit.notOwned>0&&<span>{audit.notOwned} nicht in Sammlung</span>}
     </div>}
+    <details className="v39-scout-detail">
+      <summary>{sport==='nba'?'◈ NBA Breakout Finder':'◈ Football Action Hunter'} · Top {scouts.length} &amp; Gründe <span>anzeigen</span></summary>
+      <div className="v39-scout-results">
+        {scouts.map(c=><div className="v39-scout-item" key={c.playerId}>
+          <div><button type="button" onClick={()=>onOpenPlayer(c.playerId)}>{c.name} ↗</button><small>{'why' in c?c.why:''}</small></div>
+          <button type="button" onClick={()=>onSendToBuilder(c.playerId)}>+ Builder</button>
+        </div>)}
+        {!scouts.length&&<p>Keine verlässlich zuordenbaren Kandidaten im ausgewählten Pool.</p>}
+      </div>
+      <small className="v39-scout-note">Scouting-Index, keine kalibrierte Missionstrefferchance. Für Fußball fehlen einzelne Tor-/Assist- und Spezialaktionsdaten.</small>
+    </details>
     <div className="v36-mission-groups">
       {sections.map(section=>{
         const data=ranked.filter(r=>r.kind===section.kind).slice(0,6);

@@ -1,3 +1,7 @@
+## V3.9.0 – NEON Intelligence / kompaktes UI
+
+NBA Breakout Finder und Football Action Hunter in zugeklappten Daily-Mission-Details, Gameday & Advisor als schmale Builder-Zeile, reparierender One-Click Rebuild, kompakter Hidden Gems Detector, verifizierter Reality Check, Multi-Lineup Portfolio-Diversifizierung, Spielbeginn-Radar und NEON Quick Actions (Strg+K). Alle fünf Tabs und Regeln bleiben bestehen. Keine kostenpflichtigen API-/Upstash-Abhängigkeiten. 48 Tests erfolgreich; Next.js-Produktionsbuild noch nicht lokal bestätigt.
+
 ## V3.8.0 – Daily Mission Intelligence 2.0 (kostenlos)
 - Neuer One-Click Mission Pick: wählt nur verifiziert eigene Karten und überspringt Kandidaten mit hohem Einsatzrisiko; überträgt nur in den lokalen manuellen Builder, keine automatische Sorare-Abgabe.
 - Mission Safety verknüpft vorhandene Verfügbarkeitsberichte (OUT / Doubtful / Questionable), Alter des Gesundheitsstatus, Prognosedaten und Einsatzmodell. Risiken werden als heuristischer INDEX, nicht als behauptete Wahrscheinlichkeit angezeigt.

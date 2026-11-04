@@ -1629,3 +1629,40 @@ body{background:#030407}
 .v36-mission-player .v38-safety-note{font-size:10px;color:#aaa4b5}
 @media(max-width:580px){.v38-mission-hero{padding:10px}.v38-mission-pick-button{width:100%}.v38-mission-row{gap:7px}}
 .v38-mission-collection-button{background:#1b1725;border:1px solid #55426b;color:#dfcdf0;padding:9px 12px;border-radius:9px;font-size:11px;cursor:pointer}
+
+/* V3.9 – small surfaces, never a sixth workspace or ten permanent modules */
+.v39-quick-actions{position:relative;z-index:54;display:flex;align-items:center;gap:10px;padding:5px max(14px,calc((100vw - 1480px)/2));background:#07080b;border-bottom:1px solid #201b2a;color:#898398;font-size:10px}
+.v39-quick-actions>button{border:1px solid #443259;border-radius:7px;background:#1b1325;color:#e6d0ff;padding:6px 11px;font-size:11px;font-weight:750;cursor:pointer}
+.v39-quick-actions>button small{font-size:9px;color:#a6a0b5;margin-left:7px}
+.v39-command-panel{position:absolute;top:100%;left:max(14px,calc((100vw - 1480px)/2));width:min(360px,calc(100vw - 28px));background:#100e16;border:1px solid #523c69;box-shadow:0 14px 36px #000a;border-radius:10px;padding:8px;display:grid;grid-template-columns:1fr 1fr;gap:5px;z-index:100}
+.v39-command-panel button{border:1px solid #2c2337;background:#191421;color:#e3d8ed;font-size:11px;padding:10px 8px;border-radius:7px;text-align:left;cursor:pointer}
+.v39-command-panel button:hover{border-color:#9163ce;background:#2b203a}
+.v39-intelligence-strip,.v39-reality-strip{display:flex;align-items:center;gap:15px;flex-wrap:wrap;border:1px solid #292234;border-radius:9px;background:#0c0b10;padding:9px 13px;margin:10px 0;color:#aca6b9;font-size:11px}
+.v39-intelligence-strip strong,.v39-reality-strip strong{color:#d8c0f5;font-size:11px}
+.v39-intelligence-strip>div{display:flex;gap:11px;align-items:center;flex-wrap:wrap}
+.v39-intelligence-strip details{margin-left:auto;position:relative;max-width:100%}
+.v39-intelligence-strip details summary{cursor:pointer;color:#dec0fa;font-weight:750;list-style:disclosure-closed}
+.v39-intelligence-strip details[open]{flex:1 1 100%;background:#15101d;padding:9px;border-radius:8px;border:1px solid #372748}
+.v39-intelligence-strip details p{margin:5px 0;color:#b4a9c0;line-height:1.5}
+.v39-intelligence-strip details p strong{color:#e9d5ff}
+.v39-mission-radar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;background:#111018;border:1px solid #30253e;border-radius:8px;padding:8px 11px;color:#bbb3cb;font-size:11px}
+.v39-mission-radar strong{color:#d6bbfa}.v39-mission-radar small{color:#898397;font-size:10px}
+.v39-scout-detail,.v39-portfolio-details{border:1px solid #342a42;background:#0e0c13;border-radius:9px;margin:10px 0;padding:9px 11px;color:#cfc1df;font-size:11px}
+.v39-scout-detail>summary,.v39-portfolio-details>summary{cursor:pointer;font-weight:750;color:#d8b8fa;font-size:12px}
+.v39-scout-detail>summary span{font-weight:450;color:#9085a6}
+.v39-scout-results{margin-top:8px;display:grid;gap:5px}
+.v39-scout-item{display:flex;align-items:center;justify-content:space-between;gap:10px;background:#15121d;border-radius:7px;padding:7px 9px}
+.v39-scout-item div{display:flex;flex-direction:column;gap:3px;min-width:0}
+.v39-scout-item button{background:none;border:0;color:#e6ccff;font-weight:700;font-size:11px;cursor:pointer}
+.v39-scout-item small,.v39-scout-note{color:#a29aaf;font-size:10px;line-height:1.5}
+.v39-scout-item>button{white-space:nowrap;border:1px solid #514065;border-radius:6px;padding:5px 8px}
+.v39-scout-note{display:block;margin-top:8px}
+.v39-portfolio-body{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:10px 0;color:#b9acc9}
+.v39-portfolio-body strong{color:#efe1ff}
+.v39-portfolio-toggle{display:flex;gap:7px;align-items:flex-start;cursor:pointer;color:#d9c6eb;line-height:1.5;margin-bottom:6px}
+.v39-portfolio-details>small{display:block;color:#9b92a9;line-height:1.45;margin:5px 0}
+.v39-reality-strip{margin:9px 0}.v39-reality-strip small{font-size:10px;color:#9c96aa}
+@media(max-width:740px){.v39-quick-actions{padding:6px 10px}.v39-quick-actions>span{display:none}.v39-intelligence-strip{align-items:flex-start}.v39-intelligence-strip details{margin-left:0}.v39-portfolio-body{gap:8px}}
+.v39-manual-advisor{border:1px solid #2b2340;border-radius:7px;background:#0f0d14;padding:7px 10px;margin:7px 0}
+.v39-manual-advisor>summary{font-size:11px;font-weight:700;color:#c4a2e9;cursor:pointer}
+.v39-manual-advisor p{font-size:11px;color:#aaa2b8;margin:7px 0 2px;line-height:1.5}.v39-manual-advisor strong{color:#e5c7ff}

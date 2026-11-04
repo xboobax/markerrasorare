@@ -1,3 +1,9 @@
+# Neon Builder Pro V3.9 – NEON Intelligence
+
+**Die aktuelle Version hat weiterhin fünf kompakte Tabs.** Daily Missions, Gameday, Advisor, Rebuild, Portfolio, Reality Check und Schnellaktionen sind in den bestehenden Bereichen integriert, ohne zusätzliche Pflicht-Panels. Keine Upstash-Pflicht und keine kostenpflichtigen APIs. Die vollständige Update-Anleitung steht in [`UPDATE_V3_9_NEON_INTELLIGENCE_DE.md`](UPDATE_V3_9_NEON_INTELLIGENCE_DE.md).
+
+---
+
 ## V3.7.1: Aktuelles Fußball-Set beim Kartensync
 
 Die Fußball-Kartensammlung nutzt jetzt **`cardSet.currentSet(sport: FOOTBALL)`** und

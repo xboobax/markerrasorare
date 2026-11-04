@@ -4,6 +4,7 @@ import {useEffect,useMemo,useRef,useState,type DragEvent} from "react";
 import {ARCADE} from "@/config/divination";
 import {isValidNbaStars,slotAccepts,type CardInput,type Strategy} from "@/lib/arcade";
 import {evaluateManualLineup} from "@/lib/manual-lineup";
+import {oneClickRebuild} from "@/lib/neon-v39";
 import {diagnoseLineup} from "@/lib/lineup-doctor";
 import {gameDate,initialTeams,placeInTeam,restoreWorkspace,withinHorizon,workspaceKey,type WorkspaceTeam} from "@/lib/builder-workspace";
 import {goalMeter,moveBetweenSelections,quickSwapsForSlot,smartFillEmptySlots} from "@/lib/builder-neon";
@@ -130,7 +131,7 @@ export default function BuilderWorkspace({sport,league,availability,availability
     return {team,base,captain,result:captainLineup(base,sport,captain,team.goal??targetScore)};
   }),[teams,cards,sport,targetScore,availabilityById,verifiedCollection]);
   const currentResult=assessment.find(a=>a.team.id===activeTeamId)?.result??assessment[0]?.result;
-  const doctor=useMemo(()=>activeTeam?diagnoseLineup(activeTeam.selection,cards,sport,activeTeam.goal??targetScore,{limit:3}):null,
+  const doctor=useMemo(()=>activeTeam?diagnoseLineup(activeTeam.selection,cards,sport,activeTeam.goal??targetScore,{limit:3,ownedOnly:onlyMyCards}):null,
     [activeTeam,cards,sport,targetScore]);
   const selectedIds=new Set(activeTeam?.selection.filter((id):id is string=>!!id)??[]);
   const battleOpponent=teams.find(t=>t.id===compareId&&t.id!==activeTeamId)??teams.find(t=>t.id!==activeTeamId);
@@ -254,6 +255,33 @@ export default function BuilderWorkspace({sport,league,availability,availability
       captainId:sport==="football"?(t.captainId&&filled.selection.includes(t.captainId)?t.captainId:smartCaptain(check,availabilityById,t.captainMode??"projection")):null}));
     setActiveTeamId(id);setActiveSlot(null);setSwapTarget(null);setPreviewSwapId(null);
     setMsg(`Smart Auto-Fill: ${filled.added} freie Slots ergänzt. Alle vorhandenen Spieler bleiben erhalten. ${fmt(check.projectedScore)} Punkte Prognose.`);
+  };
+  // Repair only empty / confirmed problematic slots; respect locked players, collection,
+  // day filter, reuse, advanced V3 rules and the 16-star budget. Undo remains available.
+  const rebuildOneClick=(id:string)=>{
+    const team=teams.find(t=>t.id===id);if(!team)return;
+    if(onlyMyCards&&!verifiedOwnedReady){setMsg('Bitte zunächst die Sorare-Sammlung verifizieren; keine alten Set-Karten verwenden.');return;}
+    const settings=v30ForTeam(v30State,id);
+    if(settings.excludedLeagues.includes(league)){setMsg('Aktuelle Liga ist in den Teamregeln ausgeschlossen; nichts verändert.');return;}
+    const counts=new Map<string,number>();
+    for(const other of teams.filter(t=>t.id!==id))for(const id of other.selection)if(id)counts.set(id,(counts.get(id)??0)+1);
+    const allowed=cards.filter(c=>(counts.get(c.player.id)??0)<settings.maxUses &&
+      isInSelectedCollection(c.player.id,cardStore,onlyMyCards,verifiedOwnedReady) &&
+      eligibleByHorizon(c.player) && !cardStore[c.player.id]?.excluded &&
+      !isConfirmedOut(availabilityById[c.player.id]) && availabilityById[c.player.id]?.status!=='doubtful');
+    const blocked=[...new Set([...excludedByInjury,...cards.filter(c=>!eligibleByHorizon(c.player)).map(c=>c.player.id),...Object.keys(cardStore).filter(k=>cardStore[k]?.excluded),
+      ...Object.entries(availabilityById).filter(([,v])=>v.status==='doubtful').map(([id])=>id)])];
+    const fixed=oneClickRebuild({selection:team.selection,cards:teamCards(team),sport,
+      lockedIds:team.locks,blockedIds:blocked,allowedIds:allowed.map(c=>c.player.id),
+      strategy:settings.preset==='safe'?'safe':settings.preset==='ceiling'?'upside':strategy,
+      advancedSettings:settings,targetScore:team.goal??targetScore});
+    if(fixed.reason){setMsg(`One-Click Rebuild: ${fixed.reason}`);return;}
+    const checked=evaluateManualLineup(fixed.selection,teamCards(team),sport,team.goal??targetScore);
+    if(!checked.valid){setMsg('One-Click Rebuild wurde wegen der Regelprüfung verworfen.');return;}
+    changeTeam(id,t=>({...t,selection:fixed.selection,
+      captainId:sport==='football'?(t.captainId&&fixed.selection.includes(t.captainId)?t.captainId:smartCaptain(checked,availabilityById,t.captainMode??'projection')):null}));
+    setActiveTeamId(id);setSwapTarget(null);setPreviewSwapId(null);
+    setMsg(`One-Click Rebuild: ${fixed.changed} Slot(s) repariert, ${fixed.replaced.length} riskante Karte(n) entfernt · ${fmt(checked.projectedScore)} PS. Mit Undo rückgängig.`);
   };
   const toggleLock=(teamId:string,id:string)=>{
     changeTeam(teamId,t=>({...t,locks:t.locks.includes(id)?t.locks.filter(v=>v!==id):[...t.locks,id]}));
@@ -423,8 +451,12 @@ export default function BuilderWorkspace({sport,league,availability,availability
     </header>
     <div className="v35-manual-quickbar" aria-label="Schnellaktionen für das aktive Team">
       <div className="v35-manual-kpis"><strong>TEAM {teams.findIndex(t=>t.id===activeTeamId)+1}</strong><span>{activeResult?.result.picks.length??0}/5 Karten</span><span>{activeResult?`${fmt(activeResult.result.projectedScore)} PS`:"—"}</span>{sport==="nba"&&<span>{fmt(activeResult?.result.starsUsed??0)} / 16 ★</span>}</div>
-      <div className="v35-manual-actions"><button type="button" onClick={()=>autoFill(activeTeamId)}>✦ Auto-Fill</button><button type="button" disabled={smartSwapSlot<0} onClick={()=>{if(smartSwapSlot>=0){setSwapTarget({teamId:activeTeamId,slot:smartSwapSlot});setPreviewSwapId(null);window.requestAnimationFrame(()=>document.getElementById("active-smart-swap")?.scrollIntoView({block:"nearest",behavior:"smooth"}));}}}>⇄ Smart Swap</button><button type="button" onClick={()=>setShowFinalCheck(v=>v===activeTeamId?null:activeTeamId)}>✓ Lineup Doctor {doctor?.issues.length?`(${doctor.issues.length})`:""}</button><button type="button" className={compareOpen?"active":""} onClick={()=>setCompareOpen(v=>!v)}>▣ Teamvergleich</button><button type="button" disabled={!undoTeams} onClick={()=>{if(undoTeams){setTeams(undoTeams);setUndoTeams(null);setMsg("Letzte Teamänderung rückgängig gemacht.");}}}>↶ Undo</button></div>
+      <div className="v35-manual-actions"><button type="button" onClick={()=>autoFill(activeTeamId)}>✦ Auto-Fill</button><button type="button" onClick={()=>rebuildOneClick(activeTeamId)} title="Repariert bestätigte Problemspieler und füllt freie Slots unter allen Regeln. Undo möglich.">↻ One-Click Rebuild</button><button type="button" disabled={smartSwapSlot<0} onClick={()=>{if(smartSwapSlot>=0){setSwapTarget({teamId:activeTeamId,slot:smartSwapSlot});setPreviewSwapId(null);window.requestAnimationFrame(()=>document.getElementById("active-smart-swap")?.scrollIntoView({block:"nearest",behavior:"smooth"}));}}}>⇄ Smart Swap</button><button type="button" onClick={()=>setShowFinalCheck(v=>v===activeTeamId?null:activeTeamId)}>✓ Lineup Doctor {doctor?.issues.length?`(${doctor.issues.length})`:""}</button><button type="button" className={compareOpen?"active":""} onClick={()=>setCompareOpen(v=>!v)}>▣ Teamvergleich</button><button type="button" disabled={!undoTeams} onClick={()=>{if(undoTeams){setTeams(undoTeams);setUndoTeams(null);setMsg("Letzte Teamänderung rückgängig gemacht.");}}}>↶ Undo</button></div>
     </div>
+    <details className="v39-manual-advisor"><summary>◈ NEON Smart Advisor · {doctor?.swaps.length?`${doctor.swaps.length} geprüfte Vorschläge`:'Team-Check'} ▾</summary>
+      {doctor?.swaps.length?<p>{doctor.swaps[0].fromName} → <strong>{doctor.swaps[0].toName}</strong> · {doctor.swaps[0].delta>=0?'+':''}{fmt(doctor.swaps[0].delta)} PS · {doctor.swaps[0].reason}. Über den Lineup Doctor prüfen und bewusst übernehmen.</p>
+        :<p>{doctor?.issues[0]?.description??'Keine regelkonforme bessere Alternative in deinem geladenen Spielerpool gefunden.'} Keine automatische Sorare-Einreichung.</p>}
+    </details>
     <details className="v35-advanced"><summary>⚙ Profi-Einstellungen · Stack, Positionsvorgaben und Datenfilter</summary><AutoBuilderSettings sport={sport} league={league} leagues={leagues} state={v30State} onChange={onV30Change} teamId={activeTeamId} maxTeams={teams.length}/></details>
     <div className="v23-subbar v292-subbar"><span className="v23-live-dot"/><strong>{teams.length} Teams</strong><span>{onlyMyCards?"✓ Meine Sorare-Karten":"Alle Spieler"}</span>{(horizon==="today"||horizon==="tomorrow")&&<span className="v291-day-chip">◷ {horizon==="today"?"Heute":"Morgen"} · {now?new Date(`${activeCalendarDay}T12:00:00Z`).toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit",year:"numeric",timeZone:"UTC"}):"Datum wird geladen"} · MEZ/MESZ</span>}<span className="v23-target-label">Team <b>{activeTeamId.replace("team-", "#")}</b> · {activeSlotLabel}</span>{existingOutOfWindow>0&&<span className="v291-day-warning" title="Bestehende Teams werden nicht automatisch geändert.">⚠ {existingOutOfWindow} bestehende Spieler außerhalb des Zeitfensters</span>}{matchdayReady&&<span className="v292-active-state">⚡ Ready: Heute · Eigene Karten · Nicht OUT</span>}</div>
     <details className="v26-injury-toolbar v292-injury-details" aria-label="INJURY & AVAILABILITY">

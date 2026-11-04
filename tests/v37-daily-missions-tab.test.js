@@ -5,7 +5,7 @@ const dashboard=fs.readFileSync(path.join(root,'app/components/arcade-dashboard.
 const mission=fs.readFileSync(path.join(root,'app/components/daily-mission-picker.tsx'),'utf8');
 const css=fs.readFileSync(path.join(root,'app/globals.css'),'utf8');
 const pkg=require('../package.json');
-assert.match(pkg.version,/^3\.(?:7|8)\./); // The dedicated tab survives subsequent versions.
+assert.match(pkg.version,/^3\.(?:7|8|9)\./); // The dedicated tab survives subsequent versions.
 assert.match(dashboard,/\["missions","⚡","Daily Missions"\]/);
 assert.ok(dashboard.indexOf('["collection","▣","Sammlung"]')<dashboard.indexOf('["missions","⚡","Daily Missions"]'));
 assert.match(dashboard,/<section className="v35-tab-section v37-mission-workspace" data-tab="missions" id="daily-mission">/);

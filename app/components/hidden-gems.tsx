@@ -4,14 +4,15 @@ import {useMemo,useState} from "react";
 import {findHiddenGems,type GemCardSettings} from "@/lib/hidden-gems";
 import type {Forecast,Sport} from "@/lib/model";
 
-type Props={sport:Sport;players:Forecast[];cardStore:Record<string,GemCardSettings>;watchlist:string[];
+type Props={sport:Sport;players:Forecast[];cardStore:Record<string,GemCardSettings>;watchlist:string[];verifiedOwnedReady?:boolean;
  onOpenPlayer:(id:string)=>void;onAddPlayer:(id:string)=>void;onToggleFavorite:(id:string)=>void};
 const fmt=(n:number)=>n.toLocaleString("de-DE",{minimumFractionDigits:1,maximumFractionDigits:1});
-export default function HiddenGems({sport,players,cardStore,watchlist,onOpenPlayer,onAddPlayer,onToggleFavorite}:Props){
+export default function HiddenGems({sport,players,cardStore,watchlist,verifiedOwnedReady=false,onOpenPlayer,onAddPlayer,onToggleFavorite}:Props){
   const [ownedOnly,setOwnedOnly]=useState(false);
   const [position,setPosition]=useState("all");
   const [showAll,setShowAll]=useState(false);
-  const result=useMemo(()=>findHiddenGems(players,sport,cardStore,{ownedOnly,position,limit:showAll?20:6}),[players,sport,cardStore,ownedOnly,position,showAll]);
+  const result=useMemo(()=>ownedOnly&&!verifiedOwnedReady?{gems:[],eligible:0,missingStars:0,excludedWeakData:0}:
+    findHiddenGems(players,sport,cardStore,{ownedOnly,position,limit:showAll?12:3}),[players,sport,cardStore,ownedOnly,position,showAll,verifiedOwnedReady]);
   const positions=[...new Set(players.map(p=>p.position))].sort();
   return <section className="panel gem-center" id="hidden-gems">
     <div className="section-top gem-heading"><div><span className="section-kicker">V2.1 / DISCOVERY ENGINE</span><h2>Hidden Gems Finder <span className="gem-diamond">◆</span></h2><p>Entdecke interessante Kandidaten, die du sonst leicht übersiehst – transparent berechnet aus deinen geladenen Daten.</p></div><span className="gem-live">{result.eligible} AUSWERTBAR</span></div>
@@ -20,6 +21,7 @@ export default function HiddenGems({sport,players,cardStore,watchlist,onOpenPlay
       <label className="gem-toggle"><input type="checkbox" checked={ownedOnly} onChange={e=>setOwnedOnly(e.target.checked)}/> Nur meine Karten</label>
       <span className="gem-meta">{sport==="nba"?"Rangfolge: erwartete Punkte / offizielle Sorare-Sterne (sonst manueller Fallback)":"Rangfolge: Form- und Stabilitätsindex"}</span>
     </div>
+    {ownedOnly&&!verifiedOwnedReady&&<p className="gem-hint">Bitte erst die aktuelle Sorare-Sammlung synchronisieren. Frühere Fußball-Sets gelten nicht als bestätigter Besitz.</p>}
     {sport==="nba"&&result.missingStars>0&&<p className="gem-hint">★ {result.missingStars} Spieler ohne verfügbare offizielle oder manuell ergänzte Sterne bleiben aus dem Vergleich ausgeschlossen.</p>}
     <div className="gem-grid">
       {result.gems.map(g=><article className="gem-card" key={g.player.id}>
@@ -34,7 +36,7 @@ export default function HiddenGems({sport,players,cardStore,watchlist,onOpenPlay
       </article>)}
     </div>
     {!result.gems.length&&<div className="empty-state">Keine ausreichend belegten Kandidaten für diese Filter. {sport==="nba"?"Prüfe den Sterne-Sync oder deaktiviere den Kartenfilter.":"Wähle eine andere Position oder lade mehr Spieler."} Wir erfinden keine Hidden-Gem-Werte.</div>}
-    {result.eligible>result.gems.length&&<button className="gem-more" type="button" onClick={()=>setShowAll(x=>!x)}>{showAll?"Weniger anzeigen":"Bis zu 20 Kandidaten anzeigen"} ↗</button>}
+    {result.eligible>result.gems.length&&<button className="gem-more" type="button" onClick={()=>setShowAll(x=>!x)}>{showAll?"Weniger anzeigen":"Bis zu 12 Kandidaten anzeigen"} ↗</button>}
     <p className="gem-disclaimer">Keine Marktpreis-, Seltenheits- oder Besitzbewertung. NBA-Sterne stammen vorrangig direkt aus Sorare; manuell ergänzte Ersatzwerte können enthalten sein. Der Fußball-Analyse-Index ist kein offizieller Sorare-Score; fehlende Daten und mögliche DNPs werden nicht kaschiert.</p>
   </section>;
 }
