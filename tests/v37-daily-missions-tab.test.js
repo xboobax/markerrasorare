@@ -20,6 +20,6 @@ assert.match(mission,/Top Pick/);
 assert.match(mission,/Datenbasis:/);
 assert.match(mission,/L10/);
 assert.match(mission,/keine kalibrierten Erfolgs- oder Verletzungswahrscheinlichkeiten/);
-assert.ok(fs.existsSync(path.join(root,'app/(dream)/daily-missions/page.tsx')),'V4 dedicated Daily Missions route remains reachable');
+assert.ok(fs.existsSync(path.join(root,'app/daily-missions/page.tsx')),'V4 dedicated Daily Missions route remains reachable');
 const vercel=require('../vercel.json');assert.equal(vercel.crons,undefined);
 console.log('V3.7 Daily Missions dedicated fifth tab, compact scope, responsive nav and free-data ranking: OK');

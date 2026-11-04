@@ -1,93 +1,16 @@
-import { getFootballClubs, getNbaTeams, getPlayers, type Club } from "@/lib/sorare";
-import { forecast, type Player, type Sport } from "@/lib/model";
-import ArcadeDashboard from "@/app/components/arcade-dashboard";
-import { FOOTBALL_LEAGUES, isFootballLeague } from "@/lib/leagues";
-import {getAutomaticMatchupData} from "@/lib/auto-matchups";
-import {getEspnNbaDefenseFallback} from "@/lib/nba-defense-fallback";
-import {getNbaGameweekSchedule} from "@/lib/nba-gameweek-feed";
-import {attachNbaFixtures} from "@/lib/nba-fixture-mapping";
-import type {ScheduleData} from "@/lib/gameweek-center";
-import type {FetchSummary} from "@/lib/data-health";
-
-export const revalidate = 300;
-export const maxDuration = 60;
-
-type Props = { searchParams: { sport?: string; league?: string; team?: string } };
-
-export default async function Page({ searchParams }: Props) {
-  const sport: Sport = searchParams.sport === "nba" ? "nba" : "football";
-  let players: Player[] = [];
-  let clubs: Club[] = [];
-  let shownClubs: Club[] = [];
-  let leagues: string[] = [];
-  let league = "";
-  let team = searchParams.team ?? "";
-  let info = "";
-  let error = "";
-  let fetchSummary: FetchSummary={scopeTeams:0,failedTeams:0,incompleteTeams:0,noScoreTeams:0,generatedAt:""};
-
-  try {
-    clubs = sport === "football" ? await getFootballClubs() : await getNbaTeams();
-    if (sport === "football") {
-      // Fixed league order and strict allowlist. Invalid URL league parameters
-      // fall back to Bundesliga; __all still means ONLY these four leagues.
-      leagues = [...FOOTBALL_LEAGUES];
-      const requested = searchParams.league;
-      league = requested === "__all" || isFootballLeague(requested) ? requested : "Bundesliga";
-      shownClubs = league === "__all" ? clubs : clubs.filter(c => c.league === league);
-    } else {
-      shownClubs = clubs;
-    }
-    // Ignore invalid team parameters instead of silently reporting a false zero-player result.
-    if (team && !shownClubs.some(c => c.slug === team)) team = "";
-    const scope = team ? shownClubs.filter(c => c.slug === team) : shownClubs;
-    fetchSummary.scopeTeams=scope.length;
-    const response = await getPlayers(sport, scope);
-    fetchSummary={...fetchSummary,failedTeams:response.failed,incompleteTeams:response.incomplete,noScoreTeams:response.noScoreFields};
-    players = response.players;
-    info = `${players.length} aktive Sorare-Kaderspieler geladen · ${scope.length - response.failed} von ${scope.length} Teams erfolgreich.`;
-    if (response.incomplete) info += ` ${response.incomplete} Kader nur teilweise geladen (Pagination nicht vollständig verfügbar).`;
-    if (response.noScoreFields) info += ` Warnung: Bei ${response.noScoreFields} Teams hat Sorare keine unterstützten Score-Felder geliefert. Spielerprofile können dort unvollständig sein.`;
-    if (sport === "football" && scope.length === 0) {
-      info += " Keine Vereine für diese Liga erkannt. Bitte den Sorare-Ligaabruf prüfen.";
-    }
-    if (response.failed) info += ` ${response.failed} Teams konnten derzeit nicht geladen werden; angezeigte Ergebnisse sind daher unvollständig.`;
-    if (players.length > 0 && !players.some(p => (p.recentScores?.length ?? 0) > 0 || p.proj !== null || p.avg !== null)) {
-      error = "Spieler-Stammdaten wurden geladen, aber keine Sorare-Scores oder Prognosen. Bitte Sorare-Abfrage/API-Key kontrollieren. Diese 0,0-Werte sind KEINE gültigen Vorhersagen.";
-    }
-  } catch (e) {
-    error = e instanceof Error ? e.message : String(e);
-    fetchSummary.error=error;
-  }
-
-  fetchSummary.generatedAt=new Date().toISOString();
-  const projected = players.map(forecast).sort((a,b)=>b.weighted-a.weighted);
-  // Optional schedule lives beside the established matchup provider. It cannot
-  // invalidate Sorare player scores or the core page if BALLDONTLIE is down.
-  const [automaticMatchups,nbaSchedule] = await Promise.all([
-    getAutomaticMatchupData(sport),
-    sport === "nba" ? getNbaGameweekSchedule() : Promise.resolve<ScheduleData>({fixtures:[],status:"not-configured",source:null}),
-  ]);
-  // Matchup ratings are optional scouting data. If the authenticated provider
-  // has insufficient completed games, try an isolated keyless ESPN fallback.
-  // A failed fallback MUST NOT affect the successful Sorare data or NBA calendar.
-  const espnDefense=sport==="nba"&&automaticMatchups.coverage===0
-    ? await getEspnNbaDefenseFallback():null;
-  const resolvedMatchups=espnDefense&&espnDefense.coverage>0?espnDefense:automaticMatchups;
-  // The NBA score queries do not include fixtures. Enrich only fixture metadata
-  // after forecasting, without changing score predictions or Sorare queries.
-  const playersWithGames=sport==="nba"?attachNbaFixtures(projected,nbaSchedule):projected;
-  return <ArcadeDashboard
-    sport={sport}
-    league={league}
-    leagues={leagues}
-    team={team}
-    clubs={shownClubs}
-    players={playersWithGames}
-    info={info}
-    error={error}
-    automaticMatchups={resolvedMatchups}
-    nbaSchedule={nbaSchedule}
-    fetchSummary={fetchSummary}
-  />;
-}
+import Link from "next/link";
+import DreamTitle from "@/features/core/dream-title";
+const cards=[
+  {url:"/builder/football",icon:"⚽",title:"Football Set Builder",detail:"Positionen, Kartenbonus, Captain, Multi-Team und intelligente Optimierung.",meta:"Fußball"},
+  {url:"/builder/nba",icon:"◉",title:"NBA Set Builder",detail:"Fünferteams, 16 Sterne, Value, Risiko und unterschiedliche Strategien.",meta:"NBA"},
+  {url:"/daily-missions",icon:"✦",title:"Daily Mission Center",detail:"Fußball-Aktionen und NBA L10 + 7 direkt aus deiner Sammlung.",meta:"Missionen"},
+  {url:"/match-center",icon:"▤",title:"Match Center",detail:"Spieltermine, Gegner und erwartete Startoptionen an einem Ort.",meta:"Spiele"},
+  {url:"/players",icon:"⌕",title:"Player Database",detail:"Schnelle, filterbare Spielerlisten mit Profilen und Formanalyse.",meta:"Scouting"},
+  {url:"/collection",icon:"▣",title:"Meine Sammlung",detail:"Sorare-Sync, gültiges Football Set und Kartenboni.",meta:"Galerie"},
+];
+export default function Home(){return <>
+  <DreamTitle eyebrow="WORKSPACE / V4.0" title="Deine Sorare-Zentrale" description="Builder, Scouting und Daily Missions – alles an einem Ort. Schwarz, Gold und bewusst ohne unnötige Ablenkung."/>
+  <section className="dream-welcome"><div><span className="dream-eyebrow">MARKERRAS SORARE DREAM</span><h2>Weniger klicken. Besser aufstellen.</h2><p>Wähle einen Arbeitsbereich. Deine bisherigen lokalen Teams, Filter, Presets und die Sorare-Verbindung bleiben in den übernommenen Modulen erhalten.</p><div className="dream-hero-actions"><Link className="dream-button-gold" href="/builder/football">Football Builder öffnen <span>↗</span></Link><Link className="dream-button-quiet" href="/builder/nba">NBA Builder ↗</Link></div></div><div className="dream-welcome-emblem">M<span>◆</span></div></section>
+  <div className="dream-dashboard-grid">{cards.map(item=><Link href={item.url} key={item.title} className="dream-feature-card"><div className="dream-feature-heading"><span>{item.icon}</span><small>{item.meta}</small></div><h3>{item.title}</h3><p>{item.detail}</p><span className="dream-card-cta">Öffnen ↗</span></Link>)}</div>
+  <div className="dream-info-line"><span>● <strong>Performance-First:</strong> Jede Arbeitsseite lädt nur die jeweils benötigten Ansichten.</span><span>Bestehende Version: <Link href="/legacy">V3.9.2 als Rückfallansicht ↗</Link></span></div>
+</>}

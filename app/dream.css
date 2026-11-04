@@ -35,7 +35,7 @@
 .dream-command-trigger kbd{padding:2px 5px;border-radius:4px;color:#8f8f8f;background:#272829;font-size:10px;margin-left:9px}
 .dream-menu{display:none;color:#d8b65b;background:transparent;border:1px solid #3d3b31;border-radius:7px;padding:6px 11px}
 .dream-content{max-width:1800px;margin:auto;padding:24px 26px 50px;min-width:0}
-.dream-page-heading{display:flex;justify-content:space-between;align-items:start;gap:16px;margin:0 0 19px;min-width:0}
+.dream-page-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin:0 0 19px;min-width:0}
 .dream-page-heading h1{font-size:clamp(24px,2.1vw,33px);line-height:1.18;font-weight:850;letter-spacing:-.04em;color:#f4f2ee;margin:7px 0}
 .dream-page-heading p{margin:0;color:#979a99;font-size:12px;max-width:920px}
 .dream-eyebrow{color:#d3b369;font-size:10px;font-weight:850;letter-spacing:.16em;text-transform:uppercase}
@@ -104,7 +104,7 @@
 .dream-embedded .v23-team-column,.dream-embedded .v23-table-scroll,.dream-roster-scroll{overscroll-behavior:contain}
 /* Virtualized Player Database */
 .dream-data-area{border:1px solid #303132;background:#131516;border-radius:12px;min-width:0;overflow:hidden}
-.dream-filterbar{display:flex;align-items:end;gap:10px;flex-wrap:wrap;padding:15px;border-bottom:1px solid #303132}
+.dream-filterbar{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;padding:15px;border-bottom:1px solid #303132}
 .dream-filterbar label{display:flex;flex-direction:column;gap:5px;color:#a7a7a1;font-size:10px;font-weight:750}
 .dream-filterbar select,.dream-filterbar input:not([type="checkbox"]){border:1px solid #46463f;background:#1b1d1f;color:#eeeadd;border-radius:7px;height:36px;min-width:105px;padding:5px 9px;font-size:12px;outline:none}
 .dream-filterbar label.dream-search{display:flex;flex-direction:row;align-items:center;background:#1b1d1f;border:1px solid #46463f;border-radius:7px;padding:0 9px;color:#d8b65b;min-width:205px;flex:1}
@@ -130,7 +130,7 @@
 .dream-player-details:hover{color:#f0d487}
 .dream-external-icon{color:#e6bf60!important;text-decoration:none!important;border:1px solid #494134;border-radius:5px;padding:4px 6px;margin-left:auto}
 .dream-score{display:inline-block;background:#5a4a28;color:#f4dea0;border:1px solid #817045;padding:6px 8px;min-width:40px;text-align:center;border-radius:6px;font-weight:850}
-.dream-mini-bars{display:flex;align-items:end;justify-content:center;gap:2px;height:26px;width:77px}
+.dream-mini-bars{display:flex;align-items:flex-end;justify-content:center;gap:2px;height:26px;width:77px}
 .dream-mini-bars i{display:block;width:7px;min-height:2px;background:linear-gradient(#e7ca7b,#8d7136);border-radius:2px 2px 0 0}
 .dream-data-footnote{font-size:10px;color:#888d8b;margin:12px 15px 16px;line-height:1.6}.dream-data-footnote a{color:#e4c37b!important}
 .dream-empty{color:#b5afa1;text-align:center;padding:29px!important;white-space:normal!important}
@@ -144,7 +144,7 @@
 .dream-profile-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:15px 0 28px}
 .dream-profile-metrics>div{background:#222324;border:1px solid #333430;border-radius:9px;padding:13px 9px;min-width:0}.dream-profile-metrics small{display:block;color:#a3a39f;font-size:10px}.dream-profile-metrics strong{display:block;color:#efce80;font-size:21px;margin-top:5px}
 .dream-profile h3{font-size:15px}.dream-profile-scores{height:145px;display:flex;align-items:flex-end;gap:6px;padding:12px;background:#101314;border:1px solid #343333;border-radius:9px}
-.dream-profile-scores>div{height:100%;flex:1;display:flex;align-items:end;flex-direction:column;justify-content:end;gap:7px;font-size:10px;color:#e9ce8f}.dream-profile-scores i{width:100%;background:linear-gradient(#e0b65b,#604b27);max-height:75%;border-radius:4px 4px 0 0}
+.dream-profile-scores>div{height:100%;flex:1;display:flex;align-items:flex-end;flex-direction:column;justify-content:flex-end;gap:7px;font-size:10px;color:#e9ce8f}.dream-profile-scores i{width:100%;background:linear-gradient(#e0b65b,#604b27);max-height:75%;border-radius:4px 4px 0 0}
 /* Match Center: independent small module with lazy court view. */
 .dream-match-layout{display:grid;grid-template-columns:minmax(265px,.30fr) minmax(0,.70fr);gap:13px;min-height:640px}
 .dream-match-list,.dream-match-detail{background:#141617;border:1px solid #343534;border-radius:12px;min-width:0;overflow:hidden}

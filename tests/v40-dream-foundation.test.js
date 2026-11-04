@@ -18,7 +18,7 @@ for (const slug of ['../test','https://phishing.example/','javascript:alert(1)',
   assert.equal(sorarePlayerUrl('nba',slug),null,`unsafe or guessed slug: ${slug}`);
 }
 const routes=['builder/[sport]','daily-missions','players','match-center','collection','analytics','guides'];
-for (const route of routes)assert(fs.existsSync(`app/(dream)/${route}/page.tsx`),`missing route: ${route}`);
+for (const route of routes)assert(fs.existsSync(`app/${route}/page.tsx`),`missing route: ${route}`);
 const css=fs.readFileSync('app/dream.css','utf8');
 assert(css.includes('#d8b65b')&&css.includes('#08090a'),'black-gold color tokens');
 assert(css.includes('dream-roster-scroll')&&css.includes('dream-sidebar'),'new dedicated modular styles');
