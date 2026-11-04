@@ -1,3 +1,14 @@
+## V3.9.1 – Performance Edition (2026-11-04)
+
+- Lazy Rendering von inaktiven Player-/Analytics-/Daily-Mission-Workspaces.
+- Fußball- und NBA-Optimizer werden nur im aktiven automatischen Builder berechnet.
+- Index für bestätigte aktive Sorare-Karten; Sortierwerte im Spielerpool gecacht.
+- Prognose-Cache für unveränderte Spieler; Karten-/Besitzänderungen lösen keine komplette Vorhersage-Neuberechnung aus.
+- Memoisierung für den manuellen Builder und die Sorare-Sammlung, stabile Callbacks.
+- Gameweek Center erst beim Öffnen, vereinfachte Sticky-Leisten ohne Blur.
+- 49 Testdateien erfolgreich. Kein neuer API-Key, keine Upstash-Pflicht.
+- Full Next.js Build noch auf Vercel zu verifizieren.
+
 ## V3.9.0 – NEON Intelligence / kompaktes UI
 
 NBA Breakout Finder und Football Action Hunter in zugeklappten Daily-Mission-Details, Gameday & Advisor als schmale Builder-Zeile, reparierender One-Click Rebuild, kompakter Hidden Gems Detector, verifizierter Reality Check, Multi-Lineup Portfolio-Diversifizierung, Spielbeginn-Radar und NEON Quick Actions (Strg+K). Alle fünf Tabs und Regeln bleiben bestehen. Keine kostenpflichtigen API-/Upstash-Abhängigkeiten. 48 Tests erfolgreich; Next.js-Produktionsbuild noch nicht lokal bestätigt.

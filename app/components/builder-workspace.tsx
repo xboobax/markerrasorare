@@ -1,10 +1,11 @@
 "use client";
 
-import {useEffect,useMemo,useRef,useState,type DragEvent} from "react";
+import {memo,useDeferredValue,useEffect,useMemo,useRef,useState,type DragEvent} from "react";
 import {ARCADE} from "@/config/divination";
 import {isValidNbaStars,slotAccepts,type CardInput,type Strategy} from "@/lib/arcade";
 import {evaluateManualLineup} from "@/lib/manual-lineup";
 import {oneClickRebuild} from "@/lib/neon-v39";
+import {indexCurrentCardAssets,sortPlayersWithCachedValues} from "@/lib/performance";
 import {diagnoseLineup} from "@/lib/lineup-doctor";
 import {gameDate,initialTeams,placeInTeam,restoreWorkspace,withinHorizon,workspaceKey,type WorkspaceTeam} from "@/lib/builder-workspace";
 import {goalMeter,moveBetweenSelections,quickSwapsForSlot,smartFillEmptySlots} from "@/lib/builder-neon";
@@ -62,12 +63,13 @@ function AvailabilityBadge({report,small=false}:{report?:AvailabilityReport;smal
 function MiniStat({label,value,tone}:{label:string;value:string;tone?:"good"|"warn"|"star"}){
   return <div className="v23-mini-stat"><small>{label}</small><strong className={tone?`tone-${tone}`:""}>{value}</strong></div>;
 }
-export default function BuilderWorkspace({sport,league,availability,availabilityById,players,cardStore,ownedOnly,verifiedOwnedReady,verifiedCollection,updateCard,targetScore,onOpenProfile,onSavePredictions,requestedPlayer,favorites,onToggleFavorite,nbaSchedule,matchupRatings,matchupSource,v30State,onV30Change,leagues}:Props){
+function BuilderWorkspace({sport,league,availability,availabilityById,players,cardStore,ownedOnly,verifiedOwnedReady,verifiedCollection,updateCard,targetScore,onOpenProfile,onSavePredictions,requestedPlayer,favorites,onToggleFavorite,nbaSchedule,matchupRatings,matchupSource,v30State,onV30Change,leagues}:Props){
   const [teams,setTeams]=useState<WorkspaceTeam[]>(initialTeams);
   const [activeTeamId,setActiveTeamId]=useState("team-1");
   const [loadedSport,setLoadedSport]=useState<Sport|null>(null);
   const [activeSlot,setActiveSlot]=useState<number|null>(null);
   const [query,setQuery]=useState("");
+  const deferredQuery=useDeferredValue(query);
   const [horizon,setHorizon]=useState<MatchdayHorizon>("today");
   const [matchdayReady,setMatchdayReady]=useState(false);
   const [valueFilter,setValueFilter]=useState<NbaValueMode>("all");
@@ -115,12 +117,14 @@ export default function BuilderWorkspace({sport,league,availability,availability
   const excludedByInjury=useMemo(()=>Object.entries(availabilityById).filter(([,r])=>isConfirmedOut(r)).map(([id])=>id),[availabilityById]);
   const availableAt=availability.data?.fetchedAt?new Date(availability.data.fetchedAt).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"}):"—";
   const syncedCards=useMemo(()=>activeCollectionCards(verifiedCollection,sport),[verifiedCollection,sport]);
+  const assetsByPlayer=useMemo(()=>indexCurrentCardAssets(syncedCards),[syncedCards]);
+  const playerAssets=(id:string)=>assetsByPlayer.get(id)??[];
   const cards:CardInput[]=useMemo(()=>players.map(player=>({player,owned:cardStore[player.id]?.owned===true,
     stars:cardStore[player.id]?.stars??null,bonusPercent:cardStore[player.id]?.bonusPercent??0})),[players,cardStore]);
   const favoriteSet=useMemo(()=>new Set(favorites),[favorites]);
   const byId=useMemo(()=>new Map(players.map(player=>[player.id,player])),[players]);
   const teamCards=(team:WorkspaceTeam):CardInput[]=>cards.map(c=>{
-    const available=cardsForPlayer(syncedCards,sport,c.player.id);
+    const available=playerAssets(c.player.id);
     const asset=chooseCardAsset(available,team.assetIds?.[c.player.id]);
     const customBonus=asset?team.assetBonuses?.[asset.assetId]:undefined;
     return {...c,bonusPercent:selectedCardBonus(asset,customBonus,asset&&cardStore[c.player.id]?.bonusSource==="sorare"?0:c.bonusPercent??0).percent};
@@ -129,7 +133,7 @@ export default function BuilderWorkspace({sport,league,availability,availability
     const base=evaluateManualLineup(team.selection,teamCards(team),sport,team.goal??targetScore);
     const captain=sport==="football"?captainForTeam(base,team.captainId,availabilityById,team.captainMode??"projection"):null;
     return {team,base,captain,result:captainLineup(base,sport,captain,team.goal??targetScore)};
-  }),[teams,cards,sport,targetScore,availabilityById,verifiedCollection]);
+  }),[teams,cards,sport,targetScore,availabilityById,assetsByPlayer]);
   const currentResult=assessment.find(a=>a.team.id===activeTeamId)?.result??assessment[0]?.result;
   const doctor=useMemo(()=>activeTeam?diagnoseLineup(activeTeam.selection,cards,sport,activeTeam.goal??targetScore,{limit:3,ownedOnly:onlyMyCards}):null,
     [activeTeam,cards,sport,targetScore]);
@@ -338,7 +342,7 @@ export default function BuilderWorkspace({sport,league,availability,availability
     catch{setMsg("Kopieren wurde vom Browser verhindert.");}
   };
   const sortedPlayers=useMemo(()=>{
-    const term=filterKey(query.trim());
+    const term=filterKey(deferredQuery.trim());
     const filtered=players.filter(p=>{
       if(term&&!filterKey(`${p.name} ${p.team} ${p.position} ${p.opponent??""}`).includes(term))return false;
       if(position!=="all"&&p.position!==position)return false;
@@ -358,9 +362,8 @@ export default function BuilderWorkspace({sport,league,availability,availability
     const eligible=sport==="nba"&&valueFilter!=="all"
       ?topNbaValuePlayers(filtered,Object.fromEntries(filtered.map(p=>[p.id,cardStore[p.id]?.stars??null])),valueFilter)
       :filtered;
-    return eligible.sort((a,b)=>{
-      if(sort==="name")return (sortDescending?1:-1)*a.name.localeCompare(b.name,"de");
-      const weight=(p:Forecast):number|null=>{
+    if(sort==="name")return eligible.sort((a,b)=>(sortDescending?1:-1)*a.name.localeCompare(b.name,"de"));
+    const weight=(p:Forecast):number|null=>{
         if(sort==="kickoff")return gameDate(p)?.getTime()??null;
         if(sort==="play")return p.playProb*100;
         if(sort==="matchup"){
@@ -383,11 +386,11 @@ export default function BuilderWorkspace({sport,league,availability,availability
         if(sort==="upside")return expectedUpside(p);
         return p.weighted;
       };
-      // Kickoff defaults to earliest first. Missing values always appear last.
-      const descending=sort==="kickoff"?!sortDescending:sortDescending;
-      return comparePoolValues(weight(a),weight(b),descending)||a.name.localeCompare(b.name,"de");
-    });
-  },[players,query,position,pool,cardStore,onlyMyCards,verifiedOwnedReady,favoriteSet,horizon,now,activeSlot,slots,sort,sortDescending,multiOnly,gameCoverage,nbaSchedule,matchupRatings,sport,availabilityFilter,availabilityById,matchdayReady,valueFilter]);
+    // Cache expensive score calculations before sorting, rather than recomputing
+    // matchup/Q80/date values ~N log N times for a large player pool.
+    const descending=sort==="kickoff"?!sortDescending:sortDescending;
+    return sortPlayersWithCachedValues(eligible,weight,(a,b)=>comparePoolValues(a,b,descending));
+  },[players,deferredQuery,position,pool,cardStore,onlyMyCards,verifiedOwnedReady,favoriteSet,horizon,now,activeSlot,slots,sort,sortDescending,multiOnly,gameCoverage,nbaSchedule,matchupRatings,sport,availabilityFilter,availabilityById,matchdayReady,valueFilter]);
   const quickSwaps=useMemo(()=>{
     if(!swapTarget)return [];
     const team=teams.find(t=>t.id===swapTarget.teamId);if(!team)return [];
@@ -530,13 +533,13 @@ export default function BuilderWorkspace({sport,league,availability,availability
                           :<><MiniStat label="Einsatz*" value={`${short(player.playProb*100)}%`} tone={player.playProb<.65?"warn":"good"}/><MiniStat label="L5" value={player.last5Avg===null?"—":short(player.last5Avg)}/><MiniStat label="Bonus" tone="star" value={`+${base.slots[index]?.bonusPercent??0}%`}/></>}
                       </div>
                       <div className="v23-mini-grid second"><MiniStat label="Prognose" value={pick?fmt(pick.projectedScore):"—"}/><MiniStat label="Floor" value={pick?fmt(pick.floorScore):"—"}/><MiniStat label="Ceiling" value={pick?fmt(pick.ceilingScore):"—"}/></div>
-                      {sport==="nba"&&<span className="v293-sorare-bonus">Kartenbonus +{fmt(base.slots[index]?.bonusPercent??0)} % {cardsForPlayer(syncedCards,sport,player.id).some(c=>typeof c.bonusPercent==="number")?"· Sorare":"· Manuell / Bonus nicht verfügbar"}</span>}
+                      {sport==="nba"&&<span className="v293-sorare-bonus">Kartenbonus +{fmt(base.slots[index]?.bonusPercent??0)} % {playerAssets(player.id).some(c=>typeof c.bonusPercent==="number")?"· Sorare":"· Manuell / Bonus nicht verfügbar"}</span>}
                       <Bars player={player} compact/>
                       {sport==="football"&&captain===player.id&&<span className="v29-captain-glow">👑 CAPTAIN · +50 % · +{fmt(captainExtra(base,captain))} PS</span>}
-                      {verifiedOwnedReady&&cardsForPlayer(syncedCards,sport,player.id).length>0&&<label className="v29-asset-select">Meine Karte<select aria-label={`Sorare-Karte von ${player.name} wählen`} value={chooseCardAsset(cardsForPlayer(syncedCards,sport,player.id),team.assetIds?.[player.id])?.assetId??""} onChange={e=>changeTeam(team.id,t=>({...t,assetIds:{...t.assetIds,[player.id]:e.target.value}}))}>
-                        {cardsForPlayer(syncedCards,sport,player.id).map(asset=><option key={asset.assetId} value={asset.assetId}>{asset.rarity} · {asset.seasonYear??"?"} · #{asset.serialNumber??"?"}</option>)}
+                      {verifiedOwnedReady&&playerAssets(player.id).length>0&&<label className="v29-asset-select">Meine Karte<select aria-label={`Sorare-Karte von ${player.name} wählen`} value={chooseCardAsset(playerAssets(player.id),team.assetIds?.[player.id])?.assetId??""} onChange={e=>changeTeam(team.id,t=>({...t,assetIds:{...t.assetIds,[player.id]:e.target.value}}))}>
+                        {playerAssets(player.id).map(asset=><option key={asset.assetId} value={asset.assetId}>{asset.rarity} · {asset.seasonYear??"?"} · #{asset.serialNumber??"?"}</option>)}
                       </select>{(()=>{
-                        const asset=chooseCardAsset(cardsForPlayer(syncedCards,sport,player.id),team.assetIds?.[player.id]);
+                        const asset=chooseCardAsset(playerAssets(player.id),team.assetIds?.[player.id]);
                         const fallback=asset&&cardStore[player.id]?.bonusSource==="sorare"?0:cardStore[player.id]?.bonusPercent??0;
                         const bonus=selectedCardBonus(asset,asset?team.assetBonuses?.[asset.assetId]:undefined,fallback);
                         return bonus.source==="sorare"?<span className="v293-sorare-bonus" title={(asset?.bonusDetails??[]).map(b=>`${b.title}: +${b.bonusBasisPoints/100}%`).join(" · ")||"Sorare meldet für diese Karte keinen zusätzlichen Bonus."}>✓ Sorare +{fmt(bonus.percent)} % · Level {asset?.grade??"—"}</span>
@@ -690,3 +693,7 @@ export default function BuilderWorkspace({sport,league,availability,availability
     </div>
   </div>;
 }
+
+// Retain the editor and its local team state while switching tabs; avoid
+// unnecessary card-table renders on unrelated parent updates.
+export default memo(BuilderWorkspace);

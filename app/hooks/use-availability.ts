@@ -55,6 +55,6 @@ export function useAvailability(sport:Sport,league:string,tipoffs:(string|undefi
     window.addEventListener("focus",focus);document.addEventListener("visibilitychange",focus);
     return()=>{window.clearInterval(timer);window.removeEventListener("focus",focus);document.removeEventListener("visibilitychange",focus);requestRef.current?.abort();requestRef.current=null;};
   },[load]);
-  const refresh=()=>{setClock(Date.now());void load(true);};
+  const refresh=useCallback(()=>{setClock(Date.now());void load(true);},[load]);
   return {...state,refresh,intervalMs:nextRefreshMs(new Date(clock||Date.now()),tipoffs)};
 }

@@ -1,12 +1,12 @@
 "use client";
-import {useCallback,useEffect,useRef,useState} from "react";
+import {memo,useCallback,useEffect,useRef,useState} from "react";
 import {activeCollectionCards,collectionKey,safeCollection,type OwnedCollection,type OwnedSorareCard} from "@/lib/my-collection";
 import type {Sport} from "@/lib/model";
 
 type Status={configured:boolean;connected:boolean;slug?:string;nickname?:string;error?:string};
 type Page={userSlug:string;cards:OwnedSorareCard[];totalCount:number;pageInfo:{hasNextPage:boolean;endCursor:string|null};fetchedAt:string;activeFootballSet:{slug:string;name:string}|null;error?:string};
 const fmtTime=(s:string)=>{try{return new Date(s).toLocaleString("de-DE",{dateStyle:"short",timeStyle:"short"});}catch{return "—";}};
-export default function MySorareCollection({sport,onCollectionChange}:{sport:Sport;onCollectionChange:(v:OwnedCollection|null)=>void}){
+function MySorareCollection({sport,onCollectionChange}:{sport:Sport;onCollectionChange:(v:OwnedCollection|null)=>void}){
   const [status,setStatus]=useState<Status|null>(null);
   const [collection,setCollection]=useState<OwnedCollection|null>(null);
   const [phase,setPhase]=useState<"idle"|"loading"|"ready">("idle");
@@ -105,3 +105,7 @@ export default function MySorareCollection({sport,onCollectionChange}:{sport:Spo
     <p className="v28-note">Eine unvollständige oder fehlgeschlagene Synchronisierung löscht keine bisherigen Kartendaten. Die lokalen Aufstellungen und das Prediction Lab bleiben unabhängig davon bestehen.</p>
   </section>;
 }
+
+// Collection remains mounted for automatic sync, but unrelated builder updates
+// must not re-render a large verified-card list.
+export default memo(MySorareCollection);

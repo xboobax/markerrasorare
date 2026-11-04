@@ -1666,3 +1666,12 @@ body{background:#030407}
 .v39-manual-advisor{border:1px solid #2b2340;border-radius:7px;background:#0f0d14;padding:7px 10px;margin:7px 0}
 .v39-manual-advisor>summary{font-size:11px;font-weight:700;color:#c4a2e9;cursor:pointer}
 .v39-manual-advisor p{font-size:11px;color:#aaa2b8;margin:7px 0 2px;line-height:1.5}.v39-manual-advisor strong{color:#e5c7ff}
+
+/* V3.9.1 Performance: sticky transparent blur layers force repaints while
+   scrolling long card/player tables. Keep the dark look with solid surfaces. */
+.app-topbar.v35-topbar,.v35-tabs,.v35-manual-quickbar{
+  -webkit-backdrop-filter:none!important;
+  backdrop-filter:none!important;
+}
+.app-topbar.v35-topbar,.v35-tabs{background:#09090c!important}
+.v35-manual-quickbar{background:#131018!important}

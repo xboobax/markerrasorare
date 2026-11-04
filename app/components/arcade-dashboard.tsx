@@ -20,7 +20,7 @@ import {buildNbaStarsOptimizer,assessNbaStarsLineup,lineupChanges,NBA_STARS_MODE
 import type {FetchSummary} from "@/lib/data-health";
 import type {ScheduleData} from "@/lib/gameweek-center";
 import {canonicalNbaTeam} from "@/lib/nba-fixture-mapping";
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import {presetStorageKey,readOptimizerPresets,saveOptimizerPreset,deleteOptimizerPreset,type OptimizationPreset} from "@/lib/qol-presets";
 import {compareOptimizedLineups} from "@/lib/lineup-compare-v35";
 import {gamedayPulse,neonSmartAdvisor,portfolioPulse,diversifyPortfolio,predictionRealityCheck} from "@/lib/neon-v39";
@@ -93,6 +93,8 @@ function PlayerAvatar({player, small = false}: {player: Forecast; small?: boolea
 export default function ArcadeDashboard({sport, league, leagues, team, clubs, players: basePlayers, info, error, automaticMatchups, nbaSchedule, fetchSummary}: Props) {
   const injuryTipoffs=useMemo(()=>basePlayers.map(p=>p.nextGameTipoff),[basePlayers]);
   const availability=useAvailability(sport,league,injuryTipoffs);
+  // Stable props keep the manual editor from re-rendering on unrelated tab/search changes.
+  const builderAvailability=useMemo(()=>availability,[availability.data,availability.loading,availability.error,availability.changes,availability.refresh,availability.intervalMs]);
   const injuryById=useMemo(()=>availability.data?availabilityForPlayers(basePlayers,availability.data.reports,sport):{},[availability.data,basePlayers,sport]);
   const [activeTab,setActiveTab]=useState<"builder"|"players"|"analytics"|"collection"|"missions">("builder");
   // Preserve the Mission workspace when users switch a league/team or sport via a URL.
@@ -102,6 +104,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   },[]);
   const [compactExplorer,setCompactExplorer]=useState(true);
   const [showCloudLearning,setShowCloudLearning]=useState(false);
+  const [gameweekOpen,setGameweekOpen]=useState(false);
   const [search, setSearch] = useState("");
   const deferredSearch=useDeferredValue(search);
   const searchRef = useRef<HTMLInputElement|null>(null);
@@ -259,7 +262,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
     setActiveTab(tab);setShowQuickActions(false);
     window.requestAnimationFrame(()=>window.requestAnimationFrame(()=>{
       if(anchor)document.getElementById(anchor)?.scrollIntoView({behavior:"smooth",block:"start"});
-      else window.scrollTo({top:0,behavior:"smooth"});
+      else window.scrollTo({top:0,behavior:"auto"});
     }));
   };
   useEffect(() => {
@@ -282,7 +285,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
     setQuickNotice("Spieler wird dem ersten passenden freien Slot zugeordnet. Kartenregeln werden im Builder geprüft.");
     navigate("builder","lineup-builder");
   };
-  const toggleFavorite=(id:string)=>setWatchlist(prev=>toggleWatchlist(prev,id));
+  const toggleFavorite=useCallback((id:string)=>setWatchlist(prev=>toggleWatchlist(prev,id)),[]);
   const exploreGameweekTeam=(name:string)=>{
     const match=sport==="nba"?clubs.find(c=>canonicalNbaTeam(c.name)!==null&&canonicalNbaTeam(c.name)===canonicalNbaTeam(name)):null;
     setSearch(match?.name??name);setPosition("all");setShowCount(40);
@@ -449,15 +452,31 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
     return () => {active=false;};
   }, [selectedPlayerId, basePlayers, profileHistories]);
 
-  const updateCard = (id: string, patch: CardSettings) =>
-    setCardStore(s => ({...s, [id]: {...(s[id] ?? {}), ...patch}}));
+  const updateCard = useCallback((id: string, patch: CardSettings) =>
+    setCardStore(s => ({...s, [id]: {...(s[id] ?? {}), ...patch}})),[]);
 
   const opponentNames=useMemo(()=>[...new Set([...basePlayers.map(p=>p.opponent).filter((n):n is string=>Boolean(n)),...(sport==="nba"?nbaSchedule.fixtures.flatMap(f=>[f.home,f.away]):[])])], [basePlayers,nbaSchedule,sport]);
   const alignedAutoRatings=useMemo(()=>alignOpponentNames(automaticMatchups.ratings,opponentNames),[automaticMatchups,opponentNames]);
   const effectiveRatings=useMemo(()=>({...alignedAutoRatings,...opponentRatings}),[alignedAutoRatings,opponentRatings]);
-  // Recalculate on the client when independently entered scouting data changes.
-  // Missing ratings remain neutral; no opponent statistics are fabricated.
-  const players = useMemo(() => basePlayers.map(p => {
+  // Card ownership, bonus, stars and lock changes must NOT recalculate every
+  // player's expensive v1.8/v2 prediction. Cache per-player input signatures;
+  // genuine scouting, opponent, roster or model changes still recompute as needed.
+  type CachedPrediction=Forecast & {modelV18:ForecastV18;modelV2:PredictionV2};
+  type PredictionEntry={base:Forecast;ratings:OpponentRatings;sport:Sport;mode:typeof modelMode;
+    expectedMinutes?:number|null;typicalMinutes?:number|null;xg?:number|null;xa?:number|null;value:CachedPrediction};
+  const predictionCache=useRef(new Map<string,PredictionEntry>());
+  const players = useMemo(() => {
+    const next=new Map<string,PredictionEntry>();
+    const result=basePlayers.map(p => {
+      const scouting=cardStore[p.id];
+      const prior=predictionCache.current.get(p.id);
+      if(prior&&prior.base===p&&prior.ratings===effectiveRatings&&prior.sport===sport&&prior.mode===modelMode&&
+        prior.expectedMinutes===scouting?.expectedMinutes&&prior.typicalMinutes===scouting?.typicalMinutes&&
+        prior.xg===scouting?.xg&&prior.xa===scouting?.xa){
+        next.set(p.id,prior);
+        return prior.value;
+      }
+
     const scouted=enrichForecast(p, sport, effectiveRatings, {
       expectedMinutes: cardStore[p.id]?.expectedMinutes,
       typicalMinutes: cardStore[p.id]?.typicalMinutes,
@@ -466,7 +485,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
     });
     const modelV18=buildForecastV18(scouted,sport);
     const modelV2=buildPredictionV2(scouted,sport);
-    return {...scouted,modelV18,modelV2,
+    const value={...scouted,modelV18,modelV2,
       ...(modelMode === "v18" && modelV18.applicable ? {
         expected:modelV18.advancedExpected,weighted:modelV18.advancedWeighted,
         floor:modelV18.conditionalLow,ceiling:modelV18.conditionalHigh,
@@ -476,7 +495,14 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
         floor:modelV2.floor,ceiling:modelV2.ceiling,
         variability:modelV2.conditionalSd,confidence:modelV2.quality,
       } : {})};
-  }), [basePlayers, sport, effectiveRatings, cardStore,modelMode]);
+    next.set(p.id,{base:p,ratings:effectiveRatings,sport,mode:modelMode,
+      expectedMinutes:scouting?.expectedMinutes,typicalMinutes:scouting?.typicalMinutes,
+      xg:scouting?.xg,xa:scouting?.xa,value});
+    return value;
+    });
+    predictionCache.current=next;
+    return result;
+  }, [basePlayers, sport, effectiveRatings, cardStore,modelMode]);
   // Automatic snapshots are only taken for known fixture dates strictly in the
   // future; today's fixture lacks a trusted kickoff time and is not auto-saved.
   useEffect(()=>{
@@ -503,8 +529,8 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
     return [...counts.entries()].sort((a,b)=>a[0].localeCompare(b[0], "de"));
   }, [players]);
   const ratedOpponents = opponents.filter(([name]) => validDefenseRating(effectiveRatings[name])).length;
-  const matchupPicks = players.filter(p => p.opponentRating !== null && p.hasGame !== false && p.weighted > 0)
-    .sort((a,b) => b.matchupAdjustmentPct - a.matchupAdjustmentPct || b.weighted - a.weighted).slice(0, 8);
+  const matchupPicks = useMemo(()=>activeTab==="analytics"?players.filter(p => p.opponentRating !== null && p.hasGame !== false && p.weighted > 0)
+    .sort((a,b) => b.matchupAdjustmentPct - a.matchupAdjustmentPct || b.weighted - a.weighted).slice(0, 8):[],[players,activeTab]);
   const lockedIds = useMemo(() => players.filter(p => cardStore[p.id]?.locked&&!isConfirmedOut(injuryById[p.id])&&
     isInSelectedCollection(p.id,effectiveCardStore,ownedOnly,verifiedOwnedReady)).map(p => p.id), [players,cardStore,injuryById,effectiveCardStore,ownedOnly,verifiedOwnedReady]);
   const excludedIds = useMemo(() => players.filter(p => cardStore[p.id]?.excluded||isConfirmedOut(injuryById[p.id])).map(p => p.id), [players, cardStore,injuryById]);
@@ -569,9 +595,9 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   // V3.1 uses a separate multi-objective star-budget search only for NBA.
   // V3.0 team scope, locked picks, injury exclusions, bonuses, projections,
   // minimum scores and max-reuse rules continue to apply unchanged.
-  const nbaStarBoard=useMemo(()=>sport==="nba"&&builderMode==="automatic"&&!v30ActiveSettings.excludedLeagues.includes(league)?
+  const nbaStarBoard=useMemo(()=>activeTab==="builder"&&sport==="nba"&&builderMode==="automatic"&&!v30ActiveSettings.excludedLeagues.includes(league)?
     buildNbaStarsOptimizer(eligibleCards,v30Options(v30ActiveSettings),nbaDiversity):null,
-    [sport,builderMode,eligibleCards,ownedOnly,lockedIds,excludedIds,v30ActiveSettings,league,validTarget,totalTarget,nbaDiversity]);
+    [activeTab,sport,builderMode,eligibleCards,ownedOnly,lockedIds,excludedIds,v30ActiveSettings,league,validTarget,totalTarget,nbaDiversity]);
   const nbaProfileLines=(board:NonNullable<typeof nbaStarBoard>,settings:BuilderV30Settings)=>{
     const effectiveMode=settings.preset==="safe"?"safe":settings.preset==="ceiling"?"upside":nbaStarsMode;
     const candidates=board.pools[effectiveMode];
@@ -588,8 +614,8 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
     return ordered;
   };
   const lineups = useMemo(() => {
-    // Don't run four potentially costly NBA searches while editing manual lineups.
-    if(sport==="nba"&&builderMode!=="automatic")return [];
+    // Never search lineups when only the manual editor or another workspace is shown.
+    if(activeTab!=="builder"||builderMode!=="automatic")return [];
     const poolFor=(settings:BuilderV30Settings)=>settings.excludedLeagues.includes(league)?[]:eligibleCards;
     const makeCandidates=(settings:BuilderV30Settings)=>sport==="nba"?
       nbaProfileLines(buildNbaStarsOptimizer(poolFor(settings),v30Options(settings),nbaDiversity),settings):
@@ -613,13 +639,13 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
       picked.push(chosen);for(const pick of chosen.picks)usage.set(pick.player.id,(usage.get(pick.player.id)??0)+1);
     }
     return picked;
-  }, [eligibleCards,sport,ownedOnly,strategy,validTarget,totalTarget,lockedIds,excludedIds,v30State,league,nbaStarsMode,nbaVariantKey,nbaStarBoard,builderMode,nbaDiversity,portfolioDiversity]);
+  }, [activeTab,eligibleCards,sport,ownedOnly,strategy,validTarget,totalTarget,lockedIds,excludedIds,v30State,league,nbaStarsMode,nbaVariantKey,nbaStarBoard,builderMode,nbaDiversity,portfolioDiversity]);
   // The older Intelligence Lab builds independent candidates without V3 rules.
   // Hide it when any advanced constraints are active rather than bypassing them.
-  const intelligence=useMemo(()=>builderMode==="automatic"&&sport==="football"&&!v30AnyChanged ? buildArcadeIntelligence(eligibleCards,{
+  const intelligence=useMemo(()=>activeTab==="builder"&&builderMode==="automatic"&&sport==="football"&&!v30AnyChanged ? buildArcadeIntelligence(eligibleCards,{
     sport,ownedOnly,limit:8,beamWidth:260,maxCandidatesPerSlot:115,
     targetScore:validTarget?totalTarget:null,lockedPlayerIds:lockedIds,excludedPlayerIds:excludedIds,
-  }):null,[builderMode,eligibleCards,sport,ownedOnly,validTarget,totalTarget,lockedIds,excludedIds,v30AnyChanged]);
+  }):null,[activeTab,builderMode,eligibleCards,sport,ownedOnly,validTarget,totalTarget,lockedIds,excludedIds,v30AnyChanged]);
   const intelligenceView=useMemo(()=>intelligence&&sport==="football"?{...intelligence,variants:intelligence.variants.map(v=>{
     const lineup=automaticCaptainLineup(v.lineup,sport,injuryById,validTarget?totalTarget:null).lineup!;
     return {...v,lineup,targetGap:intelligence.target===null?null:lineup.projectedScore-intelligence.target};
@@ -639,16 +665,16 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const selectedPlayer = players.find(p => p.id === selectedPlayerId) ?? null;
   const selectedCard = selectedPlayer ? cardStore[selectedPlayer.id] ?? {} : {};
   const profileScores = selectedPlayer ? ((selectedPlayer.recentScores?.length ?? 0) > 0 ? selectedPlayer.recentScores! : profileHistories[selectedPlayer.id] ?? []) : [];
-  const metrics = trackingMetrics(tracked);
+  const metrics = useMemo(() => trackingMetrics(tracked),[tracked]);
   const realityCheck=useMemo(()=>predictionRealityCheck(tracked),[tracked]);
-  const backtest = backtestForecasts(tracked);
-  const v2Backtest = backtestPredictionV2(tracked);
+  const backtest = useMemo(() => backtestForecasts(tracked),[tracked]);
+  const v2Backtest = useMemo(() => backtestPredictionV2(tracked),[tracked]);
   const withV2 = players.filter(p=>p.modelV2.applicable).length;
   const avgV2Change=withV2?players.filter(p=>p.modelV2.applicable)
     .reduce((sum,p)=>sum+p.modelV2.changePercent,0)/withV2:0;
-  const advice = calibrationSuggestion(tracked);
+  const advice = useMemo(() => calibrationSuggestion(tracked),[tracked]);
   const autoPending = pendingForAutoCheck(tracked).length;
-  const saveTracked = (p: Forecast) => {
+  const saveTracked = useCallback((p: Forecast) => {
     const comparison=(p as Forecast & {modelV18?:ForecastV18}).modelV18;
     const v2=(p as Forecast & {modelV2?:PredictionV2}).modelV2;
     const details:TrackingModelSnapshot|undefined=comparison?{
@@ -660,10 +686,12 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
       ...(v2?{engineV2Predicted:v2.weighted,engineV2P10:v2.unconditionalP10,engineV2P90:v2.unconditionalP90}:{}),
     }:undefined;
     setTracked(items=>upsertTracked(items,createTrackedPrediction(p,sport,new Date(),details)));
-  };
+  },[sport,modelMode]);
+  const saveLineupForecasts=useCallback((items:Forecast[])=>items.forEach(saveTracked),[saveTracked]);
   const progress = chosen && validTarget ? Math.min(100, chosen.projectedScore / totalTarget * 100) : 0;
 
   const filtered = useMemo(() => {
+    if(activeTab!=="players")return [];
     // Accent-insensitive search, e.g. Mbappe matches Mbappé.
     const normalize = (value: string) => value.toLocaleLowerCase("de-DE").normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
     const needle = normalize(deferredSearch.trim());
@@ -688,16 +716,16 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
         default: return b.weighted - a.weighted;
       }
     });
-  }, [players, position, hideUnavailable, hasForecastOnly, ownedOnly, verifiedOwnedReady, favoritesOnly, favoriteSet, effectiveCardStore, deferredSearch, sortBy]);
+  }, [activeTab, players, position, hideUnavailable, hasForecastOnly, ownedOnly, verifiedOwnedReady, favoritesOnly, favoriteSet, effectiveCardStore, deferredSearch, sortBy]);
   const positions = Array.from(new Set(players.map(p => p.position))).sort();
-  const topPicks = players.filter(p => p.hasGame !== false && p.weighted > 0).slice().sort((a,b) => b.weighted - a.weighted).slice(0, 4);
+  const topPicks = useMemo(()=>activeTab==="players"?players.filter(p => p.hasGame !== false && p.weighted > 0).sort((a,b) => b.weighted - a.weighted).slice(0, 4):[],[players,activeTab]);
   const title = sport === "football" ? "Football Arcade" : "NBA Arcade";
   const favorites=useMemo(()=>{const index=new Map(players.map(p=>[p.id,p]));return watchlist.map(id=>index.get(id)).filter((p):p is typeof players[number]=>Boolean(p));},[watchlist,players]);
 
   return (
     <div className="app-shell">
       <header className="app-topbar v35-topbar">
-        <Link href={activeTab==="missions"?"/?sport=football&tab=missions":"/?sport=football"} className="brand" aria-label="Neon Builder Pro Startseite"><span className="brand-logo">N<span>◆</span></span><span className="brand-text"><strong>NEON BUILDER PRO</strong><small>V3.9 · NEON INTELLIGENCE</small></span></Link>
+        <Link href={activeTab==="missions"?"/?sport=football&tab=missions":"/?sport=football"} className="brand" aria-label="Neon Builder Pro Startseite"><span className="brand-logo">N<span>◆</span></span><span className="brand-text"><strong>NEON BUILDER PRO</strong><small>V3.9.1 · PERFORMANCE</small></span></Link>
         <nav className="sport-switch" aria-label="Sportart wählen"><Link href={activeTab==="missions"?"/?sport=football&tab=missions":"/?sport=football"} aria-current={sport==="football"?"page":undefined}>⚽ Fußball</Link><Link href={activeTab==="missions"?"/?sport=nba&tab=missions":"/?sport=nba"} aria-current={sport==="nba"?"page":undefined}>🏀 NBA</Link></nav>
         <span className="topbar-pill"><span className="status-dot" style={error?{background:"#d9a06f"}:undefined}/>{error?"API prüfen":players.length?`${players.length} Spieler geladen`:"Sorare verbindet"}</span>
       </header>
@@ -718,7 +746,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
         </div>}
       </div>
       <main className="dashboard-main v35-main" data-workspace={activeTab}>
-        <div className="v35-workspace-title" data-tab="builder"><div><span className="section-kicker">NEON STUDIO / V3.9</span><h1>{sport==="nba"?"NBA":"Fußball"} Lineup Studio</h1></div><div className="v36-title-actions"><button type="button" className="v37-mission-link" onClick={()=>navigate("missions")}>⚡ Daily Missions öffnen</button><span className="v35-title-hint">{sport==="nba"?"5 Karten · max. 16 ★":"5 Karten · Captain +50 %"}</span></div></div>
+        <div className="v35-workspace-title" data-tab="builder"><div><span className="section-kicker">NEON STUDIO / V3.9.1</span><h1>{sport==="nba"?"NBA":"Fußball"} Lineup Studio</h1></div><div className="v36-title-actions"><button type="button" className="v37-mission-link" onClick={()=>navigate("missions")}>⚡ Daily Missions öffnen</button><span className="v35-title-hint">{sport==="nba"?"5 Karten · max. 16 ★":"5 Karten · Captain +50 %"}</span></div></div>
         <div className="metric-grid v35-metrics" data-tab="builder">
           <div className="metric-card"><span className="metric-label">Spieler im Datensatz</span><strong>{players.length.toLocaleString("de-DE")}</strong><small>Aktuell ausgewählter Datenbereich</small></div>
           <div className="metric-card"><span className="metric-label">Mögliche Einsätze</span><strong>{hasGameCount.toLocaleString("de-DE")}</strong><small>Spielerbilder: {imageCount} von {players.length}</small></div>
@@ -752,9 +780,9 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
           )}
         </section>
 
-        <section className="v35-tab-section v37-mission-workspace" data-tab="missions" id="daily-mission">
+        {activeTab==="missions"&&(<section className="v35-tab-section v37-mission-workspace" data-tab="missions" id="daily-mission">
           <div className="v37-mission-title">
-            <div><span className="section-kicker">NEON / DAILY MISSIONS · V3.9</span><h1>⚡ Daily Missions</h1><p>Die besten verfügbaren Picks für deine tägliche Sorare-Mission – kostenlos, ohne Zusatz-API oder Datenbank.</p></div>
+            <div><span className="section-kicker">NEON / DAILY MISSIONS · V3.9.1</span><h1>⚡ Daily Missions</h1><p>Die besten verfügbaren Picks für deine tägliche Sorare-Mission – kostenlos, ohne Zusatz-API oder Datenbank.</p></div>
             <span className="v37-mission-coverage">{players.length.toLocaleString("de-DE")} Spieler geladen · {sport==="nba"?"NBA":"Fußball"}</span>
           </div>
           <div className="v37-mission-scope">
@@ -768,11 +796,11 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
               {clubs.map(c=><Link className={team===c.slug?"chip active":"chip"} key={c.slug} href={makeLink({sport,league:sport==="football"?league:undefined,team:c.slug,tab:"missions"})}>{c.name}</Link>)}
             </div></details>}
           </div>
-          <DailyMissionPicker active={activeTab==="missions"} sport={sport} players={players} nbaSchedule={nbaSchedule} ownedIds={dailyMissionOwnedIds} excludedIds={dailyMissionExcludedIds} onOpenPlayer={setSelectedPlayerId} onSendToBuilder={queueManualPlayer} onGoCollection={()=>navigate("collection","meine-karten")} availabilityById={injuryById} availabilitySnapshot={availability.data} scope={team?clubs.find(c=>c.slug===team)?.name??team:league==='__all'?'Alle vier Fußballligen':sport==='nba'?'NBA · geladene Teams':league} verifiedOwned={verifiedOwnedReady}/>
-        </section>
-        <div className="v35-tab-section" data-tab="builder"><details className="v35-advanced"><summary>◷ Gameweek Center · Spielplan, Ziele und Details anzeigen</summary><GameweekCenter sport={sport} players={players} cardStore={effectiveCardStore} nbaSchedule={nbaSchedule}
+          {activeTab==="missions"&&<DailyMissionPicker active={true} sport={sport} players={players} nbaSchedule={nbaSchedule} ownedIds={dailyMissionOwnedIds} excludedIds={dailyMissionExcludedIds} onOpenPlayer={setSelectedPlayerId} onSendToBuilder={queueManualPlayer} onGoCollection={()=>navigate("collection","meine-karten")} availabilityById={injuryById} availabilitySnapshot={availability.data} scope={team?clubs.find(c=>c.slug===team)?.name??team:league==='__all'?'Alle vier Fußballligen':sport==='nba'?'NBA · geladene Teams':league} verifiedOwned={verifiedOwnedReady}/>}
+        </section>)} 
+        <div className="v35-tab-section" data-tab="builder"><details className="v35-advanced" onToggle={event=>setGameweekOpen(event.currentTarget.open)}><summary>◷ Gameweek Center · Spielplan, Ziele und Details anzeigen</summary>{activeTab==="builder"&&gameweekOpen&&<GameweekCenter sport={sport} players={players} cardStore={effectiveCardStore} nbaSchedule={nbaSchedule}
           currentTarget={validTarget?totalTarget:null} onApplyTarget={applyArcadeGoal}
-          onOpenPlayer={setSelectedPlayerId} onAddPlayer={queueManualPlayer} onExploreTeam={exploreGameweekTeam}/></details></div>
+          onOpenPlayer={setSelectedPlayerId} onAddPlayer={queueManualPlayer} onExploreTeam={exploreGameweekTeam}/>}</details></div>
 
         {sport==="nba"&&<section data-tab="collection" className="panel nba-star-center" id="nba-stars" aria-label="Offizielle NBA-Sterne">
           <div className="nba-star-heading"><div><span className="section-kicker">SORARE OFFICIAL · NBA STAR SYNC</span><h2>Deine Sterne. Direkt von Sorare.</h2><p>Automatische aktuelle Spielerbewertung aus <code>gameplayTierStars</code> – ohne geschätzte Sterne.</p></div><button type="button" disabled={starSync.phase==="loading"||!basePlayers.length} onClick={()=>void fetchOfficialStars(true)}>{starSync.phase==="loading"?"↻ Synchronisiere …":"↻ Sterne jetzt aktualisieren"}</button></div>
@@ -781,11 +809,11 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
           {starSync.phase==="ready"&&starSync.snapshot?.partial&&<p className="nba-star-warning">⚠ Einige Teile des Sterneabrufs sind fehlgeschlagen. Für fehlende Bewertungen gilt weiterhin der manuelle Fallback.</p>}
           <p className="nba-star-note">Sorare aktualisiert Spieler-Tiers spieltagabhängig. Für bereits eröffnete Gameweeks kann der auf Sorare festgeschriebene Sternpreis vom aktuellen <em>gameplayTierStars</em>-Wert abweichen. Vor dem Einreichen bitte die konkrete Wettbewerbs-GW prüfen. Kartenbesitz und Kartenboni kommen aus Sorare, soweit verfügbar; sonst manuelle Ersatzwerte.</p>
         </section>}
-        <div className="v35-tab-section" data-tab="analytics"><DataHealthCenter sport={sport} players={basePlayers} summary={fetchSummary}
+        {activeTab==="analytics"&&(<div className="v35-tab-section" data-tab="analytics">{activeTab==="analytics"&&<DataHealthCenter sport={sport} players={basePlayers} summary={fetchSummary}
           archiveBackend={archiveBackend} pendingResults={autoPending}
-          matchupSource={automaticMatchups.source} scheduleStatus={nbaSchedule.status}/></div>
+          matchupSource={automaticMatchups.source} scheduleStatus={nbaSchedule.status}/>}</div>)} 
 
-        <section data-tab="analytics" className="panel forecast-lab" id="forecast-lab">
+        {activeTab==="analytics"&&(<section data-tab="analytics" className="panel forecast-lab" id="forecast-lab">
           <div className="section-top"><div><span className="section-kicker">03 / PREDICTION ENGINE 2.0 · V3.3</span><h2>Form, Matchups & Risiko transparent.</h2></div><span className="lab-stage">EXPERIMENTELL · NICHT VALIDIERT</span></div>
           <p className="lab-intro">Prediction Engine 2.0 kombiniert die vorhandenen Sorare-Daten mit einem vorsichtig gewichteten Formsignal und zeigt Floor, Ceiling sowie einen nachvollziehbaren Risikoindex. Gegner und manuell gepflegte Minuten wirken nur einmal. <strong>V1.7 und V1.8 bleiben unverändert auswählbar.</strong> Ein Leistungsgewinn ist erst durch echte Ergebnisse nachzuweisen.</p>
           <div className="lab-model-switch" role="group" aria-label="Prognosemodell wählen">
@@ -799,9 +827,9 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
             <div><small>V2.0 · offizielle Paarvergleiche</small><strong>{v2Backtest.count}</strong><span>{v2Backtest.count?`MAE V1.8: ${fmt(v2Backtest.v18Mae??0)} · V2.0: ${fmt(v2Backtest.v2Mae??0)}`:"Noch keine vergleichbaren FINAL-Daten"}</span></div>
           </div>
           <p className="lab-caution"><strong>Wichtig:</strong> Alle V2.0-Intervalle, Einsatzwahrscheinlichkeiten und Risikoeinstufungen sind unkalibrierte Heuristiken. Die 80-%-Spanne ist keine belegte 80-%-Trefferquote. {v2Backtest.count>0?`Offizielle V2.0-Vergleiche an ${v2Backtest.days} Spieltagen, MAE-Differenz V1.8 minus V2.0: ${fmt(v2Backtest.deltaMae??0)}.`:"V2.0-Qualität wird erst an zukünftigen offiziell abgeschlossenen Spielen messbar."}</p>
-        </section>
+        </section>)} 
 
-        <section data-tab="analytics" className="panel matchup-panel" id="matchups">
+        {activeTab==="analytics"&&(<section data-tab="analytics" className="panel matchup-panel" id="matchups">
           <div className="section-top"><div><span className="section-kicker">04 / MATCHUP INTELLIGENCE</span><h2>Gegneranalyse & Top-Matchups</h2></div><span className="record-count">{ratedOpponents} von {opponents.length} Gegnern bewertet</span></div>
           <p className="matchup-disclaimer">Die kommenden Gegner stammen aus Sorare-Fixtures, soweit verfügbar. {automaticMatchups.source && !automaticMatchups.error ? <><strong>Automatische Defensivdaten:</strong> {automaticMatchups.source}, Saison {automaticMatchups.season}. Die 1–5-Einstufung ist eine relative Einteilung nach Gegentoren bzw. Gegenpunkten, keine positionsbezogene Analyse. </> : <><strong>Automatische Defensivdaten nicht eingerichtet.</strong> Hinterlege {sport === "nba" ? "BALLDONTLIE_API_KEY" : "API_FOOTBALL_KEY"} als Vercel-Umgebungsvariable, um verfügbare echte Gegnerstatistiken zu laden. </>}{automaticMatchups.error && <>Feed-Fehler: {automaticMatchups.error}. </>}Du kannst die Bewertung unten jederzeit manuell überschreiben. Ohne zuverlässige Zuordnung bleibt der Gegner neutral.</p>
           <div className="opponent-grid">
@@ -824,10 +852,10 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
               <strong className="matchup-projection">{fmt(p.weighted)} Pkt.</strong>
             </div>)}
           </div> : <p className="matchup-disclaimer">Bewerte mindestens einen Gegner, um ein transparentes Matchup-Ranking zu erhalten. Ohne belastbare Defensivdaten gibt es bewusst keine erfundenen Top-10-Matchups.</p>}
-        </section>
+        </section>)} 
 
-        <div className="v35-tab-section" data-tab="players"><HiddenGems sport={sport} players={players} cardStore={effectiveCardStore} verifiedOwnedReady={verifiedOwnedReady} watchlist={watchlist}
-          onOpenPlayer={setSelectedPlayerId} onAddPlayer={queueManualPlayer} onToggleFavorite={toggleFavorite}/></div>
+        {activeTab==="players"&&(<div className="v35-tab-section" data-tab="players">{activeTab==="players"&&<HiddenGems sport={sport} players={players} cardStore={effectiveCardStore} verifiedOwnedReady={verifiedOwnedReady} watchlist={watchlist}
+          onOpenPlayer={setSelectedPlayerId} onAddPlayer={queueManualPlayer} onToggleFavorite={toggleFavorite}/>}</div>)} 
 
         <section data-tab="builder" className="two-column builder-zone-v23">
           <div className="panel builder-panel" id="lineup-builder">
@@ -866,10 +894,10 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
               <input id="manual-target" type="number" min="1" step="1" inputMode="numeric" value={target} placeholder="Score-Ziel eingeben" onChange={e=>setTarget(e.target.value)}/>
               {sport === "football" && <><button type="button" onClick={()=>setTarget("180")}>180 Pkt.</button><button type="button" onClick={()=>setTarget("360")}>360 Pkt.</button></>}
             </div>}
-            {builderMode === "manual" ? <BuilderWorkspace sport={sport} league={league} availability={availability} availabilityById={injuryById} players={players} cardStore={effectiveCardStore} ownedOnly={ownedOnly} verifiedOwnedReady={verifiedOwnedReady} verifiedCollection={verifiedCollection} v30State={v30State} onV30Change={setV30State} leagues={leagues}
+            {builderMode === "manual" ? <BuilderWorkspace sport={sport} league={league} availability={builderAvailability} availabilityById={injuryById} players={players} cardStore={effectiveCardStore} ownedOnly={ownedOnly} verifiedOwnedReady={verifiedOwnedReady} verifiedCollection={verifiedCollection} v30State={v30State} onV30Change={setV30State} leagues={leagues}
               updateCard={updateCard} targetScore={validTarget ? totalTarget : null}
               onOpenProfile={setSelectedPlayerId}
-              onSavePredictions={items => items.forEach(saveTracked)} requestedPlayer={manualRequest}
+              onSavePredictions={saveLineupForecasts} requestedPlayer={manualRequest}
               favorites={watchlist} onToggleFavorite={toggleFavorite}
               nbaSchedule={nbaSchedule} matchupRatings={effectiveRatings} matchupSource={automaticMatchups.source}/> : <>
             <div className="v35-presets" aria-label="Optimierungs-Presets"><div className="v35-presets-head"><strong>✦ Meine Optimierungs-Presets</strong><span>Nur in diesem Browser gespeichert</span></div>
@@ -993,7 +1021,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
             <div className="panel tip-panel"><span className="section-kicker">WICHTIG ZUM MODELL</span><h3>Was noch fehlt</h3><p>Sorare stellt aktuelle NBA-Sterne über gameplayTierStars bereit; diese werden separat synchronisiert. Die offiziell festgeschriebenen Sterne einer bereits eröffneten Gameweek können abweichen. Deine persönliche Kartensammlung wird noch nicht automatisch synchronisiert.</p><p>Floor, Ceiling und Zielchance sind heuristische Modellwerte, keine statistisch validierte Vorhersage. Gegnerstärke wird bei eingerichteten Datenzugängen aus echten Gegnerergebnissen abgeleitet, sonst aus deinen manuellen Bewertungen. Erwartete Minuten, Verletzungsaktualität und xG/xA sind nicht über einen eigenen Live-Feed abgesichert.</p></div>
         </aside>
 
-        <section data-tab="players" className="panel watchlist-panel" id="watchlist">
+        {activeTab==="players"&&(<section data-tab="players" className="panel watchlist-panel" id="watchlist">
           <div className="section-top"><div><span className="section-kicker">DEIN SCOUTING BOARD</span><h2>Meine Watchlist <span className="watchlist-star">★</span></h2></div><span className="record-count">{watchlist.length} Favoriten · {favorites.length} geladen</span></div>
           <p className="watchlist-note">Beobachte deine Lieblingsspieler und nimm sie mit einem Klick in deine Aufstellung auf. Favoriten sind keine Bestätigung deines Kartenbesitzes. Sie bleiben nur in diesem Browser gespeichert.</p>
           {favorites.length ? <div className="watchlist-grid">{favorites.slice(0,12).map(p=><article key={p.id} className="watchlist-card">
@@ -1001,8 +1029,8 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
             <div className="watchlist-card-actions"><button type="button" title={`${p.name} zur Aufstellung hinzufügen`} aria-label={`${p.name} in manuellen Builder übernehmen`} onClick={()=>queueManualPlayer(p.id)}>+ Lineup</button><button type="button" title="Aus Favoriten entfernen" aria-label={`${p.name} aus Favoriten entfernen`} onClick={()=>toggleFavorite(p.id)}>★</button></div>
           </article>)}</div> : <div className="watchlist-empty">Noch keine geladenen Favoriten. Markiere in der Spielersuche einen Spieler mit ☆. {watchlist.length>0 && "Einige Favoriten sind im aktuellen Team-/Ligabereich nicht geladen."}</div>}
           {favorites.length>12 && <a href="#spieler" className="watchlist-more" onClick={()=>setFavoritesOnly(true)}>Alle Favoriten in der Suche ansehen →</a>}
-        </section>
-        <section data-tab="players" data-view={compactExplorer?"compact":"all"} className="panel explorer-panel" id="spieler">
+        </section>)} 
+        {activeTab==="players"&&(<section data-tab="players" data-view={compactExplorer?"compact":"all"} className="panel explorer-panel" id="spieler">
           <div className="section-top"><div><span className="section-kicker">06 / SPIELER EXPLORER</span><h2>Spieler suchen & Spielerprofile öffnen</h2></div><span className="record-count">{filtered.length.toLocaleString("de-DE")} Ergebnisse</span></div>
           <div className="search-controls">
             <label className="searchbox"><span>⌕</span><input ref={searchRef} placeholder="Spieler, Verein oder Position suchen …" value={search} onChange={e=>{setSearch(e.target.value);setShowCount(40);}} aria-label="Spieler suchen"/><kbd>/ Suche · {filtered.length}</kbd></label>
@@ -1051,8 +1079,8 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
           {showCount < filtered.length && <button className="load-more" onClick={()=>setShowCount(n=>n+40)}>Weitere Spieler anzeigen ({Math.min(40,filtered.length-showCount)}) ↓</button>}
           {quickNotice && <p className="quick-add-notice" role="status">{quickNotice}</p>}
           <details className="v35-advanced"><summary>Hinweise zu Datenquellen & Prognosen</summary><div className="footnote">Klicke auf einen Spielernamen, um sein Detailprofil zu öffnen. Tipp: Mit „Meine Karte“ markierst du deinen Bestand. NBA-Sterne werden nach Möglichkeit aktuell von Sorare abgerufen; gespeicherte manuelle Sterne dienen nur als Fallback. Kartenboni werden bei verifizierten Karten automatisch aus Sorare übernommen; ohne verfügbare Bonusdaten bleiben lokale Eingaben erhalten. Spielerbilder stammen soweit vorhanden aus der Sorare-API; fehlt ein Foto oder lässt es sich nicht laden, werden Initialen gezeigt. Die Spannen und Zielchancen sind heuristisch und noch nicht gegen echte Spieltagsergebnisse kalibriert. xG/xA sind vorerst nur Informationsfelder (ohne rechnerischen Einfluss); für die Minutenkorrektur musst du übliche UND erwartete Minuten eingeben. Gegnerbewertungen basieren bei aktiviertem Feed auf realen Team-Gegentoren/-punkten oder ansonsten auf deinen manuellen Eingaben; die 1–5-Skala bleibt nur eine grobe Einordnung.</div></details>
-        </section>
-        <section data-tab="analytics" className="panel tracking-panel" id="tracking">
+        </section>)} 
+        {activeTab==="analytics"&&(<section data-tab="analytics" className="panel tracking-panel" id="tracking">
           <div className="section-top"><div><span className="section-kicker">07 / PROGNOSE-DATENBANK & BACKTESTING</span><h2>Prognose gegen Ergebnis</h2></div><span className="record-count">{metrics.count} lokal ausgewertete Vorhersagen</span></div>
           <div className="v39-reality-strip" aria-label="Prediction Reality Check">
             <strong>◈ Reality Check</strong><span>{realityCheck.matched} bestätigte Vor-Spiel-Paare · MAE {realityCheck.mae===null?'—':`${fmt(realityCheck.mae)} PS`} · Bias {realityCheck.bias===null?'—':`${fmt(realityCheck.bias)} PS`}</span><small>{realityCheck.message}</small>
@@ -1074,7 +1102,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
             </div>
             <p className="backtest-foot">Basis: {backtest.official} offiziell bestätigte Paare an {backtest.distinctDays} unterschiedlichen Spieltagen. Bereits gespeicherte V1.7-Prognosen ohne vorab aufgezeichnete V1.8-Vorhersage werden <strong>nicht rückwirkend</strong> umgerechnet. {backtest.holdout?`Zeitlich zurückgehaltener Test: ${backtest.holdout.count} Vorhersagen, MAE alt ${fmt(backtest.holdout.baselineMae)} / neu ${fmt(backtest.holdout.challengerMae)}.`:"Ein zeitlicher Holdout wird erst nach mindestens 20 bestätigten Paaren aus 6 Spieltagen angezeigt."} Auch bei besserem MAE besteht Unsicherheit; das Modell wird nicht automatisch umtrainiert.</p>
           </div>
-          <PredictionLabPro rows={tracked} sport={sport}/>
+          {activeTab==="analytics"&&<PredictionLabPro rows={tracked} sport={sport}/>}
           <div className="tracking-tools">
             <button className="action-primary" type="button" disabled={trackingCheck.running || !autoPending} onClick={()=>void checkSavedResults()}>{trackingCheck.running ? "Prüfung läuft …" : `Ergebnisse prüfen (${autoPending} offen)`}</button>
             <button type="button" onClick={exportTracking} disabled={!tracked.length}>Prognosen sichern (JSON)</button>
@@ -1093,7 +1121,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
             {tracked.slice(0, 60).map(row => <tr key={row.key}><td><strong>{row.playerName}</strong><small>{row.fixture ?? row.savedAt.slice(0,10)}</small></td><td>{fmt(row.predicted)}</td><td><input aria-label={`Tatsächlicher Sorare-Score für ${row.playerName}`} type="number" min="0" max="500" step="0.1" value={row.actual ?? ""} placeholder="Eintragen" onChange={e => setTracked(items => setActual(items,row.key,e.target.value === "" ? null : Number(e.target.value)))}/></td><td>{row.actual === null ? "—" : <>{fmt(row.predicted-row.actual)} <small className="tracking-source">{row.actualSource === "sorare" ? "Sorare FINAL" : "manuell"}</small></>}</td><td><button type="button" className="delete-tracking" aria-label={`Prognose für ${row.playerName} löschen`} onClick={() => setTracked(items=>items.filter(item=>item.key!==row.key))}>Entfernen</button></td></tr>)}
           </tbody></table></div>
           {!tracked.length && <div className="empty-state">Noch keine Prognosen gespeichert. Öffne einen Spieler und klicke auf „Prognose merken“ oder speichere ein vollständiges Lineup.</div>}
-        </section>
+        </section>)} 
         {selectedPlayer && <div className="profile-overlay" onMouseDown={e => {if (e.target === e.currentTarget) setSelectedPlayerId(null);}}>
           <div className="profile-dialog" role="dialog" aria-modal="true" aria-label={`Spielerprofil ${selectedPlayer.name}`}>
             <button className="profile-close" type="button" autoFocus onClick={() => setSelectedPlayerId(null)} aria-label="Profil schließen">×</button>
