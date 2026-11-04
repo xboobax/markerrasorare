@@ -35,5 +35,5 @@ assert.match(ui,/value=\"today\">◉ Heute spielen/);
 assert.match(ui,/value=\"ceiling\">Ceiling/);
 assert.match(ui,/value=\"floor\">Floor/);
 assert.match(ui,/value=\"upside\">Upside/);
-assert.match(ui,/isInSelectedCollection\(c.player.id,cardStore,ownedOnly,verifiedOwnedReady\)\&\&eligibleByHorizon\(c.player\)/);
+assert.match(ui,/isInSelectedCollection\(c.player.id,cardStore,onlyMyCards,verifiedOwnedReady\)\&\&eligibleByHorizon\(c.player\)/);
 assert.match(ui,/nbaSchedule.status!==\"available\"/);

@@ -1,0 +1,34 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs'),path=require('node:path');
+const {nbaValueScore,topNbaValuePlayers}=require('../.test-build/lib/builder-value');
+const sample=(id,weighted,floor,ceiling,playProb=1,stars=true)=>({id,weighted,floor,ceiling,playProb,forecastSources:stars?[{label:'Sorare',value:1,share:1,origin:'Sorare'}]:[]});
+const players=[sample('A',40,30,70),sample('B',50,20,80),sample('C',55,50,60),sample('D',65,40,85),sample('E',30,28,32)];
+const stars={A:2,B:5,C:4,D:5,E:1};
+assert.equal(nbaValueScore(players[0],2,'projection'),20);
+assert.equal(nbaValueScore(players[0],2,'floor'),15);
+assert.equal(nbaValueScore(players[0],2,'ceiling'),35);
+assert.equal(nbaValueScore(players[0],0,'projection'),null);
+assert.equal(nbaValueScore(players[0],2.3,'projection'),null);
+assert.equal(nbaValueScore(sample('Z',40,30,70,1,false),2,'projection'),null);
+assert.deepEqual(topNbaValuePlayers(players,stars,'projection').map(x=>x.id),['A','E']); // top two of five
+assert.deepEqual(topNbaValuePlayers(players,stars,'floor').map(x=>x.id),['A','E']);
+assert.deepEqual(topNbaValuePlayers(players,stars,'ceiling').map(x=>x.id),['A','E']);
+assert.equal(topNbaValuePlayers(players,stars,'all').length,5);
+assert.deepEqual(topNbaValuePlayers(players,{...stars,E:null},'projection').map(x=>x.id),['A']); // without valid stars
+assert.deepEqual(topNbaValuePlayers([],{},'ceiling'),[]);
+const tied=[sample('x',20,20,20),sample('y',20,20,20),sample('z',10,10,10),sample('q',1,1,1)];
+assert.deepEqual(topNbaValuePlayers(tied,{x:1,y:1,z:1,q:1},'projection').map(x=>x.id),['x','y']);
+const ui=fs.readFileSync(path.join(__dirname,'../app/components/builder-workspace.tsx'),'utf8');
+assert.match(ui,/const onlyMyCards=ownedOnly\|\|matchdayReady/);
+assert.match(ui,/setHorizon\("today"\);setPool\("all"\)/);
+assert.match(ui,/setMatchdayReady\(false\);setHorizon/);
+assert.match(ui,/\(matchdayReady\|\|\(sport==="nba"&&valueFilter!=="all"\)\)\&\&isConfirmedOut\(availabilityById\[p.id\]\)/);
+assert.match(ui,/valueFilter!=="all"/);
+assert.match(ui,/nbaValueScore\(p,cardStore\[p.id\]\?\.stars,"floor"\)/);
+assert.match(ui,/aria-label="NBA Value Filter auswählen"/);
+assert.match(ui,/sport==="nba"&&<div className="v292-value-panel"/);
+assert.match(ui,/sport==="football"&&<div className="v29-captain-toolbar"/);
+const css=fs.readFileSync(path.join(__dirname,'../app/globals.css'),'utf8');
+assert.match(css,/\.workspace-v23\s*\{--wb:#030406/);
+assert.match(css,/\.v292-toolbar-more>summary/);
+console.log('V2.9.2 clean interface, Matchday Ready, NBA Value Finder: OK');

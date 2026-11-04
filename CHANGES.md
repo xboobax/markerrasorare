@@ -1,3 +1,10 @@
+## V2.9.2 – Obsidian Black, Matchday Ready & NBA Value Finder
+
+- Deutlich dunkleres, aufgeräumtes Builder-Interface mit einklappbaren sekundären Optionen und kompaktem Spielerpool.
+- Matchday Ready: verifizierte eigene Karten + Spiel am heutigen deutschen Kalendertag + keine bestätigten OUT-Meldungen.
+- NBA Value Finder: Top-Quartil nach erwarteten Punkten, Floor oder Ceiling je gültigem Stern; kein NBA-Captain.
+- Bestehende Teams, Sorare-OAuth, Sync, NBA-Sterne und Fußball-Captain +50 % unverändert.
+
 ## V2.9.0 – Neon Lineup Builder Pro / Captain Intelligence (04.11.2026)
 
 - **Nur Fußball:** feste 50 % Captain-Bonusregel für je ein Mitglied einer 5er-Aufstellung, goldene Krone, Auswahl pro Team und Speicherung im bestehenden V2.3-Workspace-Key. Smart Captain nach Erwartungswert oder sicherheitsbewusstem Floor und Ausfallmeldungen; manuelle Wahl bleibt erhalten.

@@ -16,6 +16,7 @@ import {useAvailability} from "@/app/hooks/use-availability";
 import {isInSelectedCollection,type OwnedCollection} from "@/lib/my-collection";
 import {captainForTeam,captainLineup,captainExtra,smartCaptain,swapPreview,cardsForPlayer,chooseCardAsset,columnsForPreset,columnsLabels,type ColumnKey,type CaptainMode} from "@/lib/lineup-v29";
 import {playsOnBerlinDay,offsetBerlinDay,expectedFloor,expectedCeiling,expectedUpside,comparePoolValues,type MatchdayHorizon,type PoolSort} from "@/lib/builder-pool";
+import {nbaValueScore,topNbaValuePlayers,type NbaValueMode} from "@/lib/builder-value";
 
 type CardSettings={owned?:boolean;stars?:number|null;bonusPercent?:number;starSource?:"sorare";locked?:boolean;excluded?:boolean};
 type Props={sport:Sport;league:string;availability:ReturnType<typeof useAvailability>;availabilityById:Record<string,AvailabilityReport>;players:Forecast[];cardStore:Record<string,CardSettings>;ownedOnly:boolean;verifiedOwnedReady:boolean;verifiedCollection:OwnedCollection|null;updateCard:(id:string,patch:CardSettings)=>void;
@@ -65,6 +66,8 @@ export default function BuilderWorkspace({sport,league,availability,availability
   const [activeSlot,setActiveSlot]=useState<number|null>(null);
   const [query,setQuery]=useState("");
   const [horizon,setHorizon]=useState<MatchdayHorizon>("today");
+  const [matchdayReady,setMatchdayReady]=useState(false);
+  const [valueFilter,setValueFilter]=useState<NbaValueMode>("all");
   const [pool,setPool]=useState<"all"|"favorites"|"healthy">("all");
   const [availabilityFilter,setAvailabilityFilter]=useState<"all"|"alerts"|"out"|"unknown">("all");
   const [sort,setSort]=useState<PoolSort>("weighted");
@@ -79,8 +82,8 @@ export default function BuilderWorkspace({sport,league,availability,availability
   const [previewSwapId,setPreviewSwapId]=useState<string|null>(null);
   const [intelId,setIntelId]=useState<string|null>(null);
   const [showFinalCheck,setShowFinalCheck]=useState<string|null>(null);
-  const [tablePreset,setTablePreset]=useState<"all"|"compact"|"scouting"|"custom">("all");
-  const [visibleColumns,setVisibleColumns]=useState<ColumnKey[]>(columnsForPreset("all",sport));
+  const [tablePreset,setTablePreset]=useState<"all"|"compact"|"scouting"|"custom">("compact");
+  const [visibleColumns,setVisibleColumns]=useState<ColumnKey[]>(columnsForPreset("compact",sport));
   const [showColumnSettings,setShowColumnSettings]=useState(false);
   const [dragTarget,setDragTarget]=useState<string|null>(null);
   const [gameWindow,setGameWindow]=useState<GameWindow>(7);
@@ -97,6 +100,7 @@ export default function BuilderWorkspace({sport,league,availability,availability
     return ()=>window.clearInterval(ticker);
   },[]);
   const activeTeam=teams.find(t=>t.id===activeTeamId)??teams[0];
+  const onlyMyCards=ownedOnly||matchdayReady;
   const slots=sport==="nba"?ARCADE.nba.slots:ARCADE.football.slots;
   const gameCoverage=useMemo(()=>nbaGameCoverage(nbaSchedule,now??new Date(0),gameWindow),[nbaSchedule,now,gameWindow]);
   const gamesFor=(teamName:string)=>sport==="nba"?opportunitiesForTeam(teamName,gameCoverage):[];
@@ -133,7 +137,7 @@ export default function BuilderWorkspace({sport,league,availability,availability
   const activeSlotLabel=activeSlot===null?"Nächsten freien Slot belegen":`Slot ${activeSlot+1}: ${slotNames[slots[activeSlot]]}`;
 
   useEffect(()=>{
-    setTablePreset("all");setVisibleColumns(columnsForPreset("all",sport));
+    setTablePreset("compact");setVisibleColumns(columnsForPreset("compact",sport));
     try{const entry=JSON.parse(window.localStorage.getItem(`markerras.sorare.table.v29.${sport}`)||"null");
       if(Array.isArray(entry?.columns)){const good=columnsForPreset("all",sport);setVisibleColumns(entry.columns.filter((c:ColumnKey)=>good.includes(c)));setTablePreset("custom");}}
     catch{}
@@ -142,7 +146,7 @@ export default function BuilderWorkspace({sport,league,availability,availability
   const setPreset=(preset:"all"|"compact"|"scouting")=>{setTablePreset(preset);setVisibleColumns(columnsForPreset(preset,sport));try{window.localStorage.removeItem(`markerras.sorare.table.v29.${sport}`);}catch{}};
   const toggleCol=(key:ColumnKey)=>{const next=visibleColumns.includes(key)?visibleColumns.filter(c=>c!==key):[...visibleColumns,key];setVisibleColumns(next);setTablePreset("custom");try{window.localStorage.setItem(`markerras.sorare.table.v29.${sport}`,JSON.stringify({columns:next}));}catch{}};
   useEffect(()=>{
-    setLoadedSport(null);setActiveSlot(null);setSwapTarget(null);setTapSource(null);setCompareOpen(false);setMsg("");setLastRequest(null);setUndoTeams(null);
+    setLoadedSport(null);setMatchdayReady(false);setValueFilter("all");setActiveSlot(null);setSwapTarget(null);setTapSource(null);setCompareOpen(false);setMsg("");setLastRequest(null);setUndoTeams(null);
     try{
       const raw=window.localStorage.getItem(workspaceKey(sport));
       const legacy=window.localStorage.getItem(`markerras.sorare.manual-lineup.v1.${sport}`);
@@ -174,12 +178,15 @@ export default function BuilderWorkspace({sport,league,availability,availability
   const select=(id:string,slot:number|null=activeSlot,teamId:string=activeTeamId)=>{
     const team=teams.find(t=>t.id===teamId);
     if(!team)return;
-    if(!isInSelectedCollection(id,cardStore,ownedOnly,verifiedOwnedReady)){
+    if(!isInSelectedCollection(id,cardStore,onlyMyCards,verifiedOwnedReady)){
       setMsg("Nur meine Karten ist aktiv: Dieser Spieler gehört nicht zur vollständig synchronisierten Sorare-Sammlung.");return;
     }
     const candidate=byId.get(id);
     if(horizon!==null&&candidate&&!eligibleByHorizon(candidate)){
       setMsg("Dieser Spieler hat im gewählten Zeithorizont keinen bestätigten Spieltermin. Wähle einen anderen Zeitraum, um ihn hinzuzufügen.");return;
+    }
+    if(matchdayReady&&isConfirmedOut(availabilityById[id])){
+      setMsg("Matchday Ready: Dieser Spieler ist als OUT gemeldet. Der bestehende Teamstand bleibt erhalten.");return;
     }
     if(cardStore[id]?.excluded){setMsg("Dieser Spieler ist ausgeschlossen. Entferne erst die Sperre in der Spielerliste.");return;}
     const targetIndex=slot===null?team.selection.findIndex((v,i)=>!v&&slotAccepts(slots[i],byId.get(id)?.position??"")):slot;
@@ -224,10 +231,10 @@ export default function BuilderWorkspace({sport,league,availability,availability
   const autoFill=(id:string)=>{
     const team=teams.find(t=>t.id===id);if(!team)return;
     const target=team.goal??targetScore;
-    if(ownedOnly&&team.selection.some(id=>id&&!isInSelectedCollection(id,cardStore,true,verifiedOwnedReady))){
+    if(onlyMyCards&&team.selection.some(id=>id&&!isInSelectedCollection(id,cardStore,true,verifiedOwnedReady))){
       setMsg("Dieses Team enthält noch einen Spieler, der nicht in deiner synchronisierten Sammlung ist. Bitte manuell entfernen oder tauschen; deine Aufstellung wird nicht automatisch überschrieben.");return;
     }
-    const allowed=cards.filter(c=>isInSelectedCollection(c.player.id,cardStore,ownedOnly,verifiedOwnedReady)&&eligibleByHorizon(c.player)).filter(c=>pool==="favorites"?favoriteSet.has(c.player.id):pool==="healthy"?
+    const allowed=cards.filter(c=>isInSelectedCollection(c.player.id,cardStore,onlyMyCards,verifiedOwnedReady)&&eligibleByHorizon(c.player)).filter(c=>pool==="favorites"?favoriteSet.has(c.player.id):pool==="healthy"?
       c.player.forecastSources.length>0&&c.player.hasGame!==false&&c.player.playProb>=.65&&!isConfirmedOut(availabilityById[c.player.id]):true).filter(c=>!isConfirmedOut(availabilityById[c.player.id]));
     const filled=smartFillEmptySlots(team.selection,teamCards(team),sport,{
       strategy:strategy==="target"&&!target?"balanced":strategy,targetScore:target,
@@ -256,7 +263,7 @@ export default function BuilderWorkspace({sport,league,availability,availability
     if(!payload){try{payload=JSON.parse(event.dataTransfer.getData("application/x-markerras-player"));}catch{}}
     dragRef.current=null;
     if(!payload||typeof payload.playerId!=="string")return;
-    if(!isInSelectedCollection(payload.playerId,cardStore,ownedOnly,verifiedOwnedReady)){
+    if(!isInSelectedCollection(payload.playerId,cardStore,onlyMyCards,verifiedOwnedReady)){
       setMsg("Nur meine Karten ist aktiv. Verschiebe oder füge bitte nur synchronisierte eigene Karten hinzu.");return;
     }
     if(payload.kind==="pool"){select(payload.playerId,index,teamId);return;}
@@ -275,7 +282,7 @@ export default function BuilderWorkspace({sport,league,availability,availability
     const from=teams.find(t=>t.id===tapSource.teamId),to=teams.find(t=>t.id===teamId);
     if(!from||!to)return;
     const sourceId=from.selection[tapSource.slot];
-    if(sourceId&&!isInSelectedCollection(sourceId,cardStore,ownedOnly,verifiedOwnedReady)){
+    if(sourceId&&!isInSelectedCollection(sourceId,cardStore,onlyMyCards,verifiedOwnedReady)){
       setMsg("Nur meine Karten ist aktiv: Der ausgewählte Spieler gehört nicht zum synchronisierten Besitz.");return;
     }
     const result=transferWorkspacePlayer({source:from.selection,target:to.selection,sourceSlot:tapSource.slot,targetSlot,
@@ -297,21 +304,26 @@ export default function BuilderWorkspace({sport,league,availability,availability
   };
   const sortedPlayers=useMemo(()=>{
     const term=filterKey(query.trim());
-    return players.filter(p=>{
+    const filtered=players.filter(p=>{
       if(term&&!filterKey(`${p.name} ${p.team} ${p.position} ${p.opponent??""}`).includes(term))return false;
       if(position!=="all"&&p.position!==position)return false;
-      if(!isInSelectedCollection(p.id,cardStore,ownedOnly,verifiedOwnedReady))return false;
+      if(!isInSelectedCollection(p.id,cardStore,onlyMyCards,verifiedOwnedReady))return false;
       if(pool==="favorites"&&!favoriteSet.has(p.id))return false;
       if(pool==="healthy"&&(!p.forecastSources.length||p.hasGame===false||p.playProb<.65||isConfirmedOut(availabilityById[p.id])))return false;
       const availabilityStatus=availabilityById[p.id]?.status;
       if(availabilityFilter==="alerts"&&!(["out","doubtful","questionable"] as (typeof availabilityStatus)[]).includes(availabilityStatus))return false;
       if(availabilityFilter==="out"&&availabilityStatus!=="out")return false;
       if(availabilityFilter==="unknown"&&availabilityStatus!==undefined)return false;
+      if((matchdayReady||(sport==="nba"&&valueFilter!=="all"))&&isConfirmedOut(availabilityById[p.id]))return false;
       if(!eligibleByHorizon(p))return false;
       if(activeSlot!==null&&!slotAccepts(slots[activeSlot],p.position))return false;
       if(sport==="nba"&&multiOnly&&gamesFor(p.team).length<2)return false;
       return true;
-    }).sort((a,b)=>{
+    });
+    const eligible=sport==="nba"&&valueFilter!=="all"
+      ?topNbaValuePlayers(filtered,Object.fromEntries(filtered.map(p=>[p.id,cardStore[p.id]?.stars??null])),valueFilter)
+      :filtered;
+    return eligible.sort((a,b)=>{
       if(sort==="name")return (sortDescending?1:-1)*a.name.localeCompare(b.name,"de");
       const weight=(p:Forecast):number|null=>{
         if(sort==="kickoff")return gameDate(p)?.getTime()??null;
@@ -322,7 +334,9 @@ export default function BuilderWorkspace({sport,league,availability,availability
         }
         if(sort==="games")return gamesFor(p.team).length;
         if(sort==="stars")return isValidNbaStars(cardStore[p.id]?.stars)?cardStore[p.id]!.stars!:null;
-        if(sort==="value")return isValidNbaStars(cardStore[p.id]?.stars)&&p.forecastSources.length?p.weighted/cardStore[p.id]!.stars!:null;
+        if(sort==="value")return nbaValueScore(p,cardStore[p.id]?.stars,"projection");
+        if(sort==="valueFloor")return nbaValueScore(p,cardStore[p.id]?.stars,"floor");
+        if(sort==="valueCeiling")return nbaValueScore(p,cardStore[p.id]?.stars,"ceiling");
         if(sort==="l5")return p.last5Avg;
         if(sort==="l10")return p.last10Avg;
         if(!p.forecastSources.length)return null;
@@ -335,16 +349,16 @@ export default function BuilderWorkspace({sport,league,availability,availability
       const descending=sort==="kickoff"?!sortDescending:sortDescending;
       return comparePoolValues(weight(a),weight(b),descending)||a.name.localeCompare(b.name,"de");
     });
-  },[players,query,position,pool,cardStore,ownedOnly,verifiedOwnedReady,favoriteSet,horizon,now,activeSlot,slots,sort,sortDescending,multiOnly,gameCoverage,nbaSchedule,matchupRatings,sport,availabilityFilter,availabilityById]);
+  },[players,query,position,pool,cardStore,onlyMyCards,verifiedOwnedReady,favoriteSet,horizon,now,activeSlot,slots,sort,sortDescending,multiOnly,gameCoverage,nbaSchedule,matchupRatings,sport,availabilityFilter,availabilityById,matchdayReady,valueFilter]);
   const quickSwaps=useMemo(()=>{
     if(!swapTarget)return [];
     const team=teams.find(t=>t.id===swapTarget.teamId);if(!team)return [];
     return quickSwapsForSlot(team.selection,swapTarget.slot,cards,sport,[...new Set([
       ...Object.keys(cardStore).filter(id=>cardStore[id]?.excluded),...excludedByInjury,
-      ...(ownedOnly?cards.filter(c=>!isInSelectedCollection(c.player.id,cardStore,true,verifiedOwnedReady)).map(c=>c.player.id):[]),
+      ...(onlyMyCards?cards.filter(c=>!isInSelectedCollection(c.player.id,cardStore,true,verifiedOwnedReady)).map(c=>c.player.id):[]),
       ...(horizon!==null?cards.filter(c=>!eligibleByHorizon(c.player)).map(c=>c.player.id):[]),
     ])],5);
-  },[swapTarget,teams,cards,sport,cardStore,excludedByInjury,ownedOnly,verifiedOwnedReady,horizon,now,nbaSchedule]);
+  },[swapTarget,teams,cards,sport,cardStore,excludedByInjury,onlyMyCards,verifiedOwnedReady,horizon,now,nbaSchedule]);
   const previewResult=useMemo(()=>{
     if(!swapTarget||!previewSwapId)return null;
     const team=teams.find(t=>t.id===swapTarget.teamId),entry=assessment.find(a=>a.team.id===swapTarget.teamId);
@@ -357,34 +371,48 @@ export default function BuilderWorkspace({sport,league,availability,availability
   },[swapTarget,previewSwapId,teams,assessment,cards,sport,targetScore,availabilityById]);
   const intelPlayer=byId.get(intelId??"")??null;
   const [showCount,setShowCount]=useState(80);
-  useEffect(()=>setShowCount(80),[sport,query,position,pool,horizon,sort,sortDescending,activeSlot,gameWindow,multiOnly,availabilityFilter]);
-  const poolCount=players.length;
+  useEffect(()=>setShowCount(80),[sport,query,position,pool,horizon,sort,sortDescending,activeSlot,gameWindow,multiOnly,availabilityFilter,valueFilter,matchdayReady]);
+  const toggleMatchdayReady=()=>{
+    if(!matchdayReady&&!verifiedOwnedReady){
+      setMsg("Matchday Ready benötigt die erfolgreich synchronisierte Sorare-Sammlung. Bitte zuerst unter ‚Meine Karten‘ synchronisieren.");return;
+    }
+    if(!matchdayReady){
+      setHorizon("today");setPool("all");setAvailabilityFilter("all");setPosition("all");setMultiOnly(false);setActiveSlot(null);setQuery("");
+      setMsg("Matchday Ready aktiv: Heute spielen · nur verifizierte eigene Karten · bestätigte OUT-Spieler ausblenden. Bestehende Teams bleiben unverändert.");
+    }else setMsg("Matchday Ready deaktiviert. Die aktiven Filter bleiben zur weiteren Bearbeitung erhalten.");
+    setMatchdayReady(v=>!v);
+  };
   const existingOutOfWindow=horizon===null?0:(activeTeam?.selection??[]).filter(id=>{
     const candidate=byId.get(id??"");
     return candidate&&!eligibleByHorizon(candidate);
   }).length;
   return <div className="workspace-v23" aria-label="V2.9 Neon Lineup Builder Pro">
-    <header className="v23-toolbar">
-      <div className="v23-toolbar-brand"><span className="v23-mark">M<span>★</span></span><span><strong>NEON BUILDER PRO</strong><small>{sport==="nba"?"NBA · OFFIZIELLE SORARE-STERNE":"FOOTBALL · 5 POSITIONEN"} / V2.9.1</small></span></div>
-      <label>Zeithorizont<select aria-label="Zeithorizont – Spiele am aktuellen Tag filtern" value={horizon===null?"all":horizon} onChange={e=>{const value=e.target.value;setHorizon(value==="all"?null:value==="today"||value==="tomorrow"?value:Number(value) as MatchdayHorizon);}}>
-        <option value="today">◉ Heute spielen (Berlin)</option><option value="tomorrow">Morgen spielen (Berlin)</option><option value="all">Alle bekannten Spiele</option><option value="24">≈ Nächste 24 Std.*</option><option value="72">Nächste 3 Tage*</option><option value="168">Nächste 7 Tage*</option>
-      </select></label>
-      {sport==="nba"&&<label>Spielzeitraum<select aria-label="NBA-Spielzeitraum für Mehrfachspiele" value={gameWindow} onChange={e=>setGameWindow(Number(e.target.value) as GameWindow)}>
-        <option value="3">3 Tage</option><option value="7">7 Tage</option><option value="14">14 Tage</option>
-      </select></label>}
-      <label>Zusatzfilter<select value={pool} onChange={e=>setPool(e.target.value as typeof pool)}><option value="all">Kein Zusatzfilter</option><option value="favorites">Watchlist</option><option value="healthy">Gute Datenlage</option></select></label>
-      <label>Optimierung<select value={strategy} onChange={e=>setStrategy(e.target.value as Strategy)}><option value="balanced">Ausgewogen</option><option value="safe">Sicher</option><option value="upside">Offensiv</option><option value="target" disabled={targetScore===null&&!teams.some(t=>t.goal!==null)}>Arcade-Ziel</option></select></label>
-      <div className="v23-toolbar-actions"><button type="button" onClick={()=>autoFill(activeTeamId)} title="Nur freie Slots des aktiven Teams füllen">✦ Smart Auto-Fill</button><button type="button" className={compareOpen?"v25-active-action":""} onClick={()=>setCompareOpen(v=>!v)} title="Zwei Teams anhand ihrer Prognosen vergleichen">⇄ Team Battle</button><button type="button" onClick={()=>cloneTeam(activeTeamId)} title="Aktives Team kopieren">⧉ Team kopieren</button><button type="button" onClick={()=>{if(undoTeams){setTeams(undoTeams);setUndoTeams(null);setMsg("Letzte Teamänderung rückgängig gemacht.");}}} disabled={!undoTeams} title="Letzte Teamänderung rückgängig machen">↶ Undo</button></div>
+    <header className="v23-toolbar v292-toolbar">
+      <div className="v23-toolbar-brand"><span className="v23-mark">M<span>★</span></span><span><strong>NEON LINEUP BUILDER PRO</strong><small>{sport==="nba"?"NBA · STERNE / VALUE SCOUT":"FOOTBALL · CAPTAIN +50 %"} · V2.9.2</small></span></div>
+      <div className="v292-primary-controls">
+        <label>Spieltag<select aria-label="Zeithorizont – Spiele am aktuellen Tag filtern" value={horizon===null?"all":horizon} onChange={e=>{const value=e.target.value;setMatchdayReady(false);setHorizon(value==="all"?null:value==="today"||value==="tomorrow"?value:Number(value) as MatchdayHorizon);}}>
+          <option value="today">◉ Heute spielen (Berlin)</option><option value="tomorrow">Morgen spielen (Berlin)</option><option value="all">Alle bekannten Spiele</option><option value="24">≈ Nächste 24 Std.*</option><option value="72">Nächste 3 Tage*</option><option value="168">Nächste 7 Tage*</option>
+        </select></label>
+        <button type="button" className={`v292-ready-btn ${matchdayReady?"active":""}`} aria-pressed={matchdayReady} onClick={toggleMatchdayReady} title="Heute spielen + nur verifizierte eigene Sorare-Karten + keine bestätigten OUT-Spieler">{matchdayReady?"✓ Matchday Ready aktiv":"⚡ Matchday Ready"}</button>
+        <div className="v23-toolbar-actions"><button type="button" onClick={()=>autoFill(activeTeamId)} title="Nur freie Slots des aktiven Teams füllen">✦ Smart Auto-Fill</button></div>
+      </div>
+      <details className="v292-toolbar-more"><summary>Weitere Optionen <span>⌄</span></summary>
+        <div className="v292-toolbar-extra">
+          {sport==="nba"&&<label>Mehrfachspiele<select aria-label="NBA-Spielzeitraum für Mehrfachspiele" value={gameWindow} onChange={e=>setGameWindow(Number(e.target.value) as GameWindow)}><option value="3">3 Tage</option><option value="7">7 Tage</option><option value="14">14 Tage</option></select></label>}
+          <label>Zusatzfilter<select value={pool} onChange={e=>setPool(e.target.value as typeof pool)}><option value="all">Kein Zusatzfilter</option><option value="favorites">Watchlist</option><option value="healthy">Gute Datenlage</option></select></label>
+          <label>Optimierung<select value={strategy} onChange={e=>setStrategy(e.target.value as Strategy)}><option value="balanced">Ausgewogen</option><option value="safe">Sicher</option><option value="upside">Offensiv</option><option value="target" disabled={targetScore===null&&!teams.some(t=>t.goal!==null)}>Arcade-Ziel</option></select></label>
+          <div className="v23-toolbar-actions v292-secondary-actions"><button type="button" className={compareOpen?"v25-active-action":""} onClick={()=>setCompareOpen(v=>!v)} title="Teams anhand ihrer Prognosen vergleichen">⇄ Team Battle</button><button type="button" onClick={()=>cloneTeam(activeTeamId)} title="Aktives Team kopieren">⧉ Team kopieren</button><button type="button" onClick={()=>{if(undoTeams){setTeams(undoTeams);setUndoTeams(null);setMsg("Letzte Teamänderung rückgängig gemacht.");}}} disabled={!undoTeams}>↶ Undo</button></div>
+        </div>
+      </details>
     </header>
-    <div className="v23-subbar"><span className="v23-live-dot"/> <strong>{teams.length} Teams</strong><span>{ownedOnly?"✓ Nur meine Karten":"◯ Alle Spieler"}</span><span>{poolCount} geladene Spieler</span>{(horizon==="today"||horizon==="tomorrow")&&<span className="v291-day-chip">◷ {horizon==="today"?"Heute":"Morgen"} · {now?new Date(`${activeCalendarDay}T12:00:00Z`).toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit",year:"numeric",timeZone:"UTC"}):"Datum wird geladen"} · MEZ/MESZ</span>}<span className="v23-target-label">Aktives Team <b>{activeTeamId.replace("team-", "#")}</b> · {activeSlotLabel}</span>{existingOutOfWindow>0&&<span className="v291-day-warning" title="Bereits gespeicherte Aufstellungen werden durch einen Poolfilter nicht automatisch verändert.">⚠ {existingOutOfWindow} bestehende Spieler außerhalb des Zeitfensters</span>}<span className="v23-tiny-muted">Spieler rechts ziehen oder „+“ benutzen · NBA-Termine in deutscher Zeit (MEZ/MESZ)</span></div>
-    <div className="v26-injury-toolbar" role="status" aria-live="polite">
-      <strong>✚ INJURY & AVAILABILITY</strong>
-      <span className={availability.error?"v26-status-error":""}>{availability.loading?"Prüfe Ausfallmeldungen …":availability.error||`${availability.data?.reports.length??0} Ausfall-/Statusmeldungen · ${availableAt} Uhr`}</span>
-      <span>Quelle: {availability.data?.sources.join(" · ")||"Keine bestätigte Quelle"}</span>
+    <div className="v23-subbar v292-subbar"><span className="v23-live-dot"/><strong>{teams.length} Teams</strong><span>{onlyMyCards?"✓ Meine Sorare-Karten":"Alle Spieler"}</span>{(horizon==="today"||horizon==="tomorrow")&&<span className="v291-day-chip">◷ {horizon==="today"?"Heute":"Morgen"} · {now?new Date(`${activeCalendarDay}T12:00:00Z`).toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit",year:"numeric",timeZone:"UTC"}):"Datum wird geladen"} · MEZ/MESZ</span>}<span className="v23-target-label">Team <b>{activeTeamId.replace("team-", "#")}</b> · {activeSlotLabel}</span>{existingOutOfWindow>0&&<span className="v291-day-warning" title="Bestehende Teams werden nicht automatisch geändert.">⚠ {existingOutOfWindow} bestehende Spieler außerhalb des Zeitfensters</span>}{matchdayReady&&<span className="v292-active-state">⚡ Ready: Heute · Eigene Karten · Nicht OUT</span>}</div>
+    <details className="v26-injury-toolbar v292-injury-details" aria-label="INJURY & AVAILABILITY">
+      <summary>✚ Ausfallmeldungen <span className={availability.error?"v26-status-error":""} role="status" aria-live="polite">{availability.loading?"Prüfe …":availability.error||`${availability.data?.reports.length??0} Meldungen · ${availableAt} Uhr`}</span><span>Details ⌄</span></summary>
+      <div className="v292-injury-content"><span>Quelle: {availability.data?.sources.join(" · ")||"Keine bestätigte Quelle"}</span>
       {availability.data?.providerUpdatedAt&&<span>Provider-Stand: {new Date(availability.data.providerUpdatedAt).toLocaleString("de-DE")}</span>}
       <span>Aktualisierung bei offener Seite: ca. {Math.round(availability.intervalMs/60000)} Min. · Provider können verzögert sein</span>
-      <button type="button" disabled={availability.loading} onClick={availability.refresh}>↻ Jetzt prüfen</button>
-    </div>
+      <button type="button" disabled={availability.loading} onClick={availability.refresh}>↻ Jetzt prüfen</button></div>
+    </details>
     {!!availability.changes.length&&<div className="v26-breaking" role="alert"><b>⚠ Neue kurzfristige Ausfallmeldung:</b> {availability.changes.join(" · ")}. Betroffene Teams prüfen und Quick Swap nutzen.</div>}
     {availability.data?.notes.length? <details className="v26-source-note"><summary>Quellenstatus / Fußball-API-Zugang</summary>{availability.data.notes.map((n,i)=><p key={i}>{n}</p>)}<p>Keine Ausfallmeldung bedeutet nicht, dass ein Spieler fit oder in der Startelf ist. Webseitenüberwachung läuft nur bei geöffnetem Tab.</p></details>:null}
     {msg&&<div className="v23-message" role="status">{msg}<button type="button" onClick={()=>setMsg("")} aria-label="Hinweis schließen">×</button></div>}
@@ -410,7 +438,7 @@ export default function BuilderWorkspace({sport,league,availability,availability
           const multiCount=sport==="nba"?result.picks.filter(p=>gamesFor(p.player.team).length>=2).length:0;
           const teamAvailabilityAlerts=team.selection.filter((id):id is string=>!!id).map(id=>({id,report:availabilityById[id],player:byId.get(id)})).filter(({report})=>report&&(report.status==="out"||report.status==="doubtful"||report.status==="questionable"));
           const confirmedOuts=teamAvailabilityAlerts.filter(({report})=>report?.status==="out");
-          const nonOwnedCount=ownedOnly?team.selection.filter((id):id is string=>!!id).filter(id=>!isInSelectedCollection(id,cardStore,true,verifiedOwnedReady)).length:0;
+          const nonOwnedCount=onlyMyCards?team.selection.filter((id):id is string=>!!id).filter(id=>!isInSelectedCollection(id,cardStore,true,verifiedOwnedReady)).length:0;
           const riskCount=result.errors.length+result.warnings.length+(d?.issues.length??0)+Number(missing>0)+teamAvailabilityAlerts.length+(sport==="football"&&captainRisk?.status==="out"?1:0);
           return <section key={team.id} className={`v23-team v24-team ${active?"is-current":""}`} aria-label={`Team ${teamIndex+1}`}>
             <div className="v23-team-top">
@@ -513,7 +541,7 @@ export default function BuilderWorkspace({sport,league,availability,availability
               {active&&result.errors.length>0&&<p className="v23-team-alert">{result.errors.slice(0,2).join(" · ")}</p>}
               {active&&d&&d.issues.length>0&&<details className="v23-doctor"><summary>✦ Lineup Doctor · {d.issues.length} Hinweise</summary><div>{d.issues.slice(0,4).map(item=><p key={item.id}><b>{item.title}</b> – {item.description}</p>)}</div></details>}
               {nonOwnedCount>0&&<p className="v283-team-owned-warning">⚠ {nonOwnedCount} vorhandene Karte(n) in diesem Team gehören nicht zum bestätigten Bestand. Die Aufstellung bleibt bis zu deiner Änderung erhalten.</p>}
-            {active&&d&&d.swaps.length>0&&<details className="v23-doctor v23-doctor-swaps"><summary>✦ Lineup Doctor · {d.swaps.length} geprüfte Wechselideen</summary><div>{d.swaps.map(swap=><div className="v23-swap" key={`${swap.slotIndex}-${swap.toId}`}><span><b>{swap.fromName}</b> → <b>{swap.toName}</b><small>{swap.kind==="safer"?"Weniger Modellrisiko":swap.kind==="repair"?"Regelreparatur":"Höhere Prognose"} · {swap.delta>=0?"+":""}{fmt(swap.delta)} Punkte</small></span><button type="button" disabled={team.locks.includes(swap.fromId)||isConfirmedOut(availabilityById[swap.toId])||!isInSelectedCollection(swap.toId,cardStore,ownedOnly,verifiedOwnedReady)} onClick={()=>{setActiveTeamId(team.id);setSwapTarget({teamId:team.id,slot:swap.slotIndex});setPreviewSwapId(swap.toId);}}>Wechsel ansehen</button></div>)}</div></details>}
+            {active&&d&&d.swaps.length>0&&<details className="v23-doctor v23-doctor-swaps"><summary>✦ Lineup Doctor · {d.swaps.length} geprüfte Wechselideen</summary><div>{d.swaps.map(swap=><div className="v23-swap" key={`${swap.slotIndex}-${swap.toId}`}><span><b>{swap.fromName}</b> → <b>{swap.toName}</b><small>{swap.kind==="safer"?"Weniger Modellrisiko":swap.kind==="repair"?"Regelreparatur":"Höhere Prognose"} · {swap.delta>=0?"+":""}{fmt(swap.delta)} Punkte</small></span><button type="button" disabled={team.locks.includes(swap.fromId)||isConfirmedOut(availabilityById[swap.toId])||!isInSelectedCollection(swap.toId,cardStore,onlyMyCards,verifiedOwnedReady)} onClick={()=>{setActiveTeamId(team.id);setSwapTarget({teamId:team.id,slot:swap.slotIndex});setPreviewSwapId(swap.toId);}}>Wechsel ansehen</button></div>)}</div></details>}
             </>}
           </section>;
         })}
@@ -526,14 +554,24 @@ export default function BuilderWorkspace({sport,league,availability,availability
       </div>
       <section className="v23-pool" aria-label="Spielerpool und Suche">
         <div className="v23-pool-head"><div><span className="v23-kicker">PLAYER DATABASE / SCOUTING</span><h3>Spielerpool <small>{sortedPlayers.length.toLocaleString("de-DE")} Treffer</small></h3></div><span className="v23-active-team-chip">◉ Team {teams.findIndex(t=>t.id===activeTeamId)+1} aktiv</span></div>
-        <div className="v23-pool-filters"><input type="search" aria-label="Spieler oder Team suchen" placeholder="⌕  Spieler / Team / Gegner suchen …" value={query} onChange={e=>setQuery(e.target.value)}/>
-          <select aria-label="Position filtern" value={position} onChange={e=>setPosition(e.target.value)}><option value="all">Alle Positionen</option>{(sport==="nba"?["G","F","C"]:["GK","DEF","MID","FWD"]).map(pos=><option key={pos} value={pos}>{positionNames[pos]}</option>)}</select>
-          <select aria-label="Verletzungsstatus filtern" value={availabilityFilter} onChange={e=>setAvailabilityFilter(e.target.value as typeof availabilityFilter)}><option value="all">Alle Verfügbarkeiten</option><option value="alerts">⚠ OUT / Fraglich</option><option value="out">Nur OUT</option><option value="unknown">Ohne Statusmeldung</option></select>
-          {sport==="nba"&&<label className="v25-multi-filter"><input type="checkbox" checked={multiOnly} onChange={e=>setMultiOnly(e.target.checked)}/> Nur 2+ Spiele</label>}
-          <select aria-label="Spieler sortieren" value={sort} onChange={e=>setSort(e.target.value as PoolSort)}><option value="weighted">Prognose</option><option value="ceiling">Ceiling (inkl. Einsatz)</option><option value="floor">Floor (inkl. Einsatz)</option><option value="upside">Upside (Ceiling − Prognose)</option><option value="l5">L5-Form</option><option value="l10">L10-Form</option><option value="play">Einsatzchance / Risiko</option><option value="kickoff">Nächstes Spiel</option>{sport==="nba"&&<><option value="stars">Sterne</option><option value="value">Prognose / Stern</option><option value="games">Mehrfachspiele</option></>}<option value="matchup">Günstiges Matchup</option><option value="name">Name A–Z</option></select>
+        <div className="v23-pool-filters v292-pool-filters">
+          <input type="search" aria-label="Spieler oder Team suchen" placeholder="⌕ Spieler, Team oder Gegner suchen …" value={query} onChange={e=>setQuery(e.target.value)}/>
+          <label className="v292-sort-label"><span>Sortieren</span><select aria-label="Spieler sortieren" value={sort} onChange={e=>setSort(e.target.value as PoolSort)}><option value="weighted">Prognose</option><option value="ceiling">Ceiling (inkl. Einsatz)</option><option value="floor">Floor (inkl. Einsatz)</option><option value="upside">Upside (Ceiling − Prognose)</option><option value="l5">L5-Form</option><option value="l10">L10-Form</option><option value="play">Einsatzchance / Risiko</option><option value="kickoff">Nächstes Spiel</option>{sport==="nba"&&<><option value="stars">Sterne</option><option value="value">Prognose / Stern</option><option value="valueFloor">Floor / Stern</option><option value="valueCeiling">Ceiling / Stern</option><option value="games">Mehrfachspiele</option></>}<option value="matchup">Günstiges Matchup</option><option value="name">Name A–Z</option></select></label>
           <button type="button" className="v291-sort-direction" onClick={()=>setSortDescending(v=>!v)} aria-label={sortDescending?"Sortierrichtung umkehren: aufsteigend":"Sortierrichtung umkehren: absteigend"} title="Sortierrichtung wechseln">{sort==="name"?(sortDescending?"A–Z":"Z–A"):sort==="kickoff"?(sortDescending?"Früh zuerst":"Spät zuerst"):(sortDescending?"↓ Absteigend":"↑ Aufsteigend")}</button>
-          {activeSlot!==null&&<button type="button" className="v23-clear-slot" onClick={()=>setActiveSlot(null)}>Slotfilter ×</button>}
+          <details className="v292-pool-more"><summary>Mehr Filter ⌄</summary><div>
+            <select aria-label="Position filtern" value={position} onChange={e=>setPosition(e.target.value)}><option value="all">Alle Positionen</option>{(sport==="nba"?["G","F","C"]:["GK","DEF","MID","FWD"]).map(pos=><option key={pos} value={pos}>{positionNames[pos]}</option>)}</select>
+            <select aria-label="Verletzungsstatus filtern" value={availabilityFilter} onChange={e=>{setAvailabilityFilter(e.target.value as typeof availabilityFilter);if(e.target.value==="out")setMatchdayReady(false);}}><option value="all">Alle Verfügbarkeiten</option><option value="alerts">⚠ OUT / Fraglich</option><option value="out">Nur OUT</option><option value="unknown">Ohne Statusmeldung</option></select>
+            {sport==="nba"&&<label className="v25-multi-filter"><input type="checkbox" checked={multiOnly} onChange={e=>setMultiOnly(e.target.checked)}/> Nur 2+ Spiele</label>}
+            {activeSlot!==null&&<button type="button" className="v23-clear-slot" onClick={()=>setActiveSlot(null)}>Slotfilter ×</button>}
+          </div></details>
         </div>
+        {sport==="nba"&&<div className="v292-value-panel"><div><strong>◇ NBA VALUE FINDER</strong><small>Modellpunkte pro ★ · Vergleich innerhalb deines aktuellen Spielerpools</small></div>
+          <select aria-label="NBA Value Filter auswählen" value={valueFilter} onChange={e=>{const mode=e.target.value as NbaValueMode;setValueFilter(mode);if(mode!=="all"){setSort(mode==="projection"?"value":mode==="floor"?"valueFloor":"valueCeiling");setSortDescending(true);}}}>
+            <option value="all">Alle Spieler</option><option value="projection">Top 25 % · Prognose/★</option><option value="floor">Top 25 % · Floor/★</option><option value="ceiling">Top 25 % · Ceiling/★</option>
+          </select>
+          {valueFilter!=="all"&&<span className="v292-value-count">{sortedPlayers.length} Value-Kandidaten</span>}
+        </div>}
+        {matchdayReady&&<p className="v292-ready-description">⚡ Matchday Ready prüft den heutigen Spielplan (deutsche Zeit), deine <b>verifizierten Sorare-Karten</b> und bestätigte OUT-Meldungen. Unbekannter Status bedeutet nicht automatisch fit. Gespeicherte Teams bleiben erhalten.</p>}
         <div className="v29-table-toolbar"><strong>Tabellenansicht</strong><select value={tablePreset} aria-label="Tabellenansicht wählen" onChange={e=>{if(e.target.value!=="custom")setPreset(e.target.value as "all"|"compact"|"scouting");}}><option value="all">Alle Spalten</option><option value="compact">Kompakt</option><option value="scouting">Scouting</option><option value="custom">Eigene Ansicht</option></select><button type="button" onClick={()=>setShowColumnSettings(v=>!v)}>⚙ Spalten auswählen</button>
           {showColumnSettings&&<div className="v29-columns">{columnsForPreset("all",sport).map(k=><label key={k}><input type="checkbox" checked={showCol(k)} onChange={()=>toggleCol(k)}/>{columnsLabels[k]}</label>)}</div>}
         </div>
@@ -545,7 +583,7 @@ export default function BuilderWorkspace({sport,league,availability,availability
           <p>Kartenbonus (manuell): {cardStore[intelPlayer.id]?.bonusPercent??0} % · {gameDate(intelPlayer)?`Nächstes Spiel am ${gameDate(intelPlayer)!.toLocaleDateString("de-DE",{timeZone:"Europe/Berlin"})}`:"Kein bestätigter Termin"}. Die Sorare-Synchronisierung liefert hier keine verifizierten XP-/Collection-Bonusprozente.</p>
           {verifiedOwnedReady&&<p>Eigene Sorare-Karten: <b>{cardsForPlayer(verifiedCollection?.cards,sport,intelPlayer.id).length}</b> {cardsForPlayer(verifiedCollection?.cards,sport,intelPlayer.id).map(c=>`${c.rarity} ${c.seasonYear??""} #${c.serialNumber??"?"}`).join(" · ")}</p>}
           <div className="v29-intel-actions"><button type="button" onClick={()=>select(intelPlayer.id)}>+ Zum aktiven Team</button><button type="button" onClick={()=>onOpenProfile(intelPlayer.id)}>Ausführliches Profil ↗</button></div></section>}
-        <div className="v23-table-scroll"><table className="v23-roster-table"><thead><tr><th>Aktion</th>{showCol("date")&&<th>Datum</th>}<th>Spieler / Team</th>{showCol("status")&&<th>Verfügbarkeit</th>}{sport==="nba"&&showCol("games")&&<th>Spiele*</th>}{showCol("matchup")&&<th>Gegnerstärke</th>}{showCol("form")&&<th>Form (letzte Scores)</th>}{showCol("play")&&<th>Einsatz*</th>}{showCol("l5")&&<th>L5</th>}{showCol("l10")&&<th>L10</th>}{showCol("projection")&&<th>Prognose</th>}{showCol("floor")&&<th>Floor</th>}{showCol("ceiling")&&<th>Ceiling</th>}{sport==="nba"?<>{showCol("stars")&&<th>Sterne</th>}{showCol("value")&&<th>Wert/★</th>}</>:showCol("bonus")&&<th>Bonus</th>}{showCol("card")&&<th>Karte</th>}</tr></thead>
+        <div className="v23-table-scroll"><table className="v23-roster-table"><thead><tr><th>Aktion</th>{showCol("date")&&<th>Datum</th>}<th>Spieler / Team</th>{showCol("status")&&<th>Verfügbarkeit</th>}{sport==="nba"&&showCol("games")&&<th>Spiele*</th>}{showCol("matchup")&&<th>Gegnerstärke</th>}{showCol("form")&&<th>Form (letzte Scores)</th>}{showCol("play")&&<th>Einsatz*</th>}{showCol("l5")&&<th>L5</th>}{showCol("l10")&&<th>L10</th>}{showCol("projection")&&<th>Prognose</th>}{showCol("floor")&&<th>Floor</th>}{showCol("ceiling")&&<th>Ceiling</th>}{sport==="nba"?<>{showCol("stars")&&<th>Sterne</th>}{(showCol("value")||valueFilter!=="all")&&<th>{valueFilter==="floor"?"Floor/★":valueFilter==="ceiling"?"Ceiling/★":"Wert/★"}</th>}</>:showCol("bonus")&&<th>Bonus</th>}{showCol("card")&&<th>Karte</th>}</tr></thead>
           <tbody>{sortedPlayers.slice(0,showCount).map(p=>{
             const card=cardStore[p.id]??{};
             const stars=isValidNbaStars(card.stars)?card.stars:null;
@@ -565,15 +603,16 @@ export default function BuilderWorkspace({sport,league,availability,availability
               {showCol("projection")&&<td><span className="v23-table-pill featured">{p.forecastSources.length?fmt(p.weighted):"—"}</span></td>}
               {showCol("floor")&&<td><span className="v23-small-figure">{p.forecastSources.length?fmt(p.floor*p.playProb):"—"}</span></td>}
               {showCol("ceiling")&&<td><span className="v23-small-figure">{p.forecastSources.length?fmt(p.ceiling*p.playProb):"—"}</span></td>}
-              {sport==="nba"?<>{showCol("stars")&&<td>{card.starSource==="sorare"?<span className="v23-table-pill star">{stars===null?"—":`${fmt(stars)} ★`}</span>:<select className="v23-star-edit" aria-label={`Sterne für ${p.name} manuell eintragen`} title="Manueller Ersatzwert, wenn Sorare keinen offiziellen Sternwert liefert" value={stars===null?"":String(stars)} onChange={e=>updateCard(p.id,{stars:e.target.value?Number(e.target.value):null})}><option value="">★ —</option>{Array.from({length:9},(_,i)=>1+i/2).map(value=><option key={value} value={value}>{fmt(value)} ★</option>)}</select>}<small className="v23-star-source">{card.starSource==="sorare"?"✓ Sorare":stars!==null?"Manuell":"Fehlt"}</small></td>}{showCol("value")&&<td>{stars!==null&&p.forecastSources.length?fmt(p.weighted/stars):"—"}</td>}</>
+              {sport==="nba"?<>{showCol("stars")&&<td>{card.starSource==="sorare"?<span className="v23-table-pill star">{stars===null?"—":`${fmt(stars)} ★`}</span>:<select className="v23-star-edit" aria-label={`Sterne für ${p.name} manuell eintragen`} title="Manueller Ersatzwert, wenn Sorare keinen offiziellen Sternwert liefert" value={stars===null?"":String(stars)} onChange={e=>updateCard(p.id,{stars:e.target.value?Number(e.target.value):null})}><option value="">★ —</option>{Array.from({length:9},(_,i)=>1+i/2).map(value=><option key={value} value={value}>{fmt(value)} ★</option>)}</select>}<small className="v23-star-source">{card.starSource==="sorare"?"✓ Sorare":stars!==null?"Manuell":"Fehlt"}</small></td>}{(showCol("value")||valueFilter!=="all")&&<td title={valueFilter==="floor"?"Floor / Stern":valueFilter==="ceiling"?"Ceiling / Stern":"Prognose / Stern"}>{fmt(nbaValueScore(p,stars,valueFilter==="floor"?"floor":valueFilter==="ceiling"?"ceiling":"projection")??NaN)}</td>}</>
                 :showCol("bonus")&&<td><select className="v23-bonus-select" aria-label={`Kartenbonus ${p.name}`} value={card.bonusPercent??0} onChange={e=>updateCard(p.id,{bonusPercent:Number(e.target.value)})}>{[0,5,10,15,20,25,30].map(n=><option key={n} value={n}>+{n}%</option>)}</select></td>}
               {showCol("card")&&<td><button type="button" className={`v23-owned-button ${card.owned?"owned":""}`} aria-pressed={card.owned===true} disabled={verifiedOwnedReady} title={verifiedOwnedReady?"Besitz wurde aus Sorare synchronisiert und kann hier nicht manuell verändert werden":"Manuell Kartenbesitz markieren"} onClick={()=>updateCard(p.id,{owned:!card.owned})}>{card.owned?(verifiedOwnedReady?"✓ Sorare":"✓ Meine"):(verifiedOwnedReady?"—":"+ Karte")}</button></td>}
             </tr>;
           })}</tbody></table></div>
+        {!sortedPlayers.length&&sport==="nba"&&valueFilter!=="all"&&<div className="v292-value-empty">Keine NBA-Value-Kandidaten mit gültigen Sternen und verlässlicher Prognose im aktuellen Filter. Prüfe Tag, Sammlung oder Sternwerte.</div>}
         {!sortedPlayers.length&&<div className="v23-no-results">{(horizon==="today"||horizon==="tomorrow")&&sport==="nba"&&nbaSchedule.status!=="available"?
           "NBA-Spielplan derzeit nicht verfügbar: Für diesen Tag können wir keine bestätigten Spiele nachweisen. Bitte Spielplan aktualisieren oder einen anderen Zeithorizont auswählen.":
           (horizon==="today"||horizon==="tomorrow")?`Keine bestätigten Spiele für ${activeCalendarDay??"den ausgewählten Tag"} im geladenen ${sport==="nba"?"NBA":"Fußball"}-Pool. Prüfe Liga, Kartenfilter und Spielplan oder wähle einen größeren Zeitraum.`:
-          ownedOnly?"Keine passenden Karten aus deiner synchronisierten Sammlung. Prüfe die Synchronisierung unter ‚Meine Karten‘ oder den gewählten Verein / die Liga.":"Keine passenden Spieler im aktuell geladenen Pool. Prüfe Liga, Filter, Slotposition oder Spieltermin."}</div>}
+          onlyMyCards?"Keine passenden Karten aus deiner synchronisierten Sammlung. Prüfe die Synchronisierung unter ‚Meine Karten‘ oder den gewählten Verein / die Liga.":"Keine passenden Spieler im aktuell geladenen Pool. Prüfe Liga, Filter, Slotposition oder Spieltermin."}</div>}
         {showCount<sortedPlayers.length&&<button className="v23-load-more" type="button" onClick={()=>setShowCount(count=>count+80)}>Weitere 80 Spieler anzeigen · {sortedPlayers.length-showCount} verbleiben ↓</button>}
         <div className="v23-pool-foot"><span>Ausfallstatus aus externen Meldungen, mit Quellenangabe. Keine Meldung = unbekannt, nicht gesund. Die angezeigte Einsatzwahrscheinlichkeit, Floor/Ceiling und Zielchance sind <b>Modellschätzungen</b>. Gegnerstärke: {matchupSource??"manuelle Bewertung oder unbekannt"}, 1 = günstig, 5 = schwierig. Mehrfachspiele beziehen sich auf das gewählte Zeitfenster – nicht auf eine bestätigte Arcade-Gameweek. Keine Summierung der NBA-Einzelspiel-Scores.</span><button type="button" onClick={()=>{
           if(!currentResult?.picks.length){setMsg("Zum Speichern zuerst Spieler auswählen.");return;}
