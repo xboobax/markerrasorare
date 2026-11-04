@@ -75,9 +75,9 @@ function event(id,date,home,away,completed=false){return {id,date,status:{type:{
   const none=await getNbaGameweekSchedule(new Date('2026-11-03T12:00:00Z'));
   assert.equal(none.status,'unavailable');assert.equal(none.fixtures.length,0);
   assert(none.note.includes('HTTP 403'),'display honest provider failure');
-  const page=fs.readFileSync(path.join(__dirname,'../app/page.tsx'),'utf8');
+  const page=fs.readFileSync(path.join(__dirname,'../features/core/workspace-server.ts'),'utf8');
   const builder=fs.readFileSync(path.join(__dirname,'../app/components/builder-workspace.tsx'),'utf8');
-  assert(page.includes('attachNbaFixtures(projected,nbaSchedule)'));
+  assert(page.includes('attachNbaFixtures(players,nbaSchedule)'));
   assert(builder.includes('fixtureTime(p)'));
   console.log('V2.4.1 NBA fixtures: independent ESPN fallback, franchise mapping, verified tipoffs, German dates, 24h filters, score isolation passed.');
  }finally{global.fetch=fetchBefore;if(previous===undefined)delete process.env.BALLDONTLIE_API_KEY;else process.env.BALLDONTLIE_API_KEY=previous;}

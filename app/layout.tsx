@@ -1,10 +1,9 @@
 import "./globals.css";
-
-export const metadata = {
-  title: "Markerras Sorare Helper V2.1.1 | Obsidian Intelligence",
-  description: "NBA & Fußball Arcade: Lineup Doctor, Hidden Gems, Datenqualität, Spielplan und Prognose-Optimierung. Fußball: Bundesliga, LaLiga, Ligue 1 und Premier League. NBA: maximal 16 Sterne.",
+import "./dream.css";
+export const metadata={
+  title:"MarkErras Sorare Dream 4.0 | Football & NBA",
+  description:"Black & Gold Sorare Workspace für Fußball und NBA: Builder, Kartensammlung, Daily Missions, Match Center, Player Database und Analyse.",
 };
-
-export default function RootLayout({children}: {children: React.ReactNode}) {
+export default function RootLayout({children}:{children:React.ReactNode}){
   return <html lang="de"><body>{children}</body></html>;
 }

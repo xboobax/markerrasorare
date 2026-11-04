@@ -1,0 +1,11 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const source=fs.readFileSync('lib/regular-nba.ts','utf8');
+const dashboard=fs.readFileSync('app/components/arcade-dashboard.tsx','utf8');
+const shell=fs.readFileSync('features/shell/dream-shell.tsx','utf8');
+assert.match(source,/filterRegularNbaTeams/);
+assert.match(source,/canonicalNbaTeam\(team\.name\)/);
+assert.match(dashboard,/initialTab="builder"/);
+assert.match(shell,/MarkErras/);
+assert.match(shell,/Daily Missions/);
+console.log('V4 Foundation: Tests erfolgreich');

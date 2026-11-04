@@ -4,6 +4,7 @@ import MySorareCollection from "@/app/components/my-sorare-collection";
 import {ownedSlugs,mergeVerifiedOwned,ownedViewKey,isInSelectedCollection,bestOwnedBonusByPlayer,activeFootballSetReady,type OwnedCollection} from "@/lib/my-collection";
 
 import Link from "next/link";
+import {useRouter} from "next/navigation";
 import BuilderWorkspace from "@/app/components/builder-workspace";
 import DailyMissionPicker from "@/app/components/daily-mission-picker";
 import {automaticCaptainLineup} from "@/lib/lineup-v29";
@@ -63,6 +64,9 @@ type Props = {
   automaticMatchups: AutomaticMatchupData;
   nbaSchedule: ScheduleData;
   fetchSummary: FetchSummary;
+  embedded?: boolean;
+  legacyRoot?: boolean;
+  initialTab?: "builder"|"players"|"analytics"|"collection"|"missions";
 };
 
 const POS_LABEL: Record<string, string> = {
@@ -71,10 +75,10 @@ const POS_LABEL: Record<string, string> = {
 };
 const POS_SHORT: Record<string, string> = { GK: "TW", DEF: "VER", MID: "MF", FWD: "FWD", FLEX: "EX", ANY: "NBA" };
 const fmt = (n: number) => Number.isFinite(n) ? n.toLocaleString("de-DE", {maximumFractionDigits: 1, minimumFractionDigits: 1}) : "—";
-const makeLink = (pairs: Record<string, string | undefined>) => {
+const makeLink = (pairs: Record<string, string | undefined>, base="/") => {
   const q = new URLSearchParams();
   for (const [k, v] of Object.entries(pairs)) if (v) q.set(k, v);
-  return "/?" + q.toString();
+  return base + "?" + q.toString();
 };
 const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map(s => s[0]?.toUpperCase()).join("");
 const starOptions = Array.from({length: 9}, (_, i) => i / 2 + 1);
@@ -90,16 +94,17 @@ function PlayerAvatar({player, small = false}: {player: Forecast; small?: boolea
   </span>;
 }
 
-export default function ArcadeDashboard({sport, league, leagues, team, clubs, players: basePlayers, info, error, automaticMatchups, nbaSchedule, fetchSummary}: Props) {
+export default function ArcadeDashboard({sport, league, leagues, team, clubs, players: basePlayers, info, error, automaticMatchups, nbaSchedule, fetchSummary, embedded=false, legacyRoot=false, initialTab="builder"}: Props) {
+  const router=useRouter();
   const injuryTipoffs=useMemo(()=>basePlayers.map(p=>p.nextGameTipoff),[basePlayers]);
   const availability=useAvailability(sport,league,injuryTipoffs);
   // Stable props keep the manual editor from re-rendering on unrelated tab/search changes.
   const builderAvailability=useMemo(()=>availability,[availability.data,availability.loading,availability.error,availability.changes,availability.refresh,availability.intervalMs]);
   const injuryById=useMemo(()=>availability.data?availabilityForPlayers(basePlayers,availability.data.reports,sport):{},[availability.data,basePlayers,sport]);
-  const [activeTab,setActiveTab]=useState<"builder"|"players"|"analytics"|"collection"|"missions">("builder");
+  const [activeTab,setActiveTab]=useState<"builder"|"players"|"analytics"|"collection"|"missions">(initialTab);
   // Preserve the Mission workspace when users switch a league/team or sport via a URL.
   useEffect(()=>{
-    try {if(new URLSearchParams(window.location.search).get("tab")==="missions")setActiveTab("missions");}
+    try {if(!embedded && new URLSearchParams(window.location.search).get("tab")==="missions")setActiveTab("missions");}
     catch { /* URL access is optional; the default Builder tab still works. */ }
   },[]);
   const [compactExplorer,setCompactExplorer]=useState(true);
@@ -258,7 +263,13 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
     if (loadedWatchSport !== sport) return;
     try {window.localStorage.setItem(watchlistKey(sport),JSON.stringify(watchlist));} catch {}
   }, [sport,loadedWatchSport,watchlist]);
+  const makeScopedLink=(pairs:Record<string,string|undefined>)=>makeLink(pairs,embedded?(activeTab==="missions"?"/daily-missions":`/builder/${sport}`):(legacyRoot?"/legacy":"/"));
   const navigate=(tab:typeof activeTab,anchor?:string)=>{
+    if(embedded&&tab!==activeTab){
+      const target=tab==="builder"?`/builder/${sport}`:tab==="missions"?"/daily-missions":tab==="players"?"/players":tab==="analytics"?"/analytics":"/collection";
+      router.push(`${target}${tab!=="builder"?`?sport=${sport}`:`?${new URLSearchParams({league,team}).toString()}`}${anchor?`#${anchor}`:""}`);
+      return;
+    }
     setActiveTab(tab);setShowQuickActions(false);
     window.requestAnimationFrame(()=>window.requestAnimationFrame(()=>{
       if(anchor)document.getElementById(anchor)?.scrollIntoView({behavior:"smooth",block:"start"});
@@ -279,12 +290,32 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
     return ()=>document.removeEventListener("keydown",handler);
   },[]);
   const queueManualPlayer=(id:string)=>{
+    if(embedded){
+      try {window.sessionStorage.setItem(`dream:pending-pick:${sport}`,JSON.stringify({id,seq:Date.now()}));}
+      catch { /* Session storage may be disabled: normal direct Builder still works. */ }
+    }
     setBuilderMode("manual");
     setManualRequest(old=>({id,seq:(old?.seq??0)+1}));
     setSelectedPlayerId(null);
     setQuickNotice("Spieler wird dem ersten passenden freien Slot zugeordnet. Kartenregeln werden im Builder geprüft.");
     navigate("builder","lineup-builder");
   };
+  // A Daily Mission click navigates to the dedicated Builder route. Resume the
+  // request once the Builder mounts; never lose the selected player at the route boundary.
+  useEffect(()=>{
+    if(!embedded||initialTab!=="builder")return;
+    try{
+      const key=`dream:pending-pick:${sport}`;
+      const raw=window.sessionStorage.getItem(key);
+      if(!raw)return;
+      window.sessionStorage.removeItem(key);
+      const pending=JSON.parse(raw) as {id?:unknown;seq?:unknown};
+      if(typeof pending.id==="string"&&basePlayers.some(p=>p.id===pending.id)){
+        setManualRequest({id:pending.id,seq:typeof pending.seq==="number"?pending.seq:Date.now()});
+        setBuilderMode("manual");
+      }
+    }catch { /* invalid persisted request safely ignored */ }
+  },[embedded,initialTab,sport,basePlayers]);
   const toggleFavorite=useCallback((id:string)=>setWatchlist(prev=>toggleWatchlist(prev,id)),[]);
   const exploreGameweekTeam=(name:string)=>{
     const match=sport==="nba"?clubs.find(c=>canonicalNbaTeam(c.name)!==null&&canonicalNbaTeam(c.name)===canonicalNbaTeam(name)):null;
@@ -723,10 +754,10 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const favorites=useMemo(()=>{const index=new Map(players.map(p=>[p.id,p]));return watchlist.map(id=>index.get(id)).filter((p):p is typeof players[number]=>Boolean(p));},[watchlist,players]);
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${embedded?"dream-embedded":""}`}>
       <header className="app-topbar v35-topbar">
-        <Link href={activeTab==="missions"?"/?sport=football&tab=missions":"/?sport=football"} className="brand" aria-label="Neon Builder Pro Startseite"><span className="brand-logo">N<span>◆</span></span><span className="brand-text"><strong>NEON BUILDER PRO</strong><small>V3.9.2 · PERFORMANCE</small></span></Link>
-        <nav className="sport-switch" aria-label="Sportart wählen"><Link href={activeTab==="missions"?"/?sport=football&tab=missions":"/?sport=football"} aria-current={sport==="football"?"page":undefined}>⚽ Fußball</Link><Link href={activeTab==="missions"?"/?sport=nba&tab=missions":"/?sport=nba"} aria-current={sport==="nba"?"page":undefined}>🏀 NBA</Link></nav>
+        <Link href={legacyRoot?"/legacy":activeTab==="missions"?"/?sport=football&tab=missions":"/?sport=football"} className="brand" aria-label="Neon Builder Pro Startseite"><span className="brand-logo">N<span>◆</span></span><span className="brand-text"><strong>NEON BUILDER PRO</strong><small>V3.9.2 · PERFORMANCE</small></span></Link>
+        <nav className="sport-switch" aria-label="Sportart wählen"><Link href={legacyRoot?"/legacy?sport=football":activeTab==="missions"?"/?sport=football&tab=missions":"/?sport=football"} aria-current={sport==="football"?"page":undefined}>⚽ Fußball</Link><Link href={legacyRoot?"/legacy?sport=nba":activeTab==="missions"?"/?sport=nba&tab=missions":"/?sport=nba"} aria-current={sport==="nba"?"page":undefined}>🏀 NBA</Link></nav>
         <span className="topbar-pill"><span className="status-dot" style={error?{background:"#d9a06f"}:undefined}/>{error?"API prüfen":players.length?`${players.length} Spieler geladen`:"Sorare verbindet"}</span>
       </header>
 
@@ -767,15 +798,15 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
           <div className="section-top"><div><span className="section-kicker">01 / DATENBEREICH</span><h2>Liga & Team auswählen</h2></div><span className="caption-small">Suche im geladenen Kader · Alle 4 Ligen für ligaübergreifende Suche auswählen</span></div>
           {sport === "football" && leagues.length > 0 && (
             <div className="chip-strip" aria-label="Fußball-Ligen">
-              <Link className={league === "__all" && !team ? "chip active" : "chip"} href={makeLink({sport, league:"__all"})}>Alle 4 Ligen</Link>
-              {leagues.map(l => <Link className={l === league && !team ? "chip active" : "chip"} key={l} href={makeLink({sport,league:l})}>{l}</Link>)}
+              <Link className={league === "__all" && !team ? "chip active" : "chip"} href={makeScopedLink({sport, league:"__all"})}>Alle 4 Ligen</Link>
+              {leagues.map(l => <Link className={l === league && !team ? "chip active" : "chip"} key={l} href={makeScopedLink({sport,league:l})}>{l}</Link>)}
             </div>
           )}
-          {sport === "football" && league !== "__all" && <p className="scope-notice">Du suchst gerade nur in {league}. <Link href={makeLink({sport,league:"__all"})+"#spieler"}>Alle Spieler aus den vier Ligen durchsuchen →</Link></p>}
+          {sport === "football" && league !== "__all" && <p className="scope-notice">Du suchst gerade nur in {league}. <Link href={makeScopedLink({sport,league:"__all"})+"#spieler"}>Alle Spieler aus den vier Ligen durchsuchen →</Link></p>}
           {clubs.length > 0 && (
             <details className="v35-scope-more"><summary>Vereine auswählen · {team?clubs.find(c=>c.slug===team)?.name??team:"Alle Teams"} ▾</summary><div className="chip-strip chip-teams" aria-label="Teams">
-              <Link className={!team ? "chip active" : "chip"} href={makeLink({sport, league: sport === "football" ? league : undefined})}>Alle Teams</Link>
-              {clubs.map(c => <Link className={c.slug === team ? "chip active" : "chip"} key={c.slug} href={makeLink({sport, league: sport === "football" ? league : undefined, team:c.slug})}>{c.name}</Link>)}
+              <Link className={!team ? "chip active" : "chip"} href={makeScopedLink({sport, league: sport === "football" ? league : undefined})}>Alle Teams</Link>
+              {clubs.map(c => <Link className={c.slug === team ? "chip active" : "chip"} key={c.slug} href={makeScopedLink({sport, league: sport === "football" ? league : undefined, team:c.slug})}>{c.name}</Link>)}
             </div></details>
           )}
         </section>
@@ -788,12 +819,12 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
           <div className="v37-mission-scope">
             <div className="v37-mission-scope-head"><strong>Spielerpool wählen</strong><span>{team?clubs.find(c=>c.slug===team)?.name??team:league==='__all'?"Vier Fußballligen":sport==="nba"?"Alle NBA-Teams":league}</span></div>
             {sport==="football"&&<div className="v37-mission-leagues" aria-label="Daily Mission Fußball-Ligen">
-              <Link className={league==="__all"&&!team?"chip active":"chip"} href={makeLink({sport,league:"__all",tab:"missions"})}>Alle 4 Ligen</Link>
-              {leagues.map(l=><Link className={league===l&&!team?"chip active":"chip"} key={l} href={makeLink({sport,league:l,tab:"missions"})}>{l}</Link>)}
+              <Link className={league==="__all"&&!team?"chip active":"chip"} href={makeScopedLink({sport,league:"__all",tab:"missions"})}>Alle 4 Ligen</Link>
+              {leagues.map(l=><Link className={league===l&&!team?"chip active":"chip"} key={l} href={makeScopedLink({sport,league:l,tab:"missions"})}>{l}</Link>)}
             </div>}
             {clubs.length>0&&<details className="v37-mission-team-filter"><summary>Teamfilter · {team?clubs.find(c=>c.slug===team)?.name??team:"Alle Teams"}</summary><div className="chip-strip chip-teams" aria-label="Daily Mission Teams">
-              <Link className={!team?"chip active":"chip"} href={makeLink({sport,league:sport==="football"?league:undefined,tab:"missions"})}>Alle Teams</Link>
-              {clubs.map(c=><Link className={team===c.slug?"chip active":"chip"} key={c.slug} href={makeLink({sport,league:sport==="football"?league:undefined,team:c.slug,tab:"missions"})}>{c.name}</Link>)}
+              <Link className={!team?"chip active":"chip"} href={makeScopedLink({sport,league:sport==="football"?league:undefined,tab:"missions"})}>Alle Teams</Link>
+              {clubs.map(c=><Link className={team===c.slug?"chip active":"chip"} key={c.slug} href={makeScopedLink({sport,league:sport==="football"?league:undefined,team:c.slug,tab:"missions"})}>{c.name}</Link>)}
             </div></details>}
           </div>
           {activeTab==="missions"&&<DailyMissionPicker active={true} sport={sport} players={players} nbaSchedule={nbaSchedule} ownedIds={dailyMissionOwnedIds} excludedIds={dailyMissionExcludedIds} onOpenPlayer={setSelectedPlayerId} onSendToBuilder={queueManualPlayer} onGoCollection={()=>navigate("collection","meine-karten")} availabilityById={injuryById} availabilitySnapshot={availability.data} scope={team?clubs.find(c=>c.slug===team)?.name??team:league==='__all'?'Alle vier Fußballligen':sport==='nba'?'NBA · geladene Teams':league} verifiedOwned={verifiedOwnedReady}/>}

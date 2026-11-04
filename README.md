@@ -1,3 +1,13 @@
+# MarkErras Sorare Dream 4.0 — Black & Gold Preview
+
+**Neue Plattformbasis:** separate Seiten, schwarz-goldenes UI, schnelle Player Database, Match Center, Guides, reguläre NBA-Franchises und bewährte Fußball-/NBA-Builder aus V3.9.2.
+
+**Zum Start:** [UPDATE_V4_0_MARKERRAS_DREAM_DE.md](UPDATE_V4_0_MARKERRAS_DREAM_DE.md) · [Blueprint](BLUEPRINT_V4.md) · Rückfallansicht `/legacy`.
+
+**Release-Status:** Preview, noch kein vollständiger Next.js-Produktionsbuild in dieser Umgebung bestätigt. Erst auf einem Vercel-Preview-Branch testen, bevor die funktionierende Produktionsseite ersetzt wird.
+
+---
+
 # Neon Builder Pro V3.9.2 – Performance Edition · Build Fix
 
 **Performance-Update:** Die umfangreichen Spieler-/Analysebereiche laden erst bei Bedarf, die Prognosen und Kartenabfragen nutzen Zwischenspeicher und der automatische Optimizer arbeitet nur im aktiven Automatikmodus. Details in [`UPDATE_V3_9_1_PERFORMANCE_DE.md`](UPDATE_V3_9_1_PERFORMANCE_DE.md).
