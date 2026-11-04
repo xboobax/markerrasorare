@@ -157,3 +157,7 @@ Details und sichere Aktualisierung via GitHub Desktop: **`UPDATE_V2_0_DE.md`**.
 ### V2.4.1 – NBA Spielplan-/Gegner-Fix
 
 Die NBA-Spielkarten und die Spielerpool-Tabelle nutzen jetzt den getrennt geladenen NBA-Spielplan zur Anzeige der nächsten Gegner und Spieltermine. BALLDONTLIE wird weiterhin zuerst verwendet; optional greift ein öffentlicher ESPN-Webseitenfeed als nicht garantierter Ersatz. Ohne bestätigte Spieldaten wird nichts geschätzt. Installationshilfe: `UPDATE_V2_4_1_DE.md`.
+
+## V2.8 – My Sorare Collection
+
+Offizieller Sorare-OAuth-Login und automatische Synchronisierung eigener NBA-/Fußballkarten. Einrichtung: **UPDATE_V2_8_DE.md**.

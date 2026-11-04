@@ -1,3 +1,5 @@
+import MySorareCollection from "@/app/components/my-sorare-collection";
+import {ownedSlugs,mergeVerifiedOwned,type OwnedCollection} from "@/lib/my-collection";
 "use client";
 
 import Link from "next/link";
@@ -110,6 +112,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const [hideUnavailable, setHideUnavailable] = useState(false);
   const [hasForecastOnly, setHasForecastOnly] = useState(false);
   const [cardStore, setCardStore] = useState<CardStore>({});
+  const [verifiedCollection,setVerifiedCollection]=useState<OwnedCollection|null>(null);
   const [officialStars,setOfficialStars] = useState<NbaStarRatings>({});
   const [starSync,setStarSync] = useState<{phase:"idle"|"loading"|"ready"|"error";snapshot:NbaStarSync|null;message:string}>({phase:"idle",snapshot:null,message:""});
   const starRequestSeq=useRef(0);
@@ -141,13 +144,15 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
     // Scope key is stable across renders; a changed NBA roster starts a fresh sync.
   },[sport,starScopeKey]);
   const effectiveCardStore:CardStore=useMemo(()=>{
-    if(sport!=="nba"||!Object.keys(officialStars).length)return cardStore;
-    const merged:CardStore={...cardStore};
+    const verified=verifiedCollection?.complete?ownedSlugs(verifiedCollection,sport):[];
+    const base=mergeVerifiedOwned(cardStore,verified,verifiedCollection?.complete===true);
+    if(sport!=="nba"||!Object.keys(officialStars).length)return base;
+    const merged:CardStore={...base};
     for(const [id,stars] of Object.entries(officialStars)){
       if(officialStarValue(stars)!==null)merged[id]={...merged[id],stars,starSource:"sorare"};
     }
     return merged;
-  },[sport,cardStore,officialStars]);
+  },[sport,cardStore,officialStars,verifiedCollection]);
   const [opponentRatings, setOpponentRatings] = useState<OpponentRatings>({});
   const [loadedRatingSport, setLoadedRatingSport] = useState<Sport | null>(null);
   const [loadedSport, setLoadedSport] = useState<Sport | null>(null);
@@ -403,13 +408,13 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const excludedIds = useMemo(() => players.filter(p => cardStore[p.id]?.excluded||isConfirmedOut(injuryById[p.id])).map(p => p.id), [players, cardStore,injuryById]);
   const eligibleCards: CardInput[] = useMemo(() => players.map((p) => ({
     player: p,
-    owned: cardStore[p.id]?.owned === true,
+    owned: effectiveCardStore[p.id]?.owned === true,
     stars: effectiveCardStore[p.id]?.stars ?? null,
     bonusPercent: cardStore[p.id]?.bonusPercent ?? 0,
   })), [players, cardStore, effectiveCardStore]);
 
   const favoriteSet=useMemo(()=>new Set(watchlist),[watchlist]);
-  const ownedCount = players.filter(p => cardStore[p.id]?.owned).length;
+  const ownedCount = players.filter(p => effectiveCardStore[p.id]?.owned).length;
   const ratedCount = players.filter(p => isValidNbaStars(effectiveCardStore[p.id]?.stars)).length;
   const automaticStarCount=players.filter(p=>officialStarValue(officialStars[p.id])!==null).length;
   const manualStarCount=ratedCount-automaticStarCount;
@@ -458,7 +463,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
       if (position !== "all" && p.position !== position) return false;
       if (hideUnavailable && (p.hasGame === false || p.playProb < .3)) return false;
       if (hasForecastOnly && p.forecastSources.length === 0) return false;
-      if (ownedOnly && !cardStore[p.id]?.owned) return false;
+      if (ownedOnly && !effectiveCardStore[p.id]?.owned) return false;
       if (favoritesOnly && !favoriteSet.has(p.id)) return false;
       if (needle && !normalize(`${p.name} ${p.team} ${p.position}`).includes(needle)) return false;
       return true;
@@ -475,7 +480,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
         default: return b.weighted - a.weighted;
       }
     });
-  }, [players, position, hideUnavailable, hasForecastOnly, ownedOnly, favoritesOnly, favoriteSet, cardStore, search, sortBy]);
+  }, [players, position, hideUnavailable, hasForecastOnly, ownedOnly, favoritesOnly, favoriteSet, effectiveCardStore, search, sortBy]);
   const positions = Array.from(new Set(players.map(p => p.position))).sort();
   const topPicks = players.filter(p => p.hasGame !== false && p.weighted > 0).slice().sort((a,b) => b.weighted - a.weighted).slice(0, 4);
   const title = sport === "football" ? "Football Arcade" : "NBA Arcade";
@@ -512,9 +517,11 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
         <div className="metric-grid">
           <div className="metric-card"><span className="metric-label">Spieler im Datensatz</span><strong>{players.length.toLocaleString("de-DE")}</strong><small>Aktuell ausgewählter Datenbereich</small></div>
           <div className="metric-card"><span className="metric-label">Mögliche Einsätze</span><strong>{hasGameCount.toLocaleString("de-DE")}</strong><small>Spielerbilder: {imageCount} von {players.length}</small></div>
-          <div className="metric-card"><span className="metric-label">Meine markierten Karten</span><strong>{ownedCount}</strong><small>Manuell erfasst, lokal gespeichert</small></div>
+          <div className="metric-card"><span className="metric-label">Meine Karten im Spielerpool</span><strong>{ownedCount}</strong><small>{verifiedCollection?.complete?"Aus Sorare synchronisiert":"Manuell erfasst, lokal gespeichert"}</small></div>
           <div className="metric-card"><span className="metric-label">{sport === "nba" ? "Sterne zugewiesen" : "Aktuelle Zielmarke"}</span><strong>{sport === "nba" ? ratedCount : (validTarget ? totalTarget : "—")}</strong><small>{sport === "nba" ? `${automaticStarCount} offiziell · ${manualStarCount} manuell` : "Veränderbar im Builder"}</small></div>
         </div>
+
+        <MySorareCollection sport={sport} onCollectionChange={setVerifiedCollection}/>
 
         {error && <div className="notice warning"><strong>Datenabruf fehlgeschlagen.</strong> {error}</div>}
         {info && <div className="notice"><span className="status-dot"/> {info}</div>}
@@ -723,7 +730,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
                   <button type="button" aria-pressed={card.locked === true} className={card.locked ? "active" : ""} title="Spieler fest ins Lineup aufnehmen" onClick={()=>updateCard(p.id,{locked:!card.locked,excluded:false})}>🔒 {card.locked ? "Fixiert" : "Fixieren"}</button>
                   <button type="button" aria-pressed={card.excluded === true} className={card.excluded ? "excluded" : ""} title="Spieler aus Lineups ausschließen" onClick={()=>updateCard(p.id,{excluded:!card.excluded,locked:false})}>🚫</button>
                 </div></td>
-                <td><label className="owned-checkbox" title="Diese Spielerkarte ist in meinem Bestand"><input type="checkbox" checked={card.owned === true} onChange={e=>updateCard(p.id,{owned:e.target.checked})}/><span>{card.owned ? "Meine Karte" : "Merken"}</span></label></td>
+                <td><label className="owned-checkbox" title="Diese Spielerkarte ist in meinem Bestand"><input type="checkbox" checked={effectiveCardStore[p.id]?.owned === true} disabled={verifiedCollection?.complete===true} title={verifiedCollection?.complete?"Bestand aus Sorare synchronisiert, daher nicht manuell änderbar":"Lokale Markierung"} onChange={e=>updateCard(p.id,{owned:e.target.checked})}/><span>{effectiveCardStore[p.id]?.owned ? verifiedCollection?.complete?"✓ Sorare":"Meine Karte" : "Merken"}</span></label></td>
                 {sport === "nba" && <td><div className="star-cell"><select className="small-select star-select" value={isValidNbaStars(effectiveCardStore[p.id]?.stars) ? String(effectiveCardStore[p.id]?.stars) : ""} disabled={officialStarValue(officialStars[p.id])!==null} aria-label={`Sterne für ${p.name}`} title={officialStarValue(officialStars[p.id])!==null?"Offizielle aktuelle Sorare-Spielerbewertung · nicht manuell überschreibbar":"Manueller Ersatzwert, solange keine offizielle Bewertung vorliegt"} onChange={e=>updateCard(p.id,{stars:e.target.value===""?null:Number(e.target.value)})}><option value="">—</option>{starOptions.map(s=><option value={String(s)} key={s}>{fmt(s)} ★</option>)}</select><small className={officialStarValue(officialStars[p.id])!==null?"star-source-official":"star-source-fallback"}>{nbaStarValue(officialStars[p.id],card.stars).source==="sorare"?"✓ Sorare":isValidNbaStars(card.stars)?"Manuell":"Fehlt"}</small></div></td>}
                 <td><select className="small-select" value={card.bonusPercent ?? 0} aria-label={`Kartenbonus für ${p.name}`} onChange={e=>updateCard(p.id,{bonusPercent:Number(e.target.value)})}>{bonuses.map(b=><option value={b} key={b}>+{b} %</option>)}</select></td>
               </tr>;

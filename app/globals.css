@@ -1153,3 +1153,22 @@ body { background:#090d17; color:var(--ink); -webkit-font-smoothing:antialiased;
 .prediction-pro-breakdown,.prediction-pro-misses{margin-top:12px}.prediction-pro-tabs{display:flex;gap:7px;flex-wrap:wrap;margin:10px 0 13px}.prediction-pro-tabs button{background:#26314d;color:#d1daed;border:1px solid #45516c;padding:8px 11px;border-radius:8px;cursor:pointer;font-size:11px}.prediction-pro-tabs button.active{background:#48326f;color:#f2e8ff;border-color:#b57af5}
 .prediction-pro-table{min-width:540px;width:100%}.prediction-pro-table th{white-space:nowrap}.prediction-pro-table small{display:block;color:#a4b6cc;font-size:10px;margin-top:4px}.prediction-pro-table td{font-variant-numeric:tabular-nums}.prediction-positive{color:#2ee6b5!important}.prediction-negative{color:#fb7185!important}
 @media(max-width:1040px){.prediction-pro-two{grid-template-columns:1fr}}@media(max-width:750px){.prediction-pro{padding:14px}.prediction-pro-kpis{grid-template-columns:1fr 1fr}.prediction-pro-head{flex-direction:column;gap:9px}.prediction-pro-range{flex-direction:row;align-items:center}}@media(max-width:380px){.prediction-pro-kpis{grid-template-columns:1fr}.prediction-pro-candidate-grid{grid-template-columns:1fr}}
+/* V2.8 My Sorare Collection – additive Obsidian Neon interface */
+.v28-collection{border:1px solid rgba(168,85,247,.34);background:linear-gradient(115deg,rgba(168,85,247,.08),rgba(46,230,181,.025) 70%)}
+.v28-collection p{color:#b9c3d6;font-size:.91rem;line-height:1.55}
+.v28-pill{display:inline-flex;align-items:center;padding:7px 12px;border-radius:999px;border:1px solid #455069;background:#171f34;color:#a6b4cc;font-weight:700;font-size:.77rem}
+.v28-pill.connected{border-color:rgba(46,230,181,.4);color:#2ee6b5;background:rgba(46,230,181,.09)}
+.v28-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:16px 0}
+.v28-metrics>div{border:1px solid rgba(168,85,247,.22);border-radius:12px;padding:14px;background:#131c2c;display:flex;gap:5px;flex-direction:column}
+.v28-metrics small{color:#a2b3cd;letter-spacing:.03em;font-size:.72rem}
+.v28-metrics strong{color:#2ee6b5;font-size:1.4rem;overflow-wrap:anywhere}
+.v28-buttons{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:10px 0}
+.v28-buttons button,.v28-buttons .v28-login{display:inline-flex;justify-content:center;align-items:center;border:1px solid rgba(168,85,247,.6);background:#5226a1;color:white;padding:10px 14px;border-radius:10px;font-weight:700;text-decoration:none;cursor:pointer}
+.v28-buttons button:disabled{cursor:wait;opacity:.6}.v28-buttons .v28-disconnect{background:transparent;color:#fb7185;border-color:rgba(251,113,133,.5)}
+.v28-disabled{border:1px dashed #685784;padding:11px 15px;border-radius:9px;color:#fbbf24;font-size:.85rem}
+.v28-card-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:7px;max-height:280px;overflow:auto;margin:10px 0}
+.v28-card-line{display:flex;flex-direction:column;gap:3px;border:1px solid #36415b;border-radius:9px;background:#131c2c;padding:8px 10px;font-size:.83rem}
+.v28-card-line>span{color:#e7e6ff;font-weight:700}.v28-card-line small{color:#fbbf24}
+.v28-status{border-left:3px solid #22d3ee;padding:9px 12px;background:rgba(34,211,238,.07);border-radius:6px;color:#a9ecf8!important}
+.v28-note{font-size:.78rem!important;color:#94a4c3!important}
+@media(max-width:650px){.v28-metrics{grid-template-columns:1fr}.v28-buttons button,.v28-buttons .v28-login{flex:1}}

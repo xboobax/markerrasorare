@@ -80,3 +80,11 @@ Neu: Lineup Doctor (regelvalidierte Wechselideen), Hidden Gems Finder (NBA Punkt
 - BALLDONTLIE bleibt primär; ESPN-Webseitenfeed als optionaler, nicht offiziell unterstützter Ersatz, wenn kein Spielplan geliefert wird.
 - Datum/Uhrzeit in deutscher Zeitzone einschließlich US-zu-DE-Tageswechsel, echter 24-Stunden-Filter.
 - Keine Änderung an Sorare-Datenadapter und offiziellem NBA-Sterneabruf. Details: `UPDATE_V2_4_1_DE.md`.
+
+## 2.8.0 – My Sorare Collection
+
+- Sorare OAuth 2.0 Authorization Code mit CSRF-Status, verschlüsseltem HTTP-only-Cookie, Refresh und Logout
+- eigene Karten via `currentUser.anyCards` und Cursor-Pagination (NBA/Football, Seltenheit, Saison, Seriennummer)
+- Sammlungsanzeige, manueller/15-Minuten-Sync bei geöffneter Seite, sicherer Fallback bei Abbrüchen
+- verifizierter Kartenbesitz für den Team Builder, manuelle Browsermarkierungen als Backup behalten
+- Sorare-Score-Adapter, offizielle NBA-Sterne und Forecast unverändert
