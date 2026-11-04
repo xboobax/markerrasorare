@@ -1,3 +1,7 @@
+> **V4.0.3 Preview:** Prediction Engine 3.0 (Beta), PP Raw / Q80 Raw / Risiko-PP getrennt. Siehe `UPDATE_V4_0_3_PREDICTION_ENGINE_3_0_DE.md`. Werte sind **nicht** identisch mit SoProb und Q80 ist noch nicht kalibriert.
+
+> **V4.0.2 Sorare-Sync-Korrektur:** siehe [`UPDATE_V4_0_2_SORARE_SYNC_FIX_DE.md`](UPDATE_V4_0_2_SORARE_SYNC_FIX_DE.md).
+
 # MarkErras Sorare Dream 4.0 — Black & Gold Preview
 
 **Neue Plattformbasis:** separate Seiten, schwarz-goldenes UI, schnelle Player Database, Match Center, Guides, reguläre NBA-Franchises und bewährte Fußball-/NBA-Builder aus V3.9.2.

@@ -3,7 +3,7 @@ import type {Sport} from './model';
 import type {Strategy} from './arcade';
 import {restoreV30State,type BuilderV30State} from './builder-v30';
 import type {NbaStarsMode,NbaLineupDiversity} from './nba-stars-optimizer';
-export type ForecastMode='v2'|'v18'|'classic';
+export type ForecastMode='v3'|'v2'|'v18'|'classic';
 export type OptimizationPreset={id:string;name:string;sport:Sport;settings:BuilderV30State;strategy:Strategy;
   nbaMode:NbaStarsMode;diversity:NbaLineupDiversity;modelMode:ForecastMode;ownedOnly:boolean;createdAt:string};
 export const presetStorageKey=(sport:Sport)=>`neon:optimizer-presets-v35.${sport}`;
@@ -20,7 +20,7 @@ export function readOptimizerPresets(value:unknown,sport:Sport):OptimizationPres
       strategy:allowed(item.strategy,['balanced','safe','upside','target'],'balanced') as Strategy,
       nbaMode:allowed(item.nbaMode,['max','value','safe','upside'],'max') as NbaStarsMode,
       diversity:([1,2,3] as unknown[]).includes(item.diversity)?item.diversity as NbaLineupDiversity:2,
-      modelMode:allowed(item.modelMode,['v2','v18','classic'],'v2') as ForecastMode,
+      modelMode:allowed(item.modelMode,['v3','v2','v18','classic'],'v2') as ForecastMode,
       ownedOnly:item.ownedOnly===true,
       createdAt:typeof item.createdAt==='string'&&Number.isFinite(Date.parse(item.createdAt))?item.createdAt:new Date(0).toISOString()});
     if(out.length>=12)break;

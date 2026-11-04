@@ -75,11 +75,20 @@ export async function sessionForRequest(request:Request):Promise<{session:Sorare
   try{return {session:await tokenRequest({refresh_token:s.refreshToken,grant_type:"refresh_token"}),changed:true};}
   catch{return null;}
 }
+export class SorareApiError extends Error {
+  constructor(message:string,readonly status:number,readonly retryAfterSeconds:number|null=null){super(message);this.name="SorareApiError";}
+}
 export async function graphQl(token:string,query:string,variables?:Record<string,unknown>){
   const headers:Record<string,string>={"content-type":"application/json",Authorization:`Bearer ${token}`};
   if(process.env.SORARE_API_KEY?.trim())headers.APIKEY=process.env.SORARE_API_KEY.trim();
   const resp=await fetch(`${oauthHost}/graphql`,{method:"POST",headers,body:JSON.stringify({query,variables}),cache:"no-store",signal:AbortSignal.timeout(16000)});
   const json=await resp.json().catch(()=>null) as {data?:Record<string,unknown>;errors?:Array<{message?:string}>}|null;
-  if(!resp.ok||!json||json.errors?.length)throw new Error(json?.errors?.[0]?.message||`Sorare-Abfrage fehlgeschlagen (${resp.status}).`);
+  if(!resp.ok||!json||json.errors?.length){
+    const rawRetry=resp.headers.get("retry-after");
+    const seconds=rawRetry&&/^\d+$/.test(rawRetry)?Number(rawRetry):null;
+    const message=json?.errors?.[0]?.message||`Sorare-Abfrage fehlgeschlagen (${resp.status}).`;
+    // Sorare documents a 429 + Retry-After for rate-limited GraphQL requests.
+    throw new SorareApiError(resp.status===429?`Sorare-API-Limit erreicht. ${message}`:message,resp.status,seconds);
+  }
   return json.data??{};
 }

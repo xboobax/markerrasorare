@@ -38,14 +38,21 @@ export const v30ForTeam=(state:BuilderV30State,teamId:string)=>state.scope==="al
 export function presetSettings(preset:Exclude<AutoPreset,"custom">,current:BuilderV30Settings):BuilderV30Settings{
   return {...current,preset,projection:preset==="ceiling"?"q80":"ps",stack:"none",avoidOpponents:preset==="safe",minProjected:null};
 }
-/** Experimental q80 mixture estimate; require 8 real scores. It is NOT statistically calibrated. */
+/** V3.0 returns conditional Q80 from the unified distribution. Older models retain their legacy estimation. */
 export function estimatedQ80(p:Forecast):number|null{
+  const tagged=p as Forecast & {modelV3Active?:boolean;modelV3?:{applicable:boolean;q80Raw:number|null}};
+  if(tagged.modelV3Active && tagged.modelV3?.applicable)return tagged.modelV3.q80Raw;
   const scores=(p.recentScores??[]).filter(v=>finite(v)&&v>=0&&v<=200);
   if(scores.length<8||p.forecastSources.length===0||!finite(p.expected)||!finite(p.variability))return null;
   return Math.max(0,mixtureQuantile(p.expected,Math.max(p.variability,4),p.playProb,.8));
 }
 export function projectionValue(card:CardInput,mode:ProjectionMode):number|null{
-  const weighted=mode==="q80"?estimatedQ80(card.player):card.player.weighted;
+  const q80=mode==="q80"?estimatedQ80(card.player):null;
+  // The Q80 shown in the table is conditional. Auto-selection should still
+  // account for missed games; the legacy Q80 already contains its own DNP mass.
+  const isV3=Boolean((card.player as Forecast & {modelV3Active?:boolean}).modelV3Active);
+  const weighted=mode==="q80" && q80!==null && isV3?q80*card.player.playProb:
+    mode==="q80"?q80:card.player.weighted;
   if(weighted===null||!finite(weighted)||weighted<=0)return null;
   return weighted*(mode==="raw"?1:1+Math.max(0,Math.min(50,card.bonusPercent??0))/100);
 }

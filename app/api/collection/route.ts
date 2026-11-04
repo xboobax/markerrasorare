@@ -1,5 +1,5 @@
 import {NextRequest,NextResponse} from "next/server";
-import {sessionForRequest,setSessionCookie,graphQl} from "@/lib/sorare-oauth-session";
+import {sessionForRequest,setSessionCookie,graphQl,SorareApiError} from "@/lib/sorare-oauth-session";
 import {parseSorareCardBonus} from "@/lib/my-collection";
 export const dynamic="force-dynamic";
 const QUERY=`query MarkerrasOwnedCollection($after: String) {
@@ -28,6 +28,9 @@ export async function GET(request:NextRequest){
     const data=result.cardsWhere as {nodes?:unknown[];pageInfo?:{hasNextPage?:boolean;endCursor?:string};totalCount?:number}|null;
     // Never treat a failed / partial provider response as an empty, successfully synced collection.
     if(!current?.slug||!data||!Array.isArray(data.nodes))throw new Error("Sorare hat keine lesbare Kartensammlung geliefert.");
+    if(!data.pageInfo||typeof data.pageInfo.hasNextPage!=="boolean"||
+      (data.pageInfo.hasNextPage&&typeof data.pageInfo.endCursor!=="string"))
+      throw new Error("Sorare hat unvollständige Paginierungsdaten geliefert. Sammlung nicht als vollständig markieren.");
     const activeFootballSet=(result.cardSet as {currentSet?:{slug?:unknown;name?:unknown}|null}|null)?.currentSet;
     // The current set is supplied by Sorare, never guessed from a season year.
     // A missing set fails closed for football ownership but must not affect NBA.
@@ -44,8 +47,13 @@ export async function GET(request:NextRequest){
         cardSetName:typeof (c.cardSet as Record<string,unknown>|null)?.name==="string"?(c.cardSet as Record<string,unknown>).name:null,
         bonusPercent:parsed.bonusPercent,bonusDetails:parsed.bonusDetails};
     }).filter(c=>c.assetId&&c.playerSlug&&(c.sport==="NBA"||c.sport==="FOOTBALL"));
-    const res=NextResponse.json({userSlug:current.slug,cards,activeFootballSet:currentFootballSet,pageInfo:data.pageInfo??{hasNextPage:false,endCursor:null},totalCount:data.totalCount??cards.length,fetchedAt:new Date().toISOString()},{headers:{"Cache-Control":"private, no-store"}});
+    const res=NextResponse.json({userSlug:current.slug,cards,activeFootballSet:currentFootballSet,pageInfo:data.pageInfo,totalCount:data.totalCount??cards.length,fetchedAt:new Date().toISOString()},{headers:{"Cache-Control":"private, no-store"}});
     if(user.changed)setSessionCookie(res,user.session);
     return res;
-  }catch(e){return NextResponse.json({error:e instanceof Error?e.message:"Kartensynchronisierung fehlgeschlagen."},{status:502,headers:{"Cache-Control":"no-store"}});}
+  }catch(e){
+    const rateLimited=e instanceof SorareApiError&&e.status===429;
+    const headers:Record<string,string>={"Cache-Control":"no-store"};
+    if(rateLimited&&e.retryAfterSeconds!==null)headers["Retry-After"]=String(e.retryAfterSeconds);
+    return NextResponse.json({error:e instanceof Error?e.message:"Kartensynchronisierung fehlgeschlagen."},{status:rateLimited?429:502,headers});
+  }
 }

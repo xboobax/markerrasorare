@@ -1,6 +1,6 @@
 "use client";
 
-import MySorareCollection from "@/app/components/my-sorare-collection";
+import MySorareCollection,{type CollectionSyncStatus} from "@/app/components/my-sorare-collection";
 import {ownedSlugs,mergeVerifiedOwned,ownedViewKey,isInSelectedCollection,bestOwnedBonusByPlayer,activeFootballSetReady,type OwnedCollection} from "@/lib/my-collection";
 
 import Link from "next/link";
@@ -39,6 +39,7 @@ import { pendingForAutoCheck, type AutomaticResult } from "@/lib/tracking-auto";
 import {alignOpponentNames, type AutomaticMatchupData} from "@/lib/auto-matchups";
 import {buildForecastV18, pointsAtLeast, type ForecastV18} from "@/lib/forecast-v18";
 import {buildPredictionV2,backtestPredictionV2,type PredictionV2} from "@/lib/prediction-engine-v2";
+import {buildPredictionV3,withPredictionV3Bonus,evaluatePredictionV3,type PredictionV3} from "@/lib/prediction-engine-v3";
 import {backtestForecasts} from "@/lib/backtesting";
 import {loadArchive, persistArchive} from "@/lib/prediction-db";
 import {parseWatchlist, toggleWatchlist, watchlistKey} from "@/lib/watchlist";
@@ -123,7 +124,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState(false);
   const [tracked, setTracked] = useState<TrackedPrediction[]>([]);
-  const [modelMode, setModelMode] = useState<"v18"|"classic"|"v2">("v2");
+  const [modelMode, setModelMode] = useState<"v18"|"classic"|"v2"|"v3">("v3");
   const [autoArchiveEnabled, setAutoArchiveEnabled] = useState(false);
   const [archiveBackend, setArchiveBackend] = useState<"indexeddb"|"localStorage">("localStorage");
   const writeQueue = useRef<Promise<unknown>>(Promise.resolve());
@@ -150,6 +151,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const [hasForecastOnly, setHasForecastOnly] = useState(false);
   const [cardStore, setCardStore] = useState<CardStore>({});
   const [verifiedCollection,setVerifiedCollection]=useState<OwnedCollection|null>(null);
+  const [collectionSyncState,setCollectionSyncState]=useState<CollectionSyncStatus>({phase:"checking",message:"Sorare-Sammlung wird geprüft …"});
   const verifiedOwnedReady=verifiedCollection?.complete===true&&(sport==="nba"||activeFootballSetReady(verifiedCollection));
   const [officialStars,setOfficialStars] = useState<NbaStarRatings>({});
   const [starSync,setStarSync] = useState<{phase:"idle"|"loading"|"ready"|"error";snapshot:NbaStarSync|null;message:string}>({phase:"idle",snapshot:null,message:""});
@@ -378,11 +380,11 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
     setAutoArchiveEnabled(false);
     try {
       setAutoArchiveEnabled(window.localStorage.getItem(`markerras.sorare.auto-archive.v18.${sport}`) !== "off");
-      const current=window.localStorage.getItem(`neon:prediction-engine-v33.${sport}`);
+      const current=window.localStorage.getItem(`markerras.sorare.prediction-mode.v3.${sport}`);
       const legacy=window.localStorage.getItem(`markerras.sorare.model.v18.${sport}`);
-      setModelMode(current==="v2"||current==="v18"||current==="classic"?current:
-        legacy==="v18"||legacy==="classic"?legacy:"v2");
-    } catch {setModelMode("v2");}
+      setModelMode(current==="v3"||current==="v2"||current==="v18"||current==="classic"?current:
+        legacy==="v18"||legacy==="classic"?legacy:"v3");
+    } catch {setModelMode("v3");}
     void loadArchive(sport).then(({rows,backend})=>{
       if(!active)return;
       setTracked(rows);setArchiveBackend(backend);setLoadedTrackingSport(sport);
@@ -399,7 +401,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
     if(loadedTrackingSport!==sport)return;
     try{
       localStorage.setItem(`markerras.sorare.auto-archive.v18.${sport}`,autoArchiveEnabled?"on":"off");
-      localStorage.setItem(`neon:prediction-engine-v33.${sport}`,modelMode);
+      localStorage.setItem(`markerras.sorare.prediction-mode.v3.${sport}`,modelMode);
       if(modelMode==="v18"||modelMode==="classic")localStorage.setItem(`markerras.sorare.model.v18.${sport}`,modelMode);
     }catch{}
   },[sport,autoArchiveEnabled,modelMode,loadedTrackingSport]);
@@ -492,11 +494,11 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   // Card ownership, bonus, stars and lock changes must NOT recalculate every
   // player's expensive v1.8/v2 prediction. Cache per-player input signatures;
   // genuine scouting, opponent, roster or model changes still recompute as needed.
-  type CachedPrediction=ScoutedForecast & {modelV18:ForecastV18;modelV2:PredictionV2};
+  type CachedPrediction=ScoutedForecast & {modelV18:ForecastV18;modelV2:PredictionV2;modelV3:PredictionV3;modelV3Active:boolean};
   type PredictionEntry={base:Forecast;ratings:OpponentRatings;sport:Sport;mode:typeof modelMode;
     expectedMinutes?:number|null;typicalMinutes?:number|null;xg?:number|null;xa?:number|null;value:CachedPrediction};
   const predictionCache=useRef(new Map<string,PredictionEntry>());
-  const players = useMemo(() => {
+  const players:CachedPrediction[] = useMemo(() => {
     const next=new Map<string,PredictionEntry>();
     const result=basePlayers.map(p => {
       const scouting=cardStore[p.id];
@@ -516,8 +518,13 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
     });
     const modelV18=buildForecastV18(scouted,sport);
     const modelV2=buildPredictionV2(scouted,sport);
-    const value={...scouted,modelV18,modelV2,
-      ...(modelMode === "v18" && modelV18.applicable ? {
+    const modelV3=buildPredictionV3(scouted,sport,modelV2);
+    const value={...scouted,modelV18,modelV2,modelV3,modelV3Active:modelMode==="v3",
+      ...(modelMode === "v3" && modelV3.applicable ? {
+        expected:modelV3.ppRaw!,weighted:modelV3.riskAdjustedPP!,
+        floor:modelV3.q20Raw!,ceiling:modelV3.q80Raw!,
+        variability:modelV3.conditionalSd!,confidence:modelV3.quality,
+      } : modelMode === "v18" && modelV18.applicable ? {
         expected:modelV18.advancedExpected,weighted:modelV18.advancedWeighted,
         floor:modelV18.conditionalLow,ceiling:modelV18.conditionalHigh,
         variability:modelV18.conditionalSd,
@@ -548,6 +555,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
         intervalP10:p.modelV18.unconditionalP10,
         intervalP90:p.modelV18.unconditionalP90,
         modelVersion:"1.8.0",selectedMode:modelMode,
+        engineV3PP:p.modelV3.ppRaw??undefined,engineV3Q80:p.modelV3.q80Raw??undefined,
         engineV2Predicted:p.modelV2.weighted,engineV2P10:p.modelV2.unconditionalP10,engineV2P90:p.modelV2.unconditionalP90,
       })).filter(row=>!existing.has(row.key));
       if(!additions.length)return old;
@@ -700,6 +708,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const realityCheck=useMemo(()=>predictionRealityCheck(tracked),[tracked]);
   const backtest = useMemo(() => backtestForecasts(tracked),[tracked]);
   const v2Backtest = useMemo(() => backtestPredictionV2(tracked),[tracked]);
+  const v3Backtest = useMemo(() => evaluatePredictionV3(tracked),[tracked]);
   const withV2 = players.filter(p=>p.modelV2.applicable).length;
   const avgV2Change=withV2?players.filter(p=>p.modelV2.applicable)
     .reduce((sum,p)=>sum+p.modelV2.changePercent,0)/withV2:0;
@@ -708,6 +717,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const saveTracked = useCallback((p: Forecast) => {
     const comparison=(p as Forecast & {modelV18?:ForecastV18}).modelV18;
     const v2=(p as Forecast & {modelV2?:PredictionV2}).modelV2;
+    const v3=(p as Forecast & {modelV3?:PredictionV3}).modelV3;
     const details:TrackingModelSnapshot|undefined=comparison?{
       baselinePredicted:comparison.baselineWeighted,
       advancedPredicted:comparison.advancedWeighted,
@@ -715,6 +725,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
       intervalP90:comparison.unconditionalP90,
       modelVersion:"1.8.0",selectedMode:modelMode,
       ...(v2?{engineV2Predicted:v2.weighted,engineV2P10:v2.unconditionalP10,engineV2P90:v2.unconditionalP90}:{}),
+      ...(v3?.applicable?{engineV3PP:v3.ppRaw!,engineV3Q80:v3.q80Raw!}:{}),
     }:undefined;
     setTracked(items=>upsertTracked(items,createTrackedPrediction(p,sport,new Date(),details)));
   },[sport,modelMode]);
@@ -785,7 +796,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
           <div className="metric-card"><span className="metric-label">{sport === "nba" ? "Sterne zugewiesen" : "Aktuelle Zielmarke"}</span><strong>{sport === "nba" ? ratedCount : (validTarget ? totalTarget : "—")}</strong><small>{sport === "nba" ? `${automaticStarCount} offiziell · ${manualStarCount} manuell` : "Veränderbar im Builder"}</small></div>
         </div>
 
-        <div className="v35-tab-section" data-tab="collection"><MySorareCollection sport={sport} onCollectionChange={setVerifiedCollection}/></div>
+        <div className="v35-tab-section" data-tab="collection"><MySorareCollection sport={sport} onCollectionChange={setVerifiedCollection} onSyncStatus={setCollectionSyncState}/></div>
 
         {error && <div className="notice warning"><strong>Datenabruf fehlgeschlagen.</strong> {error}</div>}
         {info && <div className="notice"><span className="status-dot"/> {info}</div>}
@@ -845,9 +856,10 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
           matchupSource={automaticMatchups.source} scheduleStatus={nbaSchedule.status}/>}</div>)} 
 
         {activeTab==="analytics"&&(<section data-tab="analytics" className="panel forecast-lab" id="forecast-lab">
-          <div className="section-top"><div><span className="section-kicker">03 / PREDICTION ENGINE 2.0 · V3.3</span><h2>Form, Matchups & Risiko transparent.</h2></div><span className="lab-stage">EXPERIMENTELL · NICHT VALIDIERT</span></div>
-          <p className="lab-intro">Prediction Engine 2.0 kombiniert die vorhandenen Sorare-Daten mit einem vorsichtig gewichteten Formsignal und zeigt Floor, Ceiling sowie einen nachvollziehbaren Risikoindex. Gegner und manuell gepflegte Minuten wirken nur einmal. <strong>V1.7 und V1.8 bleiben unverändert auswählbar.</strong> Ein Leistungsgewinn ist erst durch echte Ergebnisse nachzuweisen.</p>
+          <div className="section-top"><div><span className="section-kicker">03 / PREDICTION ENGINE 3.0 · V4.0.3</span><h2>PP, Q80, Matchups & Risiko transparent.</h2></div><span className="lab-stage">EXPERIMENTELL · NICHT VALIDIERT</span></div>
+          <p className="lab-intro">V3.0 trennt PP/Q80 bei Einsatz von risikoangepassten Punkten und berücksichtigt Kartenboni erst nach der Rohprognose. Q80 nutzt eine einheitliche bedingte Punkteverteilung für beide Sportarten und ist noch unkalibriert. Die V2.0 Engine kombiniert die vorhandenen Sorare-Daten mit einem vorsichtig gewichteten Formsignal und zeigt Floor, Ceiling sowie einen nachvollziehbaren Risikoindex. Gegner und manuell gepflegte Minuten wirken nur einmal. <strong>V1.7 und V1.8 bleiben unverändert auswählbar.</strong> Ein Leistungsgewinn ist erst durch echte Ergebnisse nachzuweisen.</p>
           <div className="lab-model-switch" role="group" aria-label="Prognosemodell wählen">
+            <button type="button" aria-pressed={modelMode==="v3"} className={modelMode==="v3"?"active":""} onClick={()=>setModelMode("v3")}>✧ V3.0 · PP & Q80</button>
             <button type="button" aria-pressed={modelMode==="v2"} className={modelMode==="v2"?"active":""} onClick={()=>setModelMode("v2")}>✦ V2.0 · Prediction Engine</button>
             <button type="button" aria-pressed={modelMode==="v18"} className={modelMode==="v18"?"active":""} onClick={()=>setModelMode("v18")}>◆ V1.8 · Experiment</button>
             <button type="button" aria-pressed={modelMode==="classic"} className={modelMode==="classic"?"active":""} onClick={()=>setModelMode("classic")}>◈ V1.7 · Standard</button>
@@ -857,6 +869,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
             <div><small>V2.0 gegenüber V1.7</small><strong>{avgV2Change>=0?"+":""}{fmt(avgV2Change)} %</strong><span>Prognosedifferenz, kein Qualitätsnachweis</span></div>
             <div><small>V2.0 · offizielle Paarvergleiche</small><strong>{v2Backtest.count}</strong><span>{v2Backtest.count?`MAE V1.8: ${fmt(v2Backtest.v18Mae??0)} · V2.0: ${fmt(v2Backtest.v2Mae??0)}`:"Noch keine vergleichbaren FINAL-Daten"}</span></div>
           </div>
+          <div className="v33-interval" aria-label="Prediction Engine 3.0: offizielle Kalibrierung"><strong>V3.0 PP / Q80 Reality Check:</strong> {v3Backtest.count ? `${v3Backtest.count} offizielle Spiele mit bestätigter Teilnahme und vorab gespeicherter Prognose · PP-MAE ${fmt(v3Backtest.ppMae!)} · Q80-Abdeckung ${Math.round(v3Backtest.q80Coverage!*100)} % (Ziel nach Kalibrierung: ca. 80 %)` : "Noch keine V3-Vergleichsspiele mit bestätigter Teilnahme. Ein FINAL-Score von 0 allein belegt keinen Einsatz. Q80 bleibt unkalibriert."}</div>
           <p className="lab-caution"><strong>Wichtig:</strong> Alle V2.0-Intervalle, Einsatzwahrscheinlichkeiten und Risikoeinstufungen sind unkalibrierte Heuristiken. Die 80-%-Spanne ist keine belegte 80-%-Trefferquote. {v2Backtest.count>0?`Offizielle V2.0-Vergleiche an ${v2Backtest.days} Spieltagen, MAE-Differenz V1.8 minus V2.0: ${fmt(v2Backtest.deltaMae??0)}.`:"V2.0-Qualität wird erst an zukünftigen offiziell abgeschlossenen Spielen messbar."}</p>
         </section>)} 
 
@@ -891,7 +904,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
         <section data-tab="builder" className="two-column builder-zone-v23">
           <div className="panel builder-panel" id="lineup-builder">
             <div className="section-top"><div><span className="section-kicker">LINEUP STUDIO · V3.5</span><h2>Dein Lineup</h2></div><span className="live-pill">5 POSITIONEN</span></div>
-            <div className="v35-model-picker"><label>Prognosemodell <select aria-label="Prognosemodell im Builder" value={modelMode} onChange={e=>setModelMode(e.target.value as typeof modelMode)}><option value="v2">V2.0 Prediction Engine</option><option value="v18">V1.8</option><option value="classic">V1.7</option></select></label></div>
+            <div className="v35-model-picker"><label>Prognosemodell <select aria-label="Prognosemodell im Builder" value={modelMode} onChange={e=>setModelMode(e.target.value as typeof modelMode)}><option value="v3">V3.0 PP + Q80 (Beta)</option><option value="v2">V2.0 Prediction Engine</option><option value="v18">V1.8</option><option value="classic">V1.7</option></select></label></div>
             <div className={`v283-collection-switch ${ownedOnly?"is-on":""}`} aria-label={`${sport==="nba"?"NBA":"Fußball"} Kartenfilter`}>
               <div className="v283-collection-copy">
                 <span className="v283-collection-eyebrow">✦ MY SORARE COLLECTION · {sport==="nba"?"NBA":"FUSSBALL"}</span>
@@ -909,7 +922,14 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
                 <button type="button" onClick={()=>navigate("collection","meine-karten")}>Sammlung / Sync ↗</button>
               </div>
             </div>
-            {ownedOnly&&!verifiedOwnedReady&&<p className="v283-collection-warning" role="status">Der Kartenfilter ist aktiviert, aber die Sorare-Sammlung ist noch nicht vollständig geladen. Bis zum erfolgreichen Sync werden keine Spieler als verifiziert eigene Karten gewertet. <a href="#meine-karten">Jetzt synchronisieren</a>.</p>}
+            {ownedOnly&&!verifiedOwnedReady&&<p className="v283-collection-warning" role={collectionSyncState.phase==="error"?"alert":"status"}>
+              {collectionSyncState.phase==="error"
+                ?`Karten-Sync fehlgeschlagen: ${collectionSyncState.message}`
+                :collectionSyncState.phase==="syncing"||collectionSyncState.phase==="checking"
+                  ?"Sorare-Verbindung besteht möglicherweise bereits. Deine Karten werden gerade verifiziert; bis zum vollständigen Sync werden keine unbestätigten Karten verwendet."
+                  :"Der Kartenfilter ist aktiviert, aber deine Sorare-Karten sind noch nicht verifiziert. Die Anmeldung allein bestätigt keine Karten."}
+              {" "}<Link href={`/collection?sport=${sport}#meine-karten`}>Sammlung öffnen / Sync prüfen</Link>.
+            </p>}
             <div className="builder-mode-tabs" role="group" aria-label="Lineup Builder Modus">
               <button type="button" className={builderMode === "manual" ? "active" : ""} aria-pressed={builderMode === "manual"} onClick={() => setBuilderMode("manual")}>✋ Selbst aufstellen</button>
               <button type="button" className={builderMode === "automatic" ? "active" : ""} aria-pressed={builderMode === "automatic"} onClick={() => setBuilderMode("automatic")}>✦ Automatisch optimieren</button>
@@ -935,7 +955,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
               <div className="v35-preset-controls"><select aria-label="Gespeichertes Preset wählen" value={presetSelected} onChange={e=>setPresetSelected(e.target.value)}><option value="">Preset wählen …</option>{optimizerPresets.map(p=><option value={p.id} key={p.id}>{p.name}</option>)}</select><button type="button" disabled={!presetSelected} onClick={loadCurrentPreset}>Laden</button><button type="button" disabled={!presetSelected} onClick={()=>{setOptimizerPresets(prev=>deleteOptimizerPreset(prev,presetSelected));setPresetSelected("");setPresetNotice("Preset gelöscht.");}}>Löschen</button></div>
               <div className="v35-preset-controls"><input maxLength={45} value={presetName} placeholder="Neues Preset benennen" aria-label="Neues Preset benennen" onChange={e=>setPresetName(e.target.value)}/><button type="button" onClick={saveCurrentPreset}>+ Speichern</button></div>{presetNotice&&<small role="status">{presetNotice}</small>}</div>
             <details className="v35-advanced"><summary>⚙ Profi-Einstellungen · Team-Regeln, Stacks, Prognose-Optionen</summary><AutoBuilderSettings sport={sport} league={league} leagues={leagues} state={v30State} onChange={setV30State} teamId={v30EditTeam} onTeamChange={setV30EditTeam}/></details>
-            <p className="v30-status" role="status">V3.0: {v30State.scope==="team"?"Individuelle Auto-Team-Strategien":"Gemeinsame Strategie"} · {v30ActiveSettings.projection.toUpperCase()} · {lineups.length} gültige Vorschläge. {v30ActiveSettings.projection==="q80"?"Q80 ist experimentell, nicht kalibriert; Spieler ohne mindestens 8 Scores werden ausgeschlossen.":""} {v30ActiveSettings.projection==="raw"?"Die Auswahl wird ohne Kartenbonus optimiert; die Teamanzeige enthält weiterhin tatsächliche Karten-/Captain-Zuschläge.":""} {v30ActiveSettings.excludedLeagues.includes(league)?"Die aktuell geladene Liga wurde ausgeschlossen.":""}</p>
+            <p className="v30-status" role="status">V3.0: {v30State.scope==="team"?"Individuelle Auto-Team-Strategien":"Gemeinsame Strategie"} · {v30ActiveSettings.projection.toUpperCase()} · {lineups.length} gültige Vorschläge. {v30ActiveSettings.projection==="q80"?"Q80 ist eine unkalibrierte Schätzung bei Einsatz. Das gewählte Auto-Team berücksichtigt weiterhin das Einsatzrisiko.":""} {v30ActiveSettings.projection==="raw"?"Die Auswahl wird ohne Kartenbonus optimiert; die Teamanzeige enthält weiterhin tatsächliche Karten-/Captain-Zuschläge.":""} {v30ActiveSettings.excludedLeagues.includes(league)?"Die aktuell geladene Liga wurde ausgeschlossen.":""}</p>
             <p className="v283-auto-scope">{ownedOnly?"✓ Automatische Aufstellungen ausschließlich aus verifiziert eigenen Karten":"Alle Spieler im Datenbereich · theoretische Aufstellungen"} · Einstellung oben ändern.</p>
             {sport==="football"&&<div className="strategy-bar">
               <div className="strategy-title"><strong>Optimierung</strong><small>Diese Auswahl gilt für „Custom“. Safe, Balanced und High Ceiling aus V3.0 setzen ein eigenes Optimierungsziel.</small></div>
@@ -1046,7 +1066,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
 
         </section>
         <aside className="insights-column v35-player-insights" data-tab="players">
-            <div className="panel insight-panel"><span className="section-kicker">05 / PLAYER INTELLIGENCE</span><h2>Top-Prognosen</h2><p className="caption-small">Aktives Modell: {modelMode === "v2" ? "Prediction Engine 2.0" : modelMode === "v18" ? "V1.8" : "V1.7"} · Sorare-Daten, L5/L10, Einsatzrisiko und optionale Scouting-Faktoren.</p>
+            <div className="panel insight-panel"><span className="section-kicker">05 / PLAYER INTELLIGENCE</span><h2>Top-Prognosen</h2><p className="caption-small">Aktives Modell: {modelMode === "v3" ? "Prediction Engine 3.0 (Beta)" : modelMode === "v2" ? "Prediction Engine 2.0" : modelMode === "v18" ? "V1.8" : "V1.7"} · Sorare-Daten, L5/L10, Einsatzrisiko und optionale Scouting-Faktoren.</p>
               <div className="top-picks">{topPicks.map((p,i) => <div className="pick-row" key={p.id}><span className="pick-rank">{String(i+1).padStart(2,"0")}</span><PlayerAvatar player={p}/><span className="pick-name"><button type="button" className="player-open" onClick={() => setSelectedPlayerId(p.id)}>{p.name} ↗</button><small>{p.team}</small></span><span className="pick-score">{fmt(p.weighted)}<small>L5: {p.last5Avg === null ? "—" : fmt(p.last5Avg)}</small></span></div>)}</div>
             </div>
             <div className="panel tip-panel"><span className="section-kicker">WICHTIG ZUM MODELL</span><h3>Was noch fehlt</h3><p>Sorare stellt aktuelle NBA-Sterne über gameplayTierStars bereit; diese werden separat synchronisiert. Die offiziell festgeschriebenen Sterne einer bereits eröffneten Gameweek können abweichen. Deine persönliche Kartensammlung wird noch nicht automatisch synchronisiert.</p><p>Floor, Ceiling und Zielchance sind heuristische Modellwerte, keine statistisch validierte Vorhersage. Gegnerstärke wird bei eingerichteten Datenzugängen aus echten Gegnerergebnissen abgeleitet, sonst aus deinen manuellen Bewertungen. Erwartete Minuten, Verletzungsaktualität und xG/xA sind nicht über einen eigenen Live-Feed abgesichert.</p></div>
@@ -1072,7 +1092,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
           <div className="search-quickfilters"><button type="button" className={favoritesOnly?"active":""} aria-pressed={favoritesOnly} onClick={()=>{setFavoritesOnly(v=>!v);setShowCount(40);}}>★ Nur Favoriten {watchlist.length>0?`(${watchlist.length})`:""}</button>{search && <button type="button" onClick={()=>{setSearch("");searchRef.current?.focus();}}>× Suche leeren</button>}<span>Tipp: <kbd>/</kbd> öffnet die Suche</span></div>
           <div className="v35-explorer-tools"><button type="button" className={compactExplorer?"active":""} aria-pressed={compactExplorer} onClick={()=>setCompactExplorer(true)}>▤ Kompakt</button><button type="button" className={!compactExplorer?"active":""} aria-pressed={!compactExplorer} onClick={()=>setCompactExplorer(false)}>▦ Alle Spalten</button><span>40 Spieler pro Seite · weitere laden bei Bedarf</span></div>
           <div className="filter-checkbox"><label><input type="checkbox" checked={hideUnavailable} onChange={e=>setHideUnavailable(e.target.checked)}/> Spieler mit fehlendem Spiel oder geringerer Einsatzchance ausblenden</label><label><input type="checkbox" checked={hasForecastOnly} onChange={e=>setHasForecastOnly(e.target.checked)}/> Nur Spieler mit mindestens einer Score-Datenquelle anzeigen</label></div>
-          <div className="table-scroll"><table className={modelMode==="v2"?"players-table v35-model-v2":"players-table v35-model-legacy"}><thead><tr><th title="Favoriten in deiner Watchlist">★</th><th>Spieler / Team</th><th>Pos.</th><th>Ø Score</th><th>L5</th><th>Gegner</th><th>Floor – Ceiling</th><th>Daten</th>{modelMode==="v2"&&<th>Risiko*</th>}<th>Einsatz</th><th>Prognose</th><th>Scouting (manuell)</th><th>Builder</th><th>Mein Bestand</th>{sport === "nba" && <th>Sterne ★</th>}<th>Kartenbonus</th></tr></thead>
+          <div className="table-scroll"><table className={(modelMode==="v3"||modelMode==="v2")?"players-table v35-model-v2":"players-table v35-model-legacy"}><thead><tr><th title="Favoriten in deiner Watchlist">★</th><th>Spieler / Team</th><th>Pos.</th><th>Ø Score</th><th>L5</th><th>Gegner</th><th>Floor – Ceiling</th><th>Daten</th>{(modelMode==="v2"||modelMode==="v3")&&<th>Risiko*</th>}<th>Einsatz</th>{modelMode==="v3"&&<><th title="Punkte bei Einsatz, ohne Kartenbonus">PP Raw</th><th title="80. Perzentil bei Einsatz, ohne Kartenbonus">Q80 Raw</th><th title="PP und Q80 mit Bonus der hinterlegten Spielerkarte">PP / Q80 + Karte</th></>}<th>{modelMode==="v3"?"Risiko-PP":"Prognose"}</th><th>Scouting (manuell)</th><th>Builder</th><th>Mein Bestand</th>{sport === "nba" && <th>Sterne ★</th>}<th>Kartenbonus</th></tr></thead>
             <tbody>{filtered.slice(0,showCount).map(p => {
               const card = cardStore[p.id] ?? {};
               const syncedCard = effectiveCardStore[p.id] ?? card;
@@ -1085,8 +1105,9 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
                 <td><span className="opponent-cell"><strong>{p.opponent ?? "—"}</strong><small>{matchupLabel(p.opponentRating)}{p.opponentRating !== null ? ` (${fmt(p.matchupAdjustmentPct)} %)` : ""}</small></span></td>
                 <td className="numeric-cell range-cell">{p.forecastSources.length ? `${fmt(p.floor)} – ${fmt(p.ceiling)}` : "—"}</td>
                 <td><span className={`confidence-tag confidence-${p.confidence}`} title={`${p.sampleSize} Scores; Datenabdeckung, keine statistische Konfidenz`}>{p.confidence}</span></td>
-                {modelMode==="v2"&&<td><span className={`v33-risk v33-risk-${p.modelV2.riskLabel}`} title="Heuristischer Risikoindex, keine echte Ausfallwahrscheinlichkeit">{p.modelV2.riskIndex}/100</span></td>}
+                {(modelMode==="v2"||modelMode==="v3")&&<td><span className={`v33-risk v33-risk-${p.modelV2.riskLabel}`} title="Heuristischer Risikoindex, keine echte Ausfallwahrscheinlichkeit">{p.modelV2.riskIndex}/100</span></td>}
                 <td><div className="prob-meter"><div style={{width:`${Math.round(p.playProb * 100)}%`}}/></div><small>{Math.round(p.playProb * 100)} %</small></td>
+                {modelMode==="v3"&&<><td className="numeric-cell" title="Punkte bei Einsatz; separat vom Einsatzmodell">{p.modelV3.applicable?fmt(p.modelV3.ppRaw!):"—"}</td><td className="numeric-cell" title="Geschätztes Q80 bei Einsatz; nicht kalibriert">{p.modelV3.applicable?fmt(p.modelV3.q80Raw!):"—"}</td><td className="numeric-cell" title="Rohprognose plus Kartenbonus, je Spieler nicht doppelt berechnet">{p.modelV3.applicable?`${fmt(withPredictionV3Bonus(p.modelV3,syncedCard.bonusPercent).pp!)} / ${fmt(withPredictionV3Bonus(p.modelV3,syncedCard.bonusPercent).q80!)}`:"—"}</td></>}
                 <td className="numeric-cell score-cell" title={p.forecastSources.length ? `Bei Einsatz: ${fmt(p.expected)} · Modell-Einsatzchance: ${Math.round(p.playProb*100)} %` : "Kein Score-Eingang vorhanden"}>{p.forecastSources.length ? fmt(p.weighted) : "—"}</td>
                 <td><div className="scout-inputs">
                   <label>Ø Min.<input type="number" min="1" max={sport === "nba" ? 60 : 130} placeholder="üblich" value={card.typicalMinutes ?? ""} onChange={e=>updateCard(p.id,{typicalMinutes: e.target.value ? Number(e.target.value) : null})}/></label>
@@ -1164,6 +1185,14 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
               <div><small>Einsatzwahrscheinlichkeit (Modell)</small><strong>{Math.round(selectedPlayer.playProb*100)} %</strong></div>
               <div><small>Floor / Ceiling (heuristisch)</small><strong>{(selectedPlayer.sampleSize > 0 || selectedPlayer.proj !== null || selectedPlayer.avg !== null) ? `${fmt(selectedPlayer.floor)} – ${fmt(selectedPlayer.ceiling)}` : "—"}</strong></div>
             </div>
+            {modelMode==="v3"&&<section className="v33-profile-card" aria-label="Prediction Engine 3.0 – PP und Q80"><div className="v33-profile-head"><strong>✧ PREDICTION ENGINE 3.0 · BETA</strong><span>Datenqualität: {selectedPlayer.modelV3.quality}</span></div>
+              {selectedPlayer.modelV3.applicable?<><div className="v33-metrics">
+                <div><small>PP Raw · bei Einsatz</small><strong>{fmt(selectedPlayer.modelV3.ppRaw!)}</strong><span>Ohne Kartenbonus</span></div>
+                <div><small>Q80 Raw · Ceiling bei Einsatz</small><strong>{fmt(selectedPlayer.modelV3.q80Raw!)}</strong><span>Geschätztes 80. Perzentil</span></div>
+                <div><small>PP / Q80 mit Karte</small><strong>{fmt(withPredictionV3Bonus(selectedPlayer.modelV3,effectiveCardStore[selectedPlayer.id]?.bonusPercent).pp!)} / {fmt(withPredictionV3Bonus(selectedPlayer.modelV3,effectiveCardStore[selectedPlayer.id]?.bonusPercent).q80!)}</strong><span>Bonus +{fmt(withPredictionV3Bonus(selectedPlayer.modelV3,effectiveCardStore[selectedPlayer.id]?.bonusPercent).bonusPercent)} %</span></div>
+                <div><small>Risiko-PP inkl. DNP</small><strong>{fmt(selectedPlayer.modelV3.riskAdjustedPP!)}</strong><span>Einsatzmodell {Math.round(selectedPlayer.modelV3.playProbability*100)} %</span></div>
+                <div><small>P70 / P80 bei Einsatz*</small><strong>{Math.round((selectedPlayer.modelV3.p70Conditional??0)*100)} % / {Math.round((selectedPlayer.modelV3.p80Conditional??0)*100)} %</strong><span>Modellschätzung, nicht kalibriert</span></div>
+              </div><p className="v33-disclaimer">PP und Q80 werden ohne Einsatzrisiko angezeigt; der Builder verwendet für die Auswahl weiterhin Risiko-PP. {selectedPlayer.modelV3.reasons.join(" ")}</p></>:<p>Keine ausreichenden Score-Daten für V3.0 verfügbar.</p>}</section>}
             <section className="v33-profile-card" aria-label="Prediction Engine 2.0 Analyse">
               <div className="v33-profile-head"><strong>✦ PREDICTION ENGINE 2.0</strong><span>Datenqualität: {selectedPlayer.modelV2.quality}</span></div>
               {selectedPlayer.modelV2.applicable ? <>

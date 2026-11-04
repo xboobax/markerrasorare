@@ -1,3 +1,10 @@
+## V4.0.3 — Prediction Engine 3.0 Beta (04.11.2026)
+
+- Neue bedingte PP/Q20/Q80-Punkteverteilung für NBA & Fußball, Risiko-PP separat.
+- Einheitliche Berechnung in beiden Buildern und Player Database; Q80 mit Kartenbonus ohne doppelte DNP-Anrechnung.
+- Alte Modelle und Presets bleiben auswählbar, Sorare-Sync V4.0.2 unverändert.
+- Neuer V3-Regressionstest, Einordnung der unkalibrierten Werte, strenge Domain-Prüfung.
+
 ## V3.9.2 – Vercel TypeScript Build Fix (2026-11-04)
 
 - `CachedPrediction` verwendet jetzt `ScoutedForecast` statt `Forecast`, um `opponentRating`, `matchupAdjustmentPct` und `minutesAdjustmentPct` typkorrekt zu übernehmen.

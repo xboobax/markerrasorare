@@ -208,3 +208,5 @@
 .dream-frame .v23-roster-avatar{display:grid;place-items:center;overflow:hidden}
 .dream-frame .dream-player-details{color:#f0ede4!important;text-decoration:none!important}
 .dream-frame .dream-player-details:hover{color:#f0d487!important}
+/* Collection sync diagnostics: compact, readable without exposing auth credentials. */
+.v28-status-error {color:#f7b7a7!important;border-left:3px solid #e28d78;padding-left:10px;overflow-wrap:anywhere}

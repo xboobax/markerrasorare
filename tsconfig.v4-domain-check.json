@@ -1,1 +1,34 @@
-{"compilerOptions":{"target":"ES2020","module":"commonjs","moduleResolution":"node","strict":true,"skipLibCheck":true,"noEmit":true,"esModuleInterop":true,"baseUrl":".","paths":{"@/*":["./*"]},"lib":["ES2020","DOM"],"types":[]},"files":["features/core/workspace-server.ts","lib/regular-nba.ts","lib/sorare-profile.ts","tests/next-test-types.d.ts"]}
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": [
+        "./*"
+      ]
+    },
+    "lib": [
+      "ES2020",
+      "DOM"
+    ],
+    "types": []
+  },
+  "files": [
+    "features/core/workspace-server.ts",
+    "lib/regular-nba.ts",
+    "lib/sorare-profile.ts",
+    "lib/collection-sync-session.ts",
+    "tests/next-test-types.d.ts",
+    "lib/prediction-engine-v3.ts",
+    "lib/prediction-engine-v2.ts",
+    "lib/builder-v30.ts",
+    "lib/tracking.ts",
+    "lib/qol-presets.ts"
+  ]
+}
