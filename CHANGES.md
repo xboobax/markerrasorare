@@ -1,3 +1,10 @@
+## V3.9.2 – Vercel TypeScript Build Fix (2026-11-04)
+
+- `CachedPrediction` verwendet jetzt `ScoutedForecast` statt `Forecast`, um `opponentRating`, `matchupAdjustmentPct` und `minutesAdjustmentPct` typkorrekt zu übernehmen.
+- Die bestehende Berechnungslogik, Optimierung, Divination-Set-Filterung und das kompakte UI bleiben unverändert.
+- Zusätzlicher Typ-Regressionscheck für die Matchup-Felder in der Production-Dashboard-Komponente.
+- Vollständiger Next.js-Build benötigt npm-Abhängigkeiten und muss auf Vercel bestätigt werden.
+
 ## V3.9.1 – Performance Edition (2026-11-04)
 
 - Lazy Rendering von inaktiven Player-/Analytics-/Daily-Mission-Workspaces.

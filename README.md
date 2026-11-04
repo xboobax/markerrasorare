@@ -1,4 +1,4 @@
-# Neon Builder Pro V3.9.1 – Performance Edition
+# Neon Builder Pro V3.9.2 – Performance Edition · Build Fix
 
 **Performance-Update:** Die umfangreichen Spieler-/Analysebereiche laden erst bei Bedarf, die Prognosen und Kartenabfragen nutzen Zwischenspeicher und der automatische Optimizer arbeitet nur im aktiven Automatikmodus. Details in [`UPDATE_V3_9_1_PERFORMANCE_DE.md`](UPDATE_V3_9_1_PERFORMANCE_DE.md).
 

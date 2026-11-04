@@ -28,7 +28,7 @@ import type { Forecast, Sport } from "@/lib/model";
 import {availabilityForPlayers,isConfirmedOut} from "@/lib/availability";
 import {useAvailability} from "@/app/hooks/use-availability";
 import type { Strategy } from "@/lib/arcade";
-import { enrichForecast, matchupLabel, validDefenseRating, type OpponentRatings } from "@/lib/matchups";
+import { enrichForecast, matchupLabel, validDefenseRating, type OpponentRatings, type ScoutedForecast } from "@/lib/matchups";
 import { optimizeArcadeLineups, isValidNbaStars, type CardInput } from "@/lib/arcade";
 import { ARCADE } from "@/config/divination";
 import type { Club } from "@/lib/sorare";
@@ -461,7 +461,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   // Card ownership, bonus, stars and lock changes must NOT recalculate every
   // player's expensive v1.8/v2 prediction. Cache per-player input signatures;
   // genuine scouting, opponent, roster or model changes still recompute as needed.
-  type CachedPrediction=Forecast & {modelV18:ForecastV18;modelV2:PredictionV2};
+  type CachedPrediction=ScoutedForecast & {modelV18:ForecastV18;modelV2:PredictionV2};
   type PredictionEntry={base:Forecast;ratings:OpponentRatings;sport:Sport;mode:typeof modelMode;
     expectedMinutes?:number|null;typicalMinutes?:number|null;xg?:number|null;xa?:number|null;value:CachedPrediction};
   const predictionCache=useRef(new Map<string,PredictionEntry>());
@@ -725,7 +725,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   return (
     <div className="app-shell">
       <header className="app-topbar v35-topbar">
-        <Link href={activeTab==="missions"?"/?sport=football&tab=missions":"/?sport=football"} className="brand" aria-label="Neon Builder Pro Startseite"><span className="brand-logo">N<span>◆</span></span><span className="brand-text"><strong>NEON BUILDER PRO</strong><small>V3.9.1 · PERFORMANCE</small></span></Link>
+        <Link href={activeTab==="missions"?"/?sport=football&tab=missions":"/?sport=football"} className="brand" aria-label="Neon Builder Pro Startseite"><span className="brand-logo">N<span>◆</span></span><span className="brand-text"><strong>NEON BUILDER PRO</strong><small>V3.9.2 · PERFORMANCE</small></span></Link>
         <nav className="sport-switch" aria-label="Sportart wählen"><Link href={activeTab==="missions"?"/?sport=football&tab=missions":"/?sport=football"} aria-current={sport==="football"?"page":undefined}>⚽ Fußball</Link><Link href={activeTab==="missions"?"/?sport=nba&tab=missions":"/?sport=nba"} aria-current={sport==="nba"?"page":undefined}>🏀 NBA</Link></nav>
         <span className="topbar-pill"><span className="status-dot" style={error?{background:"#d9a06f"}:undefined}/>{error?"API prüfen":players.length?`${players.length} Spieler geladen`:"Sorare verbindet"}</span>
       </header>
@@ -746,7 +746,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
         </div>}
       </div>
       <main className="dashboard-main v35-main" data-workspace={activeTab}>
-        <div className="v35-workspace-title" data-tab="builder"><div><span className="section-kicker">NEON STUDIO / V3.9.1</span><h1>{sport==="nba"?"NBA":"Fußball"} Lineup Studio</h1></div><div className="v36-title-actions"><button type="button" className="v37-mission-link" onClick={()=>navigate("missions")}>⚡ Daily Missions öffnen</button><span className="v35-title-hint">{sport==="nba"?"5 Karten · max. 16 ★":"5 Karten · Captain +50 %"}</span></div></div>
+        <div className="v35-workspace-title" data-tab="builder"><div><span className="section-kicker">NEON STUDIO / V3.9.2</span><h1>{sport==="nba"?"NBA":"Fußball"} Lineup Studio</h1></div><div className="v36-title-actions"><button type="button" className="v37-mission-link" onClick={()=>navigate("missions")}>⚡ Daily Missions öffnen</button><span className="v35-title-hint">{sport==="nba"?"5 Karten · max. 16 ★":"5 Karten · Captain +50 %"}</span></div></div>
         <div className="metric-grid v35-metrics" data-tab="builder">
           <div className="metric-card"><span className="metric-label">Spieler im Datensatz</span><strong>{players.length.toLocaleString("de-DE")}</strong><small>Aktuell ausgewählter Datenbereich</small></div>
           <div className="metric-card"><span className="metric-label">Mögliche Einsätze</span><strong>{hasGameCount.toLocaleString("de-DE")}</strong><small>Spielerbilder: {imageCount} von {players.length}</small></div>
@@ -782,7 +782,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
 
         {activeTab==="missions"&&(<section className="v35-tab-section v37-mission-workspace" data-tab="missions" id="daily-mission">
           <div className="v37-mission-title">
-            <div><span className="section-kicker">NEON / DAILY MISSIONS · V3.9.1</span><h1>⚡ Daily Missions</h1><p>Die besten verfügbaren Picks für deine tägliche Sorare-Mission – kostenlos, ohne Zusatz-API oder Datenbank.</p></div>
+            <div><span className="section-kicker">NEON / DAILY MISSIONS · V3.9.2</span><h1>⚡ Daily Missions</h1><p>Die besten verfügbaren Picks für deine tägliche Sorare-Mission – kostenlos, ohne Zusatz-API oder Datenbank.</p></div>
             <span className="v37-mission-coverage">{players.length.toLocaleString("de-DE")} Spieler geladen · {sport==="nba"?"NBA":"Fußball"}</span>
           </div>
           <div className="v37-mission-scope">
