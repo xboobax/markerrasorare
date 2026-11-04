@@ -4,7 +4,7 @@ const {parseSorareBonuses,bestOwnedBonusByPlayer,selectedCardBonus,safeCollectio
 const {cardsForPlayer,chooseCardAsset}=require('../.test-build/lib/lineup-v29');
 const one=parseSorareBonuses([{key:'xp',title:'XP Bonus',bonusBasisPoints:700},{key:'season',title:'In-Season',bonusBasisPoints:500},{key:'collection',title:'Collection',bonusBasisPoints:200}]);
 assert.equal(one.bonusPercent,14);assert.equal(one.bonusDetails.length,3);
-assert.equal(parseSorareBonuses([]).bonusPercent,0,'Zero is a confirmed official score');
+assert.equal(parseSorareBonuses([]).bonusPercent,null,'Empty bonuses without competition context are unknown, not zero');
 assert.equal(parseSorareBonuses(null).bonusPercent,null,'No API bonus data is not zero');
 assert.equal(parseSorareBonuses([{bonusBasisPoints:NaN,key:'xp'}]).bonusPercent,null);
 assert.equal(parseSorareBonuses([{bonusBasisPoints:-1,key:'xp'}]).bonusPercent,null);
@@ -30,7 +30,7 @@ assert.equal(safeCollection(col,'user').cards.length,4);
 const route=fs.readFileSync('app/api/collection/route.ts','utf8');
 assert.match(route,/bonuses\s*\{\s*key\s+title\s+bonusBasisPoints\s*\}/);
 assert.match(route,/grade/);
-assert.match(route,/parseSorareBonuses\(c\.bonuses\)/);
+assert.match(route,/parseSorareCardBonus\(c\.bonuses,c\.powerBreakdown\)/);
 assert.match(route,/ownedByMe:\s*true/);
 const dashboard=fs.readFileSync('app/components/arcade-dashboard.tsx','utf8');
 assert.match(dashboard,/bonusPercent:\s*effectiveCardStore\[p\.id\]\?\.bonusPercent/);

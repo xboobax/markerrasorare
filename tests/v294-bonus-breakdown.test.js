@@ -1,0 +1,36 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const {parseSorareCardBonus,parseSorareBonuses,safeCollection,bestOwnedBonusByPlayer,selectedCardBonus}=require('../.test-build/lib/my-collection');
+const power=(xp,season,collection,scarcity=0)=>({xpBasisPoints:xp,seasonBasisPoints:season,collectionBasisPoints:collection,scarcityBasisPoints:scarcity,specialEditionCardsBasisPoints:0,fidelityBasisPoints:0,otherBonusBasisPoints:0});
+// Crucial regression: GraphQL may legitimately send [] with no tournament selected.
+assert.equal(parseSorareBonuses([]).bonusPercent,null);
+const nba=parseSorareCardBonus([],power(500,500,200));
+assert.equal(nba.bonusPercent,12);
+assert.deepEqual(nba.bonusDetails.map(v=>v.title),['XP','Saison','Collection']);
+const football=parseSorareCardBonus([],power(700,500,0,500));
+assert.equal(football.bonusPercent,17);
+assert.equal(parseSorareCardBonus([],power(0,0,0)).bonusPercent,null,'All-zero default breakdown without explicit bonus evidence is unknown');
+assert.equal(parseSorareCardBonus([{key:'xp',title:'XP',bonusBasisPoints:0}],power(0,0,0)).bonusPercent,0,'Explicit zero item remains valid');
+assert.equal(parseSorareCardBonus([{key:'captain',title:'Captain',bonusBasisPoints:5000}],power(0,0,0)).bonusPercent,null,'Captain is not a card bonus');
+assert.equal(parseSorareCardBonus([],power(-1,500,0)).bonusPercent,null,'Invalid breakdown not silently fixed');
+assert.equal(parseSorareCardBonus(null,null).bonusPercent,null);
+assert.equal(parseSorareCardBonus([],power(1000,500,300,5000)).bonusPercent,null,'Unreasonable sum is not silently clipped');
+// Old V2.9.3 cached data must never keep the misleading fake verified 0%.
+const oldCard={assetId:'a',slug:'a',sport:'NBA',playerSlug:'player',playerName:'P',rarity:'limited',seasonYear:2026,serialNumber:1,bonusPercent:0,bonusDetails:[],grade:6};
+const old=safeCollection({slug:'user',complete:true,cards:[oldCard],syncedAt:'y'},'user');
+assert.equal(old.cards[0].bonusPercent,null);
+assert.equal(old.cards[0].assetId,'a');
+assert.equal(bestOwnedBonusByPlayer(old,'nba').player,undefined);
+const fresh=safeCollection({slug:'user',complete:true,bonusVersion:2,cards:[{...oldCard,bonusPercent:11}],syncedAt:'y'},'user');
+assert.equal(fresh.cards[0].bonusPercent,11);
+assert.equal(bestOwnedBonusByPlayer(fresh,'nba').player,11);
+assert.equal(selectedCardBonus(fresh.cards[0],6).percent,11);
+const route=fs.readFileSync('app/api/collection/route.ts','utf8');
+assert.match(route,/powerBreakdown\s*\{\s*xpBasisPoints\s+seasonBasisPoints\s+collectionBasisPoints/);
+assert.match(route,/parseSorareCardBonus\(c\.bonuses,c\.powerBreakdown\)/);
+assert.match(route,/ownedByMe: true/);
+const ui=fs.readFileSync('app/components/my-sorare-collection.tsx','utf8');
+assert.match(ui,/bonusVersion:2/);
+const workspace=fs.readFileSync('app/components/builder-workspace.tsx','utf8');
+assert.match(workspace,/some\(c=>typeof c\.bonusPercent==="number"\)\?"· Sorare"/);
+console.log('V2.9.4 bonus breakdown + old-cache invalidation + NBA/football safety: OK');
