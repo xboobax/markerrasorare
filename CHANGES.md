@@ -1,3 +1,11 @@
+## V3.2.0 – NBA Stars Optimizer 2.1
+
+- Einstellbare Lineup Diversity: 1 / 2 (Standard) / 3 andere Spieler.
+- Echte Überlappungsbeschränkung im NBA-DP-Optimizer und Pairwise-Prüfung der Profilvarianten.
+- Stärkere Safe- und Ceiling-Strategieziele mit 90-%-Qualitätsgrenze für Alternativen.
+- Direkte Anzeige von Prognoseverlust, erreichten Spielerwechseln und möglichen Abweichungswarnungen.
+- Keine Änderungen am Fußball-Optimizer oder an manuellen Teams. Siehe `UPDATE_V3_2_NBA_STARS_DIVERSITY_DE.md`.
+
 ## V3.1.1 — Vercel TypeScript Build-Fix
 
 - Behebt einen `Cannot find name 'p'`-Fehler in `app/components/arcade-dashboard.tsx` (Zeile 515), indem der Player-Reuse-Zähler die gültige Schleifenvariable `pick` verwendet.

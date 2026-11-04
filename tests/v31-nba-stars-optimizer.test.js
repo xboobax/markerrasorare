@@ -70,7 +70,7 @@ const unscouted=buildNbaStarsOptimizer(base.filter(c=>c.player.id!=='eliteA'),op
 assert.equal(assessNbaStarsLineup(unscouted.pools.max[0]).matchupKnown,0);
 assert.equal(assessNbaStarsLineup(unscouted.pools.max[0]).matchupPercentAverage,null);
 const ui=fs.readFileSync('app/components/arcade-dashboard.tsx','utf8');
-for(const part of ['NBA Stars Optimizer 2.0','nba31-panel','Star Efficiency','Matchup bekannt','NBA_STARS_MODES','nbaProfileLines','buildNbaStarsOptimizer'])assert.ok(ui.includes(part),part);
+for(const part of ['NBA Stars Optimizer 2.1','nba31-panel','Star Efficiency','Matchup bekannt','NBA_STARS_MODES','nbaProfileLines','buildNbaStarsOptimizer'])assert.ok(ui.includes(part),part);
 assert.ok(ui.includes('usage.set(pick.player.id,(usage.get(pick.player.id)??0)+1)'), 'V3.1.1: NBA multi-team reuse counter must refer to pick, not an undefined p');
 const css=fs.readFileSync('app/globals.css','utf8');assert.ok(css.includes('.nba31-panel'));
 console.log('V3.1: multi-objective star DP, 16-star limit, 4 NBA profiles, distinctive variants, value floor, matchup coverage, risk, locks, exclusions, injuries, min/Q80, no captain and UI OK');

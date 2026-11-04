@@ -1381,3 +1381,23 @@ body{background:#030407}
 @media (max-width:760px){.nba31-modes,.nba31-variants,.nba31-metrics {grid-template-columns:repeat(2,minmax(0,1fr))}.nba31-heading {flex-wrap:wrap}.nba31-panel{padding:14px}}
 .nba31-target {font-size:11px;color:#c6b6f0;background:#1c1927;border:1px solid #42335a;padding:8px 12px;border-radius:9px;font-weight:750;margin:0 0 8px}
 .nba31-target.active {background:#382153;color:white;border-color:#b18af5}
+
+/* V3.2 – NBA Stars Optimizer 2.1: selectable, measurable lineup diversity. */
+.nba32-diversity{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;background:#0c0c15;border:1px solid #322a47;border-radius:12px;padding:13px;margin:12px 0}
+.nba32-diversity>div:first-child{display:flex;flex-direction:column;gap:3px}
+.nba32-diversity strong{font-size:13px;color:#e9deff}
+.nba32-diversity span{font-size:11px;color:#a99fbf;line-height:1.5}
+.nba32-diversity-buttons{display:flex;gap:6px;flex-wrap:wrap}
+.nba32-diversity-buttons button{border:1px solid #45345e;background:#191423;border-radius:9px;padding:9px 10px;color:#c5b9df;cursor:pointer;font-size:11px;font-weight:800}
+.nba32-diversity-buttons button:hover{border-color:#b293f5}
+.nba32-diversity-buttons button.active{background:#43256b;color:#fff;border-color:#b78dfc}
+.nba31-variants button small.nba32-meets{color:#9fe4bc;line-height:1.5}
+.nba31-variants button small.nba32-unmet{color:#ffbf93;line-height:1.5}
+.nba31-variants button small.nba32-reference{color:#bbb1d1;line-height:1.5}
+.nba31-variants button small span{color:inherit}
+.nba32-warning{margin:10px 0;color:#ffc99b;background:#291b18;border:1px solid #6b4934;border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.5}
+.nba32-current{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#171127;border:1px solid #4e3b7a;border-radius:10px;padding:11px 12px;margin:12px 0;color:#d7c5ff}
+.nba32-current span{font-size:11px;font-weight:700}
+.nba32-current strong{font-size:17px;color:#fff}
+.nba32-current small{font-size:11px;color:#aaa1bd}
+@media(max-width:760px){.nba32-diversity-buttons{width:100%}.nba32-diversity-buttons button{flex:1}.nba31-variants button{word-break:normal}}
