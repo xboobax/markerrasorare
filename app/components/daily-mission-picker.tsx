@@ -62,7 +62,7 @@ export default function DailyMissionPicker({sport,players,nbaSchedule,ownedIds,e
       <button type="button" onClick={()=>setNow(new Date())}>↻ Aktualisieren</button>
       <small>{windowMode==='next24'?'Ab jetzt bis +24h':labelDay} · {scope}</small>
     </div>
-    {ownedOnly&&!verifiedOwned&&<p className="v36-mission-warning">„Meine Karten“ basiert aktuell auf lokalen Markierungen. Für verifizierten Besitz die Sorare-Sammlung synchronisieren.</p>}
+    {ownedOnly&&!verifiedOwned&&<p className="v36-mission-warning">{sport==='football'?'Fußball: Das aktuelle Sorare-Set ist noch nicht verifiziert. Bitte die Sammlung synchronisieren. Bis dahin werden keine Karten aus alten Sets als eigene Karten gewertet.':'„Meine Karten“ basiert aktuell auf lokalen Markierungen. Für verifizierten Besitz die Sorare-Sammlung synchronisieren.'}</p>}
     {sport==='nba'&&nbaSchedule.status!=='available'&&<p className="v36-mission-warning">Der NBA-Spielplan ist nicht bestätigt verfügbar. Ohne verifizierte Ansetzungen werden keine Picks ausgegeben.</p>}
     {ranked.length>0&&<div className="v37-mission-spotlight"><strong>✦ Top Pick {sport==='nba'?'für NBA':'aus dem aktuellen Pool'}</strong><span>{ranked[0].player.name} · {ranked[0].player.team} · Ranking {Math.round(ranked[0].rankIndex)}/100</span><small>Nur Ranking innerhalb des geladenen Pools – keine garantierte Missions-Erfüllung.</small></div>}
     <div className="v36-mission-groups">

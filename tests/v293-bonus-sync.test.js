@@ -15,7 +15,7 @@ const a={assetId:'a',slug:'a',sport:'NBA',playerSlug:'nba-player',playerName:'N'
 const b={...a,assetId:'b',slug:'b',rarity:'rare',bonusPercent:13,grade:8};
 const c={...a,assetId:'c',slug:'c',sport:'FOOTBALL',playerSlug:'foot-player',bonusPercent:17};
 const d={...a,assetId:'d',slug:'d',sport:'FOOTBALL',playerSlug:'foot-player',bonusPercent:null};
-const col={...base,cards:[a,b,c,d]};
+const col={...base,activeFootballSet:{slug:'divination',name:'Divination'},cards:[a,b,{...c,cardSetSlug:'divination'},{...d,cardSetSlug:'divination'}]};
 assert.equal(bestOwnedBonusByPlayer(col,'nba')['nba-player'],13);
 assert.equal(bestOwnedBonusByPlayer(col,'football')['foot-player'],17);
 assert.deepEqual(bestOwnedBonusByPlayer({...col,complete:false},'football'),{});

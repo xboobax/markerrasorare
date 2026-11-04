@@ -1,9 +1,9 @@
 const assert=require('node:assert/strict');
 const {collectionKey,safeCollection,ownedSlugs,mergeVerifiedOwned}=require('../.test-build/lib/my-collection.js');
-const owned={slug:'sorare-user',syncedAt:'2026-11-04T12:00:00Z',complete:true,cards:[
+const owned={slug:'sorare-user',syncedAt:'2026-11-04T12:00:00Z',complete:true,activeFootballSet:{slug:'divination',name:'Divination'},cards:[
  {assetId:'1',slug:'nba-1',sport:'NBA',rarity:'LIMITED',seasonYear:2026,serialNumber:12,playerSlug:'luka-doncic',playerName:'Luka Doncic'},
  {assetId:'2',slug:'nba-2',sport:'NBA',rarity:'RARE',seasonYear:2025,serialNumber:9,playerSlug:'luka-doncic',playerName:'Luka Doncic'},
- {assetId:'3',slug:'football-1',sport:'FOOTBALL',rarity:'LIMITED',seasonYear:2026,serialNumber:4,playerSlug:'manuel-neuer',playerName:'Manuel Neuer'}
+ {assetId:'3',slug:'football-1',sport:'FOOTBALL',rarity:'LIMITED',seasonYear:2026,serialNumber:4,playerSlug:'manuel-neuer',playerName:'Manuel Neuer',cardSetSlug:'divination'}
 ]};
 assert.equal(collectionKey('sorare-user'),'markerras.sorare.verified-collection.v1.sorare-user');
 assert.equal(safeCollection(owned,'other-user'),null,'A cached collection must belong to the authenticated user');

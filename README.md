@@ -1,4 +1,16 @@
-# Neon Builder Pro V3.7 — Daily Mission Intelligence
+## V3.7.1: Aktuelles Fußball-Set beim Kartensync
+
+Die Fußball-Kartensammlung nutzt jetzt **`cardSet.currentSet(sport: FOOTBALL)`** und
+**`cardSet.slug`** aus der Sorare-GraphQL-API. Nur Karten mit exakt gleicher
+Set-ID erscheinen als verifizierte eigene Karten in Fußball-Builder, Sammlung
+und Daily Missions (bei aktivem „Nur meine Karten“). Alte Hyperglitch- und
+Pro-Karten werden nicht als Divination-Karten ausgegeben. Der Sync speichert
+weiterhin die Originalkartendaten lokal, ohne historische Karten zu löschen.
+NBA wird nicht eingeschränkt. Nach dem Update bitte **Sammlung → Jetzt
+synchronisieren** anklicken. Bei abgebrochenem Sync bleiben zuvor gespeicherte
+Daten erhalten, sie gelten jedoch nicht als für das aktuelle Set verifiziert.
+
+# Neon Builder Pro V3.7.1 — Current Set Collection Sync
 
 **Neu:** Vier kompakte Tabs (Builder, Spieler, Analyse, Sammlung), Sticky Lineup, Quick Filters, Smart Swap, Lineup Doctor, Team Battle mit Spieler-Differenzen, lokale Optimierungs-Presets und eine schlankere Spieler-Tabelle. Fußball- und NBA-Regeln bleiben erhalten. **Keine Upstash-Pflicht; Cron-Jobs standardmäßig deaktiviert.**
 

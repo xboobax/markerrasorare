@@ -13,7 +13,7 @@ import type {OpponentRatings} from "@/lib/matchups";
 import type {Forecast,Sport} from "@/lib/model";
 import {availabilityLabels,isConfirmedOut,type AvailabilityReport} from "@/lib/availability";
 import {useAvailability} from "@/app/hooks/use-availability";
-import {isInSelectedCollection,selectedCardBonus,type OwnedCollection} from "@/lib/my-collection";
+import {activeCollectionCards,isInSelectedCollection,selectedCardBonus,type OwnedCollection} from "@/lib/my-collection";
 import {captainForTeam,captainLineup,captainExtra,smartCaptain,swapPreview,cardsForPlayer,chooseCardAsset,columnsForPreset,columnsLabels,type ColumnKey,type CaptainMode} from "@/lib/lineup-v29";
 import {playsOnBerlinDay,offsetBerlinDay,expectedFloor,expectedCeiling,expectedUpside,comparePoolValues,type MatchdayHorizon,type PoolSort} from "@/lib/builder-pool";
 import {nbaValueScore,topNbaValuePlayers,type NbaValueMode} from "@/lib/builder-value";
@@ -113,12 +113,13 @@ export default function BuilderWorkspace({sport,league,availability,availability
   };
   const excludedByInjury=useMemo(()=>Object.entries(availabilityById).filter(([,r])=>isConfirmedOut(r)).map(([id])=>id),[availabilityById]);
   const availableAt=availability.data?.fetchedAt?new Date(availability.data.fetchedAt).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"}):"—";
+  const syncedCards=useMemo(()=>activeCollectionCards(verifiedCollection,sport),[verifiedCollection,sport]);
   const cards:CardInput[]=useMemo(()=>players.map(player=>({player,owned:cardStore[player.id]?.owned===true,
     stars:cardStore[player.id]?.stars??null,bonusPercent:cardStore[player.id]?.bonusPercent??0})),[players,cardStore]);
   const favoriteSet=useMemo(()=>new Set(favorites),[favorites]);
   const byId=useMemo(()=>new Map(players.map(player=>[player.id,player])),[players]);
   const teamCards=(team:WorkspaceTeam):CardInput[]=>cards.map(c=>{
-    const available=cardsForPlayer(verifiedCollection?.cards,sport,c.player.id);
+    const available=cardsForPlayer(syncedCards,sport,c.player.id);
     const asset=chooseCardAsset(available,team.assetIds?.[c.player.id]);
     const customBonus=asset?team.assetBonuses?.[asset.assetId]:undefined;
     return {...c,bonusPercent:selectedCardBonus(asset,customBonus,asset&&cardStore[c.player.id]?.bonusSource==="sorare"?0:c.bonusPercent??0).percent};
@@ -497,13 +498,13 @@ export default function BuilderWorkspace({sport,league,availability,availability
                           :<><MiniStat label="Einsatz*" value={`${short(player.playProb*100)}%`} tone={player.playProb<.65?"warn":"good"}/><MiniStat label="L5" value={player.last5Avg===null?"—":short(player.last5Avg)}/><MiniStat label="Bonus" tone="star" value={`+${base.slots[index]?.bonusPercent??0}%`}/></>}
                       </div>
                       <div className="v23-mini-grid second"><MiniStat label="Prognose" value={pick?fmt(pick.projectedScore):"—"}/><MiniStat label="Floor" value={pick?fmt(pick.floorScore):"—"}/><MiniStat label="Ceiling" value={pick?fmt(pick.ceilingScore):"—"}/></div>
-                      {sport==="nba"&&<span className="v293-sorare-bonus">Kartenbonus +{fmt(base.slots[index]?.bonusPercent??0)} % {cardsForPlayer(verifiedCollection?.cards,sport,player.id).some(c=>typeof c.bonusPercent==="number")?"· Sorare":"· Manuell / Bonus nicht verfügbar"}</span>}
+                      {sport==="nba"&&<span className="v293-sorare-bonus">Kartenbonus +{fmt(base.slots[index]?.bonusPercent??0)} % {cardsForPlayer(syncedCards,sport,player.id).some(c=>typeof c.bonusPercent==="number")?"· Sorare":"· Manuell / Bonus nicht verfügbar"}</span>}
                       <Bars player={player} compact/>
                       {sport==="football"&&captain===player.id&&<span className="v29-captain-glow">👑 CAPTAIN · +50 % · +{fmt(captainExtra(base,captain))} PS</span>}
-                      {verifiedOwnedReady&&cardsForPlayer(verifiedCollection?.cards,sport,player.id).length>0&&<label className="v29-asset-select">Meine Karte<select aria-label={`Sorare-Karte von ${player.name} wählen`} value={chooseCardAsset(cardsForPlayer(verifiedCollection?.cards,sport,player.id),team.assetIds?.[player.id])?.assetId??""} onChange={e=>changeTeam(team.id,t=>({...t,assetIds:{...t.assetIds,[player.id]:e.target.value}}))}>
-                        {cardsForPlayer(verifiedCollection?.cards,sport,player.id).map(asset=><option key={asset.assetId} value={asset.assetId}>{asset.rarity} · {asset.seasonYear??"?"} · #{asset.serialNumber??"?"}</option>)}
+                      {verifiedOwnedReady&&cardsForPlayer(syncedCards,sport,player.id).length>0&&<label className="v29-asset-select">Meine Karte<select aria-label={`Sorare-Karte von ${player.name} wählen`} value={chooseCardAsset(cardsForPlayer(syncedCards,sport,player.id),team.assetIds?.[player.id])?.assetId??""} onChange={e=>changeTeam(team.id,t=>({...t,assetIds:{...t.assetIds,[player.id]:e.target.value}}))}>
+                        {cardsForPlayer(syncedCards,sport,player.id).map(asset=><option key={asset.assetId} value={asset.assetId}>{asset.rarity} · {asset.seasonYear??"?"} · #{asset.serialNumber??"?"}</option>)}
                       </select>{(()=>{
-                        const asset=chooseCardAsset(cardsForPlayer(verifiedCollection?.cards,sport,player.id),team.assetIds?.[player.id]);
+                        const asset=chooseCardAsset(cardsForPlayer(syncedCards,sport,player.id),team.assetIds?.[player.id]);
                         const fallback=asset&&cardStore[player.id]?.bonusSource==="sorare"?0:cardStore[player.id]?.bonusPercent??0;
                         const bonus=selectedCardBonus(asset,asset?team.assetBonuses?.[asset.assetId]:undefined,fallback);
                         return bonus.source==="sorare"?<span className="v293-sorare-bonus" title={(asset?.bonusDetails??[]).map(b=>`${b.title}: +${b.bonusBasisPoints/100}%`).join(" · ")||"Sorare meldet für diese Karte keinen zusätzlichen Bonus."}>✓ Sorare +{fmt(bonus.percent)} % · Level {asset?.grade??"—"}</span>
@@ -610,7 +611,7 @@ export default function BuilderWorkspace({sport,league,availability,availability
           <Bars player={intelPlayer}/><p><AvailabilityBadge report={availabilityById[intelPlayer.id]}/> <MatchupPill opponent={intelPlayer.opponent} ratings={matchupRatings} sport={sport}/></p>
           {sport==="football"&&<p>👑 Captain-Potenzial: <b>+{fmt(intelPlayer.weighted*.5)} PS</b> bei 50 % (ohne weitere Kartenboni). Konkrete Captain-Wahl im Team vornehmen.</p>}
           <p>Kartenbonus: <strong>+{fmt(cardStore[intelPlayer.id]?.bonusPercent??0)} %</strong> {cardStore[intelPlayer.id]?.bonusSource==="sorare"?"· von Sorare synchronisiert (beste verfügbare Karte)":"· manuelle Eingabe oder Fallback"} · {gameDate(intelPlayer)?`Nächstes Spiel am ${gameDate(intelPlayer)!.toLocaleDateString("de-DE",{timeZone:"Europe/Berlin"})}`:"Kein bestätigter Termin"}. Der tatsächliche Bonus kann vom ausgewählten Wettbewerb abhängen.</p>
-          {verifiedOwnedReady&&<p>Eigene Sorare-Karten: <b>{cardsForPlayer(verifiedCollection?.cards,sport,intelPlayer.id).length}</b> {cardsForPlayer(verifiedCollection?.cards,sport,intelPlayer.id).map(c=>`${c.rarity} ${c.seasonYear??""} #${c.serialNumber??"?"}`).join(" · ")}</p>}
+          {verifiedOwnedReady&&<p>Eigene Sorare-Karten: <b>{cardsForPlayer(syncedCards,sport,intelPlayer.id).length}</b> {cardsForPlayer(syncedCards,sport,intelPlayer.id).map(c=>`${c.rarity} ${c.seasonYear??""} #${c.serialNumber??"?"}`).join(" · ")}</p>}
           <div className="v29-intel-actions"><button type="button" onClick={()=>select(intelPlayer.id)}>+ Zum aktiven Team</button><button type="button" onClick={()=>onOpenProfile(intelPlayer.id)}>Ausführliches Profil ↗</button></div></section>}
         <div className="v23-table-scroll"><table className="v23-roster-table"><thead><tr><th>Aktion</th>{showCol("date")&&<th>Datum</th>}<th>Spieler / Team</th>{showCol("status")&&<th>Verfügbarkeit</th>}{sport==="nba"&&showCol("games")&&<th>Spiele*</th>}{showCol("matchup")&&<th>Gegnerstärke</th>}{showCol("form")&&<th>Form (letzte Scores)</th>}{showCol("play")&&<th>Einsatz*</th>}{showCol("l5")&&<th>L5</th>}{showCol("l10")&&<th>L10</th>}{showCol("psRaw")&&<th title="Erwartung ohne Karten-/Captain-Bonus"><button type="button" className="v30-th-sort" onClick={()=>{setSort("raw");setSortDescending(sort!=="raw"||!sortDescending);}}>PS Raw ⇅</button></th>}{showCol("projection")&&<th>PS Standard</th>}{showCol("psBonus")&&<th>PS mit Karte</th>}{showCol("q80")&&<th title="Experimentelle 80%-Modellquantile; nicht kalibriert"><button type="button" className="v30-th-sort" onClick={()=>{setSort("q80");setSortDescending(sort!=="q80"||!sortDescending);}}>PS Q80* ⇅</button></th>}{showCol("q80Bonus")&&<th>Q80 mit Karte*</th>}{showCol("historical70")&&<th title="Historische Trefferquote 70+ aus mindestens 8 Einzelscores"><button type="button" className="v30-th-sort" onClick={()=>{setSort("historical70");setSortDescending(sort!=="historical70"||!sortDescending);}}>70+ historisch ⇅</button></th>}{showCol("p70")&&<th title="P70 noch nicht kalibriert">P70 %</th>}{showCol("p80")&&<th title="P80 noch nicht kalibriert">P80 %</th>}{showCol("startPct")&&<th title="Zuverlässige Startelfwahrscheinlichkeit nicht vorhanden">Start %</th>}{showCol("teamXg")&&<th title="Verifizierte Team-xG-Daten fehlen">Team xG</th>}{showCol("csPct")&&<th title="Clean-Sheet-Wahrscheinlichkeit nicht kalibriert">CS %</th>}{showCol("gaPct")&&<th title="G/A-Wahrscheinlichkeit nicht kalibriert">G/A %</th>}{showCol("winPct")&&<th title="Siegeswahrscheinlichkeit nicht kalibriert">WIN %</th>}{showCol("xga")&&<th title="Verifizierte xGA-Daten fehlen">xGA</th>}{showCol("floor")&&<th>Floor</th>}{showCol("ceiling")&&<th>Ceiling</th>}{sport==="nba"&&<>{showCol("stars")&&<th>Sterne</th>}{(showCol("value")||valueFilter!=="all")&&<th>{valueFilter==="floor"?"Floor/★":valueFilter==="ceiling"?"Ceiling/★":"Wert/★"}</th>}</>}{showCol("bonus")&&<th>Kartenbonus</th>}{showCol("card")&&<th>Karte</th>}</tr></thead>
           <tbody>{sortedPlayers.slice(0,showCount).map(p=>{

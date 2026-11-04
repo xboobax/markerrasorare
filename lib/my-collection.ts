@@ -2,7 +2,9 @@
 export type SorareBonusPart={key:string;title:string;bonusBasisPoints:number};
 export type OwnedSorareCard={assetId:string;slug:string;sport:"NBA"|"FOOTBALL";rarity:string;seasonYear:number|null;serialNumber:number|null;playerSlug:string;playerName:string;
   /** Sorare-reported card bonuses without the separate football captain modifier. Null means missing data. */
-  bonusPercent?:number|null;bonusDetails?:SorareBonusPart[];grade?:number|null};
+  bonusPercent?:number|null;bonusDetails?:SorareBonusPart[];grade?:number|null;
+  /** Exact Sorare Set identifier. Pro cards and legacy cached cards have no Set. */
+  cardSetSlug?:string|null;cardSetName?:string|null};
 /** Independent, per-card values returned by Sorare powerBreakdown. */
 export type SorarePowerBreakdown={xpBasisPoints?:unknown;seasonBasisPoints?:unknown;collectionBasisPoints?:unknown;scarcityBasisPoints?:unknown;specialEditionCardsBasisPoints?:unknown;fidelityBasisPoints?:unknown;otherBonusBasisPoints?:unknown};
 /** Basis points are hundredths of a percent (100 bp = 1%). Never infer bonuses from rarity alone. */
@@ -57,10 +59,9 @@ export function parseSorareCardBonus(bonuses:unknown,power:unknown):{bonusPercen
 export function bestOwnedBonusByPlayer(collection:OwnedCollection|null,sport:"nba"|"football"){
   const result:Record<string,number>={};
   if(collection?.complete!==true)return result;
-  const expectedSport=sport==="nba"?"NBA":"FOOTBALL";
-  for(const card of collection.cards){
+  for(const card of activeCollectionCards(collection,sport)){
     const bonus=card.bonusPercent;
-    if(card.sport!==expectedSport||!card.playerSlug||typeof bonus!=="number"||!Number.isFinite(bonus)||bonus<0||bonus>50)continue;
+    if(!card.playerSlug||typeof bonus!=="number"||!Number.isFinite(bonus)||bonus<0||bonus>50)continue;
     result[card.playerSlug]=Math.max(result[card.playerSlug]??0,bonus);
   }
   return result;
@@ -72,7 +73,22 @@ export function selectedCardBonus(card:OwnedSorareCard|null,manual:number|undefi
   return {percent:playerFallback,source:"manual" as const};
 }
 
-export type OwnedCollection={slug:string;cards:OwnedSorareCard[];syncedAt:string;complete:boolean;bonusVersion?:number};
+export type OwnedCollection={slug:string;cards:OwnedSorareCard[];syncedAt:string;complete:boolean;bonusVersion?:number;
+  /** The active Football Set is taken from Sorare cardSet.currentSet, not a hard-coded date. */
+  activeFootballSet?:{slug:string;name:string}|null;};
+/** Only cards explicitly tagged with the current Football Set are eligible for Football collection usage.
+ * Missing Set metadata (older cache / Pro cards) FAILS CLOSED. NBA is unchanged.
+ * The stored collection keeps historical cards to avoid accidental data loss.
+ */
+export function activeCollectionCards(collection:OwnedCollection|null,sport:"nba"|"football"):OwnedSorareCard[]{
+  if(!collection?.complete)return [];
+  const expectedSport=sport==="nba"?"NBA":"FOOTBALL";
+  if(sport==="nba")return collection.cards.filter(card=>card.sport===expectedSport);
+  const slug=collection.activeFootballSet?.slug;
+  if(!slug)return [];
+  return collection.cards.filter(card=>card.sport===expectedSport&&card.cardSetSlug===slug);
+}
+export function activeFootballSetReady(collection:OwnedCollection|null){return collection?.complete===true&&!!collection.activeFootballSet?.slug;}
 export function collectionKey(slug:string){return `markerras.sorare.verified-collection.v1.${slug}`;}
 /** Preference is independent for NBA and football. It never changes or deletes saved cards. */
 export function ownedViewKey(sport:"nba"|"football"){return `markerras.sorare.only-my-cards.v1.${sport}`;}
@@ -81,7 +97,7 @@ export function isInSelectedCollection(id:string,store:Record<string,{owned?:boo
   return !onlyMine||(verifiedReady&&store[id]?.owned===true);
 }
 export function ownedSlugs(collection:OwnedCollection,sport:"nba"|"football"){
-  return new Set(collection.cards.filter(card=>card.sport===(sport==="nba"?"NBA":"FOOTBALL")).map(card=>card.playerSlug));
+  return new Set(activeCollectionCards(collection,sport).map(card=>card.playerSlug));
 }
 export function mergeVerifiedOwned<T extends {owned?:boolean}>(manual:Record<string,T>,ids:Iterable<string>,verifiedComplete:boolean){
   if(!verifiedComplete)return manual;
@@ -98,5 +114,10 @@ export function safeCollection(input:unknown,expectedSlug:string):OwnedCollectio
   // V2.9.3 misread an empty GraphQL bonus list as confirmed 0%. Keep the
   // cached ownership but invalidate those untrusted bonus estimates.
   const cards=item.bonusVersion===2?item.cards:item.cards.map(c=>({...c,bonusPercent:null,bonusDetails:[]}));
-  return {slug:item.slug,cards,syncedAt:typeof item.syncedAt==="string"?item.syncedAt:"",complete:item.complete===true,bonusVersion:item.bonusVersion===2?2:undefined};
+  const set=item.activeFootballSet;
+  const activeFootballSet=set&&typeof set.slug==="string"&&set.slug.trim()&&typeof set.name==="string"
+    ?{slug:set.slug,name:set.name}:null;
+  // A legacy cache without activeSet metadata remains readable, but no old football card
+  // can be presented as current-set ownership before a fresh, authenticated sync.
+  return {slug:item.slug,cards,syncedAt:typeof item.syncedAt==="string"?item.syncedAt:"",complete:item.complete===true,bonusVersion:item.bonusVersion===2?2:undefined,activeFootballSet};
 }

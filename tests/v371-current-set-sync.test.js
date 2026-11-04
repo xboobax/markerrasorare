@@ -1,0 +1,35 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const {activeCollectionCards,activeFootballSetReady,ownedSlugs,bestOwnedBonusByPlayer,safeCollection,mergeVerifiedOwned}=require('../.test-build/lib/my-collection');
+const mk=(assetId,sport,slug,cardSetSlug,bonusPercent=0)=>({assetId,slug:assetId,sport,rarity:'common',seasonYear:2026,serialNumber:null,playerSlug:slug,playerName:slug,cardSetSlug,bonusPercent});
+const source={slug:'user',syncedAt:'2026-11-04T00:00:00Z',bonusVersion:2,complete:true,activeFootballSet:{slug:'divination',name:'Divination'},cards:[
+ mk('old','FOOTBALL','old-player','hyperglitch',30),mk('new','FOOTBALL','new-player','divination',5),mk('old-but-duplicate','FOOTBALL','new-player','hyperglitch',30),mk('unknown','FOOTBALL','unknown-player',null,30),mk('pro','FOOTBALL','pro-player',null,30),mk('nba','NBA','nba-player','stellar',10)
+]};
+const col=safeCollection(source,'user');
+assert.equal(activeFootballSetReady(col),true);
+assert.deepEqual(activeCollectionCards(col,'football').map(c=>c.assetId),['new']);
+assert.deepEqual([...ownedSlugs(col,'football')],['new-player']);
+assert.equal(bestOwnedBonusByPlayer(col,'football')['new-player'],5,'Expired card bonus must not override active-set bonus');
+assert.deepEqual(Object.keys(bestOwnedBonusByPlayer(col,'football')),['new-player']);
+assert.deepEqual(activeCollectionCards(col,'nba').map(c=>c.assetId),['nba'],'NBA remains untouched');
+assert.equal(bestOwnedBonusByPlayer(col,'nba')['nba-player'],10);
+const merged=mergeVerifiedOwned({'old-player':{owned:true},'new-player':{owned:false}},ownedSlugs(col,'football'),true);
+assert.equal(merged['old-player'].owned,false,'Older set players must not be considered owned');
+assert.equal(merged['new-player'].owned,true);
+const switched={...col,activeFootballSet:{slug:'future-set',name:'Future Set'}};
+assert.deepEqual([...ownedSlugs(switched,'football')],[],'Future set changes must be automatic');
+assert.deepEqual([...ownedSlugs(safeCollection({...source,activeFootballSet:undefined},'user'),'football')],[],'Legacy cached cards fail closed');
+assert.deepEqual([...ownedSlugs({...source,complete:false},'football')],[],'Partial sync cannot verify ownership');
+assert.deepEqual(activeCollectionCards({...source,activeFootballSet:null},'football'),[],'No active set means no verified football cards');
+const route=fs.readFileSync('app/api/collection/route.ts','utf8');
+assert.match(route,/cardSet\s*\{\s*currentSet\(sport:\s*FOOTBALL\)/);
+assert.match(route,/cardSet\s*\{\s*slug name\s*\}/);
+assert.ok(!route.includes('seasonYear===2026'),'Set identity must not rely on card season');
+const component=fs.readFileSync('app/components/my-sorare-collection.tsx','utf8');
+assert.match(component,/activeCollectionCards\(collection,sport\)/);
+assert.match(component,/complete:false/,'Cached current set requires live revalidation');
+const dashboard=fs.readFileSync('app/components/arcade-dashboard.tsx','utf8');
+assert.match(dashboard,/bonusSource!==\"sorare\"/,'Previously synced bonuses must be invalidated after an active-set change');
+const builder=fs.readFileSync('app/components/builder-workspace.tsx','utf8');
+assert.match(builder,/activeCollectionCards\(verifiedCollection,sport\)/);
+console.log('V3.7.1 current Football Set filtering regression tests passed');

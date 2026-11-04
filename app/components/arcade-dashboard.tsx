@@ -1,7 +1,7 @@
 "use client";
 
 import MySorareCollection from "@/app/components/my-sorare-collection";
-import {ownedSlugs,mergeVerifiedOwned,ownedViewKey,isInSelectedCollection,bestOwnedBonusByPlayer,type OwnedCollection} from "@/lib/my-collection";
+import {ownedSlugs,mergeVerifiedOwned,ownedViewKey,isInSelectedCollection,bestOwnedBonusByPlayer,activeFootballSetReady,type OwnedCollection} from "@/lib/my-collection";
 
 import Link from "next/link";
 import BuilderWorkspace from "@/app/components/builder-workspace";
@@ -141,7 +141,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const [hasForecastOnly, setHasForecastOnly] = useState(false);
   const [cardStore, setCardStore] = useState<CardStore>({});
   const [verifiedCollection,setVerifiedCollection]=useState<OwnedCollection|null>(null);
-  const verifiedOwnedReady=verifiedCollection?.complete===true;
+  const verifiedOwnedReady=verifiedCollection?.complete===true&&(sport==="nba"||activeFootballSetReady(verifiedCollection));
   const [officialStars,setOfficialStars] = useState<NbaStarRatings>({});
   const [starSync,setStarSync] = useState<{phase:"idle"|"loading"|"ready"|"error";snapshot:NbaStarSync|null;message:string}>({phase:"idle",snapshot:null,message:""});
   const starRequestSeq=useRef(0);
@@ -173,10 +173,20 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
     // Scope key is stable across renders; a changed NBA roster starts a fresh sync.
   },[sport,starScopeKey]);
   const effectiveCardStore:CardStore=useMemo(()=>{
-    const verified=verifiedCollection?.complete?ownedSlugs(verifiedCollection,sport):[];
-    const base=mergeVerifiedOwned(cardStore,verified,verifiedCollection?.complete===true);
+    const verified=verifiedOwnedReady&&verifiedCollection?ownedSlugs(verifiedCollection,sport):[];
+    const base=mergeVerifiedOwned(cardStore,verified,verifiedOwnedReady);
     const merged:CardStore={...base};
-    for(const [id,bonus] of Object.entries(bestOwnedBonusByPlayer(verifiedCollection,sport))){
+    const activeBonuses=bestOwnedBonusByPlayer(verifiedCollection,sport);
+    // A saved Sorare bonus may belong to an expired Set; it must not leak into
+    // a new Set's lineup, including for a player also present in both Sets.
+    if(sport==="football"&&verifiedOwnedReady){
+      for(const [id,card] of Object.entries(merged)){
+        if(card.bonusSource!=="sorare"||Object.prototype.hasOwnProperty.call(activeBonuses,id))continue;
+        const {bonusPercent:_oldBonus,bonusSource:_oldSource,...rest}=card;
+        merged[id]=rest;
+      }
+    }
+    for(const [id,bonus] of Object.entries(activeBonuses)){
       merged[id]={...merged[id],bonusPercent:bonus,bonusSource:"sorare"};
     }
     if(sport!=="nba"||!Object.keys(officialStars).length)return merged;
@@ -184,7 +194,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
       if(officialStarValue(stars)!==null)merged[id]={...merged[id],stars,starSource:"sorare"};
     }
     return merged;
-  },[sport,cardStore,officialStars,verifiedCollection]);
+  },[sport,cardStore,officialStars,verifiedCollection,verifiedOwnedReady]);
   const [opponentRatings, setOpponentRatings] = useState<OpponentRatings>({});
   const [loadedRatingSport, setLoadedRatingSport] = useState<Sport | null>(null);
   const [loadedSport, setLoadedSport] = useState<Sport | null>(null);
@@ -501,7 +511,12 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
     bonusPercent: effectiveCardStore[p.id]?.bonusPercent ?? 0,
   })), [players, effectiveCardStore, ownedOnly, verifiedOwnedReady]);
 
-  const dailyMissionOwnedIds=useMemo(()=>new Set(Object.entries(effectiveCardStore).filter(([,card])=>card.owned===true).map(([id])=>id)),[effectiveCardStore]);
+  const dailyMissionOwnedIds=useMemo(()=>{
+    // With no verified current Football Set, never substitute old browser flags
+    // for confirmed ownership in the Daily Mission Picker.
+    if(sport==="football"&&!verifiedOwnedReady)return new Set<string>();
+    return new Set(Object.entries(effectiveCardStore).filter(([,card])=>card.owned===true).map(([id])=>id));
+  },[effectiveCardStore,sport,verifiedOwnedReady]);
   const dailyMissionExcludedIds=useMemo(()=>new Set(excludedIds),[excludedIds]);
   const favoriteSet=useMemo(()=>new Set(watchlist),[watchlist]);
   const ownedCount = players.filter(p => effectiveCardStore[p.id]?.owned).length;
@@ -673,7 +688,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   return (
     <div className="app-shell">
       <header className="app-topbar v35-topbar">
-        <Link href={activeTab==="missions"?"/?sport=football&tab=missions":"/?sport=football"} className="brand" aria-label="Neon Builder Pro Startseite"><span className="brand-logo">N<span>◆</span></span><span className="brand-text"><strong>NEON BUILDER PRO</strong><small>V3.7 · DAILY MISSION INTELLIGENCE</small></span></Link>
+        <Link href={activeTab==="missions"?"/?sport=football&tab=missions":"/?sport=football"} className="brand" aria-label="Neon Builder Pro Startseite"><span className="brand-logo">N<span>◆</span></span><span className="brand-text"><strong>NEON BUILDER PRO</strong><small>V3.7 · DAILY MISSION INTELLIGENCE · SYNC FIX 3.7.1</small></span></Link>
         <nav className="sport-switch" aria-label="Sportart wählen"><Link href={activeTab==="missions"?"/?sport=football&tab=missions":"/?sport=football"} aria-current={sport==="football"?"page":undefined}>⚽ Fußball</Link><Link href={activeTab==="missions"?"/?sport=nba&tab=missions":"/?sport=nba"} aria-current={sport==="nba"?"page":undefined}>🏀 NBA</Link></nav>
         <span className="topbar-pill"><span className="status-dot" style={error?{background:"#d9a06f"}:undefined}/>{error?"API prüfen":players.length?`${players.length} Spieler geladen`:"Sorare verbindet"}</span>
       </header>
@@ -686,7 +701,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
         <div className="metric-grid v35-metrics" data-tab="builder">
           <div className="metric-card"><span className="metric-label">Spieler im Datensatz</span><strong>{players.length.toLocaleString("de-DE")}</strong><small>Aktuell ausgewählter Datenbereich</small></div>
           <div className="metric-card"><span className="metric-label">Mögliche Einsätze</span><strong>{hasGameCount.toLocaleString("de-DE")}</strong><small>Spielerbilder: {imageCount} von {players.length}</small></div>
-          <div className="metric-card"><span className="metric-label">Meine Karten im Spielerpool</span><strong>{ownedCount}</strong><small>{verifiedCollection?.complete?"Aus Sorare synchronisiert":"Manuell erfasst, lokal gespeichert"}</small></div>
+          <div className="metric-card"><span className="metric-label">Meine Karten im Spielerpool</span><strong>{ownedCount}</strong><small>{verifiedOwnedReady?"Aus Sorare synchronisiert":"Manuell erfasst, lokal gespeichert"}</small></div>
           <div className="metric-card"><span className="metric-label">{sport === "nba" ? "Sterne zugewiesen" : "Aktuelle Zielmarke"}</span><strong>{sport === "nba" ? ratedCount : (validTarget ? totalTarget : "—")}</strong><small>{sport === "nba" ? `${automaticStarCount} offiziell · ${manualStarCount} manuell` : "Veränderbar im Builder"}</small></div>
         </div>
 
@@ -728,7 +743,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
               {clubs.map(c=><Link className={team===c.slug?"chip active":"chip"} key={c.slug} href={makeLink({sport,league:sport==="football"?league:undefined,team:c.slug,tab:"missions"})}>{c.name}</Link>)}
             </div></details>}
           </div>
-          <DailyMissionPicker active={activeTab==="missions"} sport={sport} players={players} nbaSchedule={nbaSchedule} ownedIds={dailyMissionOwnedIds} excludedIds={dailyMissionExcludedIds} onOpenPlayer={setSelectedPlayerId} onSendToBuilder={queueManualPlayer} scope={team?clubs.find(c=>c.slug===team)?.name??team:league==='__all'?'Alle vier Fußballligen':sport==='nba'?'NBA · geladene Teams':league} verifiedOwned={verifiedCollection?.complete===true}/>
+          <DailyMissionPicker active={activeTab==="missions"} sport={sport} players={players} nbaSchedule={nbaSchedule} ownedIds={dailyMissionOwnedIds} excludedIds={dailyMissionExcludedIds} onOpenPlayer={setSelectedPlayerId} onSendToBuilder={queueManualPlayer} scope={team?clubs.find(c=>c.slug===team)?.name??team:league==='__all'?'Alle vier Fußballligen':sport==='nba'?'NBA · geladene Teams':league} verifiedOwned={verifiedOwnedReady}/>
         </section>
         <div className="v35-tab-section" data-tab="builder"><details className="v35-advanced"><summary>◷ Gameweek Center · Spielplan, Ziele und Details anzeigen</summary><GameweekCenter sport={sport} players={players} cardStore={effectiveCardStore} nbaSchedule={nbaSchedule}
           currentTarget={validTarget?totalTarget:null} onApplyTarget={applyArcadeGoal}
@@ -993,7 +1008,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
                   <button type="button" aria-pressed={card.locked === true} className={card.locked ? "active" : ""} title="Spieler fest ins Lineup aufnehmen" onClick={()=>updateCard(p.id,{locked:!card.locked,excluded:false})}>🔒 {card.locked ? "Fixiert" : "Fixieren"}</button>
                   <button type="button" aria-pressed={card.excluded === true} className={card.excluded ? "excluded" : ""} title="Spieler aus Lineups ausschließen" onClick={()=>updateCard(p.id,{excluded:!card.excluded,locked:false})}>🚫</button>
                 </div></td>
-                <td><label className="owned-checkbox" title="Diese Spielerkarte ist in meinem Bestand"><input type="checkbox" checked={effectiveCardStore[p.id]?.owned === true} disabled={verifiedCollection?.complete===true} title={verifiedCollection?.complete?"Bestand aus Sorare synchronisiert, daher nicht manuell änderbar":"Lokale Markierung"} onChange={e=>updateCard(p.id,{owned:e.target.checked})}/><span>{effectiveCardStore[p.id]?.owned ? verifiedCollection?.complete?"✓ Sorare":"Meine Karte" : "Merken"}</span></label></td>
+                <td><label className="owned-checkbox" title="Diese Spielerkarte ist in meinem Bestand"><input type="checkbox" checked={effectiveCardStore[p.id]?.owned === true} disabled={verifiedOwnedReady} title={verifiedOwnedReady?"Bestand aus Sorare synchronisiert, daher nicht manuell änderbar":"Lokale Markierung"} onChange={e=>updateCard(p.id,{owned:e.target.checked})}/><span>{effectiveCardStore[p.id]?.owned ? verifiedOwnedReady?"✓ Sorare":"Meine Karte" : "Merken"}</span></label></td>
                 {sport === "nba" && <td><div className="star-cell"><select className="small-select star-select" value={isValidNbaStars(effectiveCardStore[p.id]?.stars) ? String(effectiveCardStore[p.id]?.stars) : ""} disabled={officialStarValue(officialStars[p.id])!==null} aria-label={`Sterne für ${p.name}`} title={officialStarValue(officialStars[p.id])!==null?"Offizielle aktuelle Sorare-Spielerbewertung · nicht manuell überschreibbar":"Manueller Ersatzwert, solange keine offizielle Bewertung vorliegt"} onChange={e=>updateCard(p.id,{stars:e.target.value===""?null:Number(e.target.value)})}><option value="">—</option>{starOptions.map(s=><option value={String(s)} key={s}>{fmt(s)} ★</option>)}</select><small className={officialStarValue(officialStars[p.id])!==null?"star-source-official":"star-source-fallback"}>{nbaStarValue(officialStars[p.id],card.stars).source==="sorare"?"✓ Sorare":isValidNbaStars(card.stars)?"Manuell":"Fehlt"}</small></div></td>}
                 <td>{syncedCard.bonusSource==="sorare"?<span className="v293-sorare-bonus" title="Automatischer Bonus der stärksten synchronisierten Karte dieses Spielers. Konkrete Karte im Builder wählen.">+{fmt(syncedCard.bonusPercent??0)} % · Sorare</span>
                   :<select className="small-select" value={card.bonusPercent ?? 0} aria-label={`Kartenbonus für ${p.name}`} onChange={e=>updateCard(p.id,{bonusPercent:Number(e.target.value)})}>{bonuses.map(b=><option value={b} key={b}>+{b} %</option>)}</select>}</td>
