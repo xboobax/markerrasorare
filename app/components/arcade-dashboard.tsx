@@ -1,6 +1,7 @@
+"use client";
+
 import MySorareCollection from "@/app/components/my-sorare-collection";
 import {ownedSlugs,mergeVerifiedOwned,type OwnedCollection} from "@/lib/my-collection";
-"use client";
 
 import Link from "next/link";
 import BuilderWorkspace from "@/app/components/builder-workspace";
