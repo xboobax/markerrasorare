@@ -9,7 +9,10 @@ export type TrackingModelSnapshot = {
   intervalP10: number;
   intervalP90: number;
   modelVersion: "1.8.0";
-  selectedMode: "classic" | "v18";
+  selectedMode: "classic" | "v18" | "v2";
+  engineV2Predicted?: number;
+  engineV2P10?: number;
+  engineV2P90?: number;
 };
 
 export type TrackedPrediction = {
@@ -31,7 +34,10 @@ export type TrackedPrediction = {
   intervalP10?: number;
   intervalP90?: number;
   modelVersion?: "1.8.0";
-  selectedMode?: "classic" | "v18";
+  selectedMode?: "classic" | "v18" | "v2";
+  engineV2Predicted?: number;
+  engineV2P10?: number;
+  engineV2P90?: number;
 };
 
 export function createTrackedPrediction(p: Forecast, sport: Sport, now = new Date(), comparison?: TrackingModelSnapshot): TrackedPrediction {
@@ -45,7 +51,12 @@ export function createTrackedPrediction(p: Forecast, sport: Sport, now = new Dat
       advancedPredicted:Math.round(comparison.advancedPredicted*10)/10,
       intervalP10:Math.round(comparison.intervalP10*10)/10,
       intervalP90:Math.round(comparison.intervalP90*10)/10,
-      modelVersion:comparison.modelVersion, selectedMode:comparison.selectedMode} : {}),
+      modelVersion:comparison.modelVersion, selectedMode:comparison.selectedMode,
+      ...(typeof comparison.engineV2Predicted === "number" && Number.isFinite(comparison.engineV2Predicted) ? {
+        engineV2Predicted:Math.round(comparison.engineV2Predicted*10)/10,
+        engineV2P10:Math.round((comparison.engineV2P10??0)*10)/10,
+        engineV2P90:Math.round((comparison.engineV2P90??0)*10)/10,
+      } : {})} : {}),
   };
 }
 export function upsertTracked(items: TrackedPrediction[], entry: TrackedPrediction): TrackedPrediction[] {
@@ -94,14 +105,17 @@ export function parseTrackingBackup(raw: unknown, sport: Sport): TrackedPredicti
     const validModel = r.modelVersion === "1.8.0" &&
       [r.baselinePredicted,r.advancedPredicted,r.intervalP10,r.intervalP90].every(x =>
         typeof x === "number" && Number.isFinite(x) && x >= 0 && x <= 500) &&
-      r.intervalP10 <= r.intervalP90 && (r.selectedMode === "classic" || r.selectedMode === "v18");
+      r.intervalP10 <= r.intervalP90 && (r.selectedMode === "classic" || r.selectedMode === "v18" || r.selectedMode === "v2");
+    const validEngine=validModel && [r.engineV2Predicted,r.engineV2P10,r.engineV2P90].every(x =>
+      typeof x === "number" && Number.isFinite(x) && x >= 0 && x <= 500) && r.engineV2P10 <= r.engineV2P90;
     out.push({key:r.key,sport:r.sport,playerId:r.playerId,playerName:r.playerName,team:r.team,
       position:typeof r.position === "string" && /^(GK|DEF|MID|FWD|FLEX|G|F|C|ANY)$/.test(r.position) ? r.position : undefined,
       fixture:r.fixture ?? null,savedAt:r.savedAt,predicted:r.predicted,playProbability:r.playProbability,
       actual:r.actual, actualSource:r.actualSource === "sorare" || r.actualSource === "manual" ? r.actualSource : undefined,
       actualGameDate:typeof r.actualGameDate === "string" && Number.isFinite(Date.parse(r.actualGameDate)) ? r.actualGameDate : undefined,
       ...(validModel ? {baselinePredicted:r.baselinePredicted,advancedPredicted:r.advancedPredicted,
-        intervalP10:r.intervalP10,intervalP90:r.intervalP90,modelVersion:r.modelVersion,selectedMode:r.selectedMode} : {})});
+        intervalP10:r.intervalP10,intervalP90:r.intervalP90,modelVersion:r.modelVersion,selectedMode:r.selectedMode} : {}),
+      ...(validEngine?{engineV2Predicted:r.engineV2Predicted,engineV2P10:r.engineV2P10,engineV2P90:r.engineV2P90}:{})});
     if (out.length >= 1500) break;
   }
   return out;

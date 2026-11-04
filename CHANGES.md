@@ -1,3 +1,12 @@
+## V3.3.0 – Prediction Engine 2.0 (NBA & Fußball)
+
+- Neues, optional wählbares Modell V2.0 im Forecast Lab; V1.7- und V1.8-Modell bleiben unverändert auswählbar. Bestehende manuelle Builder, NBA-Sterne, Captain-Regeln, Kartenbonus- und Sammlungsdaten bleiben erhalten.
+- Konservativ gewichteter, ausreißerrobuster Trend aus echten Sorare-Einzelscores (NBA maximal 36 %, Fußball maximal 30 %), begrenzt auf ±14 % gegenüber der bestehenden gegner-/minutenbereinigten Basisschätzung.
+- Gegner- und manuell erfasste Minutenfaktoren werden genau einmal berücksichtigt. Fehlende Matchups/Minuten bleiben neutral. L5/L10-Trend wird erklärt, nicht zusätzlich aufaddiert.
+- Heuristische Floor/Ceiling-Bänder, Datenqualität und Risikoindex (Einsatzrisiko, Streuung, Datenlücken) im Spielerprofil und der Spielertabelle. Kein wissenschaftlich kalibriertes Konfidenzintervall und keine garantierte Gewinnwahrscheinlichkeit.
+- Neues V2.0-Prognosearchiv: in zukünftigen Snapshots werden V1.7, V1.8 und V2.0 eingefroren gespeichert; neue V2-Felder sind optional und rückwärtskompatibel. Official-only V1.8/V2.0-MAE aus künftigen FINAL-Daten im Forecast Lab.
+- Neues V3.3-Regressions-Testfile; vollständige bestehende Suite unverändert. Details: `UPDATE_V3_3_PREDICTION_ENGINE_DE.md`.
+
 ## V3.2.0 – NBA Stars Optimizer 2.1
 
 - Einstellbare Lineup Diversity: 1 / 2 (Standard) / 3 andere Spieler.

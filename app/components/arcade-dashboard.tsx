@@ -32,6 +32,7 @@ import { createTrackedPrediction, upsertTracked, setActual, trackingMetrics, app
 import { pendingForAutoCheck, type AutomaticResult } from "@/lib/tracking-auto";
 import {alignOpponentNames, type AutomaticMatchupData} from "@/lib/auto-matchups";
 import {buildForecastV18, pointsAtLeast, type ForecastV18} from "@/lib/forecast-v18";
+import {buildPredictionV2,backtestPredictionV2,type PredictionV2} from "@/lib/prediction-engine-v2";
 import {backtestForecasts} from "@/lib/backtesting";
 import {loadArchive, persistArchive} from "@/lib/prediction-db";
 import {parseWatchlist, toggleWatchlist, watchlistKey} from "@/lib/watchlist";
@@ -100,7 +101,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState(false);
   const [tracked, setTracked] = useState<TrackedPrediction[]>([]);
-  const [modelMode, setModelMode] = useState<"v18"|"classic">("classic");
+  const [modelMode, setModelMode] = useState<"v18"|"classic"|"v2">("v2");
   const [autoArchiveEnabled, setAutoArchiveEnabled] = useState(false);
   const [archiveBackend, setArchiveBackend] = useState<"indexeddb"|"localStorage">("localStorage");
   const writeQueue = useRef<Promise<unknown>>(Promise.resolve());
@@ -294,8 +295,11 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
     setAutoArchiveEnabled(false);
     try {
       setAutoArchiveEnabled(window.localStorage.getItem(`markerras.sorare.auto-archive.v18.${sport}`) !== "off");
-      setModelMode(window.localStorage.getItem(`markerras.sorare.model.v18.${sport}`) === "v18" ? "v18" : "classic");
-    } catch {setModelMode("classic");}
+      const current=window.localStorage.getItem(`neon:prediction-engine-v33.${sport}`);
+      const legacy=window.localStorage.getItem(`markerras.sorare.model.v18.${sport}`);
+      setModelMode(current==="v2"||current==="v18"||current==="classic"?current:
+        legacy==="v18"||legacy==="classic"?legacy:"v2");
+    } catch {setModelMode("v2");}
     void loadArchive(sport).then(({rows,backend})=>{
       if(!active)return;
       setTracked(rows);setArchiveBackend(backend);setLoadedTrackingSport(sport);
@@ -312,7 +316,8 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
     if(loadedTrackingSport!==sport)return;
     try{
       localStorage.setItem(`markerras.sorare.auto-archive.v18.${sport}`,autoArchiveEnabled?"on":"off");
-      localStorage.setItem(`markerras.sorare.model.v18.${sport}`,modelMode);
+      localStorage.setItem(`neon:prediction-engine-v33.${sport}`,modelMode);
+      if(modelMode==="v18"||modelMode==="classic")localStorage.setItem(`markerras.sorare.model.v18.${sport}`,modelMode);
     }catch{}
   },[sport,autoArchiveEnabled,modelMode,loadedTrackingSport]);
   // Each browser visit checks a small set of prior saved fixtures once.
@@ -411,11 +416,16 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
       xa: cardStore[p.id]?.xa,
     });
     const modelV18=buildForecastV18(scouted,sport);
-    return {...scouted,modelV18,
+    const modelV2=buildPredictionV2(scouted,sport);
+    return {...scouted,modelV18,modelV2,
       ...(modelMode === "v18" && modelV18.applicable ? {
         expected:modelV18.advancedExpected,weighted:modelV18.advancedWeighted,
         floor:modelV18.conditionalLow,ceiling:modelV18.conditionalHigh,
         variability:modelV18.conditionalSd,
+      } : modelMode === "v2" && modelV2.applicable ? {
+        expected:modelV2.expected,weighted:modelV2.weighted,
+        floor:modelV2.floor,ceiling:modelV2.ceiling,
+        variability:modelV2.conditionalSd,confidence:modelV2.quality,
       } : {})};
   }), [basePlayers, sport, effectiveRatings, cardStore,modelMode]);
   // Automatic snapshots are only taken for known fixture dates strictly in the
@@ -432,6 +442,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
         intervalP10:p.modelV18.unconditionalP10,
         intervalP90:p.modelV18.unconditionalP90,
         modelVersion:"1.8.0",selectedMode:modelMode,
+        engineV2Predicted:p.modelV2.weighted,engineV2P10:p.modelV2.unconditionalP10,engineV2P90:p.modelV2.unconditionalP90,
       })).filter(row=>!existing.has(row.key));
       if(!additions.length)return old;
       return [...additions,...old].slice(0,1500);
@@ -554,19 +565,22 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const profileScores = selectedPlayer ? ((selectedPlayer.recentScores?.length ?? 0) > 0 ? selectedPlayer.recentScores! : profileHistories[selectedPlayer.id] ?? []) : [];
   const metrics = trackingMetrics(tracked);
   const backtest = backtestForecasts(tracked);
-  const withAdvanced=players.filter(p=>p.modelV18.applicable).length;
-  const avgModelChange=withAdvanced?players.filter(p=>p.modelV18.applicable)
-    .reduce((sum,p)=>sum+p.modelV18.changePercent,0)/withAdvanced:0;
+  const v2Backtest = backtestPredictionV2(tracked);
+  const withV2 = players.filter(p=>p.modelV2.applicable).length;
+  const avgV2Change=withV2?players.filter(p=>p.modelV2.applicable)
+    .reduce((sum,p)=>sum+p.modelV2.changePercent,0)/withV2:0;
   const advice = calibrationSuggestion(tracked);
   const autoPending = pendingForAutoCheck(tracked).length;
   const saveTracked = (p: Forecast) => {
     const comparison=(p as Forecast & {modelV18?:ForecastV18}).modelV18;
+    const v2=(p as Forecast & {modelV2?:PredictionV2}).modelV2;
     const details:TrackingModelSnapshot|undefined=comparison?{
       baselinePredicted:comparison.baselineWeighted,
       advancedPredicted:comparison.advancedWeighted,
       intervalP10:comparison.unconditionalP10,
       intervalP90:comparison.unconditionalP90,
       modelVersion:"1.8.0",selectedMode:modelMode,
+      ...(v2?{engineV2Predicted:v2.weighted,engineV2P10:v2.unconditionalP10,engineV2P90:v2.unconditionalP90}:{}),
     }:undefined;
     setTracked(items=>upsertTracked(items,createTrackedPrediction(p,sport,new Date(),details)));
   };
@@ -676,18 +690,19 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
           matchupSource={automaticMatchups.source} scheduleStatus={nbaSchedule.status}/>
 
         <section className="panel forecast-lab" id="forecast-lab">
-          <div className="section-top"><div><span className="section-kicker">03 / FORECAST LAB · V1.8 + LAB PRO</span><h2>Prognosen, die sich beweisen müssen.</h2></div><span className="lab-stage">EXPERIMENTELL · NICHT VALIDIERT</span></div>
-          <p className="lab-intro">Das neue Modell gewichtet reale Formdaten robuster, dämpft Ausreißer und berücksichtigt Nicht-Einsatz-Risiken. <strong>Die bestehende V1.7.2-Prognose bleibt zum Vergleich gespeichert.</strong> Verbesserungen werden erst nach echten Spielergebnissen bewertet.</p>
+          <div className="section-top"><div><span className="section-kicker">03 / PREDICTION ENGINE 2.0 · V3.3</span><h2>Form, Matchups & Risiko transparent.</h2></div><span className="lab-stage">EXPERIMENTELL · NICHT VALIDIERT</span></div>
+          <p className="lab-intro">Prediction Engine 2.0 kombiniert die vorhandenen Sorare-Daten mit einem vorsichtig gewichteten Formsignal und zeigt Floor, Ceiling sowie einen nachvollziehbaren Risikoindex. Gegner und manuell gepflegte Minuten wirken nur einmal. <strong>V1.7 und V1.8 bleiben unverändert auswählbar.</strong> Ein Leistungsgewinn ist erst durch echte Ergebnisse nachzuweisen.</p>
           <div className="lab-model-switch" role="group" aria-label="Prognosemodell wählen">
+            <button type="button" aria-pressed={modelMode==="v2"} className={modelMode==="v2"?"active":""} onClick={()=>setModelMode("v2")}>✦ V2.0 · Prediction Engine</button>
             <button type="button" aria-pressed={modelMode==="v18"} className={modelMode==="v18"?"active":""} onClick={()=>setModelMode("v18")}>◆ V1.8 · Experiment</button>
             <button type="button" aria-pressed={modelMode==="classic"} className={modelMode==="classic"?"active":""} onClick={()=>setModelMode("classic")}>◈ V1.7 · Standard</button>
           </div>
           <div className="lab-kpis">
-            <div><small>Spieler mit Score-Grundlage</small><strong>{withAdvanced.toLocaleString("de-DE")}</strong><span>Keine erfundenen Scores bei fehlenden Daten</span></div>
-            <div><small>Durchschnittliche Modellabweichung</small><strong>{avgModelChange>=0?"+":""}{fmt(avgModelChange)} %</strong><span>V1.8 gegenüber V1.7 · aktuelle Auswahl</span></div>
-            <div><small>Offiziell ausgewertete Paarvergleiche</small><strong>{backtest.official}</strong><span>Nur Prognosen, die vor dem Ergebnis gespeichert wurden</span></div>
+            <div><small>V2.0 · Prognosegrundlage</small><strong>{withV2.toLocaleString("de-DE")}</strong><span>Keine erfundenen Scores bei fehlenden Daten</span></div>
+            <div><small>V2.0 gegenüber V1.7</small><strong>{avgV2Change>=0?"+":""}{fmt(avgV2Change)} %</strong><span>Prognosedifferenz, kein Qualitätsnachweis</span></div>
+            <div><small>V2.0 · offizielle Paarvergleiche</small><strong>{v2Backtest.count}</strong><span>{v2Backtest.count?`MAE V1.8: ${fmt(v2Backtest.v18Mae??0)} · V2.0: ${fmt(v2Backtest.v2Mae??0)}`:"Noch keine vergleichbaren FINAL-Daten"}</span></div>
           </div>
-          <p className="lab-caution"><strong>Wichtig:</strong> Die L5/L10-Daten sind Beobachtungen, keine Zusage für künftige Scores. Die gezeigten Prozentsätze und Score-Spannen sind bislang unkalibrierte Modellschätzungen. Beide Modelle nutzen dieselbe bestehende Sorare-Datenanbindung.</p>
+          <p className="lab-caution"><strong>Wichtig:</strong> Alle V2.0-Intervalle, Einsatzwahrscheinlichkeiten und Risikoeinstufungen sind unkalibrierte Heuristiken. Die 80-%-Spanne ist keine belegte 80-%-Trefferquote. {v2Backtest.count>0?`Offizielle V2.0-Vergleiche an ${v2Backtest.days} Spieltagen, MAE-Differenz V1.8 minus V2.0: ${fmt(v2Backtest.deltaMae??0)}.`:"V2.0-Qualität wird erst an zukünftigen offiziell abgeschlossenen Spielen messbar."}</p>
         </section>
 
         <section className="panel matchup-panel" id="matchups">
@@ -862,7 +877,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
           </div>
 
           <aside className="insights-column">
-            <div className="panel insight-panel"><span className="section-kicker">05 / PLAYER INTELLIGENCE</span><h2>Top-Prognosen</h2><p className="caption-small">Aktives Modell: {modelMode === "v18" ? "V1.8" : "V1.7"} · Sorare-Daten, L5/L10, Einsatzrisiko und optionale Scouting-Faktoren.</p>
+            <div className="panel insight-panel"><span className="section-kicker">05 / PLAYER INTELLIGENCE</span><h2>Top-Prognosen</h2><p className="caption-small">Aktives Modell: {modelMode === "v2" ? "Prediction Engine 2.0" : modelMode === "v18" ? "V1.8" : "V1.7"} · Sorare-Daten, L5/L10, Einsatzrisiko und optionale Scouting-Faktoren.</p>
               <div className="top-picks">{topPicks.map((p,i) => <div className="pick-row" key={p.id}><span className="pick-rank">{String(i+1).padStart(2,"0")}</span><PlayerAvatar player={p}/><span className="pick-name"><button type="button" className="player-open" onClick={() => setSelectedPlayerId(p.id)}>{p.name} ↗</button><small>{p.team}</small></span><span className="pick-score">{fmt(p.weighted)}<small>L5: {p.last5Avg === null ? "—" : fmt(p.last5Avg)}</small></span></div>)}</div>
             </div>
             <div className="panel tip-panel"><span className="section-kicker">WICHTIG ZUM MODELL</span><h3>Was noch fehlt</h3><p>Sorare stellt aktuelle NBA-Sterne über gameplayTierStars bereit; diese werden separat synchronisiert. Die offiziell festgeschriebenen Sterne einer bereits eröffneten Gameweek können abweichen. Deine persönliche Kartensammlung wird noch nicht automatisch synchronisiert.</p><p>Floor, Ceiling und Zielchance sind heuristische Modellwerte, keine statistisch validierte Vorhersage. Gegnerstärke wird bei eingerichteten Datenzugängen aus echten Gegnerergebnissen abgeleitet, sonst aus deinen manuellen Bewertungen. Erwartete Minuten, Verletzungsaktualität und xG/xA sind nicht über einen eigenen Live-Feed abgesichert.</p></div>
@@ -888,7 +903,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
           {search.trim().length>=2 && filtered.length>0 && <div className="search-suggestions" aria-label="Schnelltreffer zur Spielersuche"><div className="search-suggestions-heading"><strong>Schnelltreffer</strong><small>Vorschläge aus dem geladenen Spielerbereich</small></div><div className="search-suggestions-grid">{filtered.slice(0,6).map(p=><div key={p.id} className="search-suggestion"><PlayerAvatar player={p} small/><div><button type="button" onClick={()=>setSelectedPlayerId(p.id)}>{p.name} ↗</button><small>{p.team} · {p.position} · {p.forecastSources.length?`${fmt(p.weighted)} Pkt.`:"Score offen"}</small></div><button className="suggestion-add" type="button" onClick={()=>queueManualPlayer(p.id)} aria-label={`${p.name} direkt ins Lineup hinzufügen`}>+</button></div>)}</div></div>}
           <div className="search-quickfilters"><button type="button" className={favoritesOnly?"active":""} aria-pressed={favoritesOnly} onClick={()=>{setFavoritesOnly(v=>!v);setShowCount(70);}}>★ Nur Favoriten {watchlist.length>0?`(${watchlist.length})`:""}</button>{search && <button type="button" onClick={()=>{setSearch("");searchRef.current?.focus();}}>× Suche leeren</button>}<span>Tipp: <kbd>/</kbd> öffnet die Suche</span></div>
           <div className="filter-checkbox"><label><input type="checkbox" checked={hideUnavailable} onChange={e=>setHideUnavailable(e.target.checked)}/> Spieler mit fehlendem Spiel oder geringerer Einsatzchance ausblenden</label><label><input type="checkbox" checked={hasForecastOnly} onChange={e=>setHasForecastOnly(e.target.checked)}/> Nur Spieler mit mindestens einer Score-Datenquelle anzeigen</label></div>
-          <div className="table-scroll"><table className="players-table"><thead><tr><th title="Favoriten in deiner Watchlist">★</th><th>Spieler / Team</th><th>Pos.</th><th>Ø Score</th><th>L5</th><th>Gegner</th><th>Floor – Ceiling</th><th>Daten</th><th>Einsatz</th><th>Prognose</th><th>Scouting (manuell)</th><th>Builder</th><th>Mein Bestand</th>{sport === "nba" && <th>Sterne ★</th>}<th>Kartenbonus</th></tr></thead>
+          <div className="table-scroll"><table className="players-table"><thead><tr><th title="Favoriten in deiner Watchlist">★</th><th>Spieler / Team</th><th>Pos.</th><th>Ø Score</th><th>L5</th><th>Gegner</th><th>Floor – Ceiling</th><th>Daten</th>{modelMode==="v2"&&<th>Risiko*</th>}<th>Einsatz</th><th>Prognose</th><th>Scouting (manuell)</th><th>Builder</th><th>Mein Bestand</th>{sport === "nba" && <th>Sterne ★</th>}<th>Kartenbonus</th></tr></thead>
             <tbody>{filtered.slice(0,showCount).map(p => {
               const card = cardStore[p.id] ?? {};
               const syncedCard = effectiveCardStore[p.id] ?? card;
@@ -901,6 +916,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
                 <td><span className="opponent-cell"><strong>{p.opponent ?? "—"}</strong><small>{matchupLabel(p.opponentRating)}{p.opponentRating !== null ? ` (${fmt(p.matchupAdjustmentPct)} %)` : ""}</small></span></td>
                 <td className="numeric-cell range-cell">{p.forecastSources.length ? `${fmt(p.floor)} – ${fmt(p.ceiling)}` : "—"}</td>
                 <td><span className={`confidence-tag confidence-${p.confidence}`} title={`${p.sampleSize} Scores; Datenabdeckung, keine statistische Konfidenz`}>{p.confidence}</span></td>
+                {modelMode==="v2"&&<td><span className={`v33-risk v33-risk-${p.modelV2.riskLabel}`} title="Heuristischer Risikoindex, keine echte Ausfallwahrscheinlichkeit">{p.modelV2.riskIndex}/100</span></td>}
                 <td><div className="prob-meter"><div style={{width:`${Math.round(p.playProb * 100)}%`}}/></div><small>{Math.round(p.playProb * 100)} %</small></td>
                 <td className="numeric-cell score-cell" title={p.forecastSources.length ? `Bei Einsatz: ${fmt(p.expected)} · Modell-Einsatzchance: ${Math.round(p.playProb*100)} %` : "Kein Score-Eingang vorhanden"}>{p.forecastSources.length ? fmt(p.weighted) : "—"}</td>
                 <td><div className="scout-inputs">
@@ -975,6 +991,21 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
               <div><small>Einsatzwahrscheinlichkeit (Modell)</small><strong>{Math.round(selectedPlayer.playProb*100)} %</strong></div>
               <div><small>Floor / Ceiling (heuristisch)</small><strong>{(selectedPlayer.sampleSize > 0 || selectedPlayer.proj !== null || selectedPlayer.avg !== null) ? `${fmt(selectedPlayer.floor)} – ${fmt(selectedPlayer.ceiling)}` : "—"}</strong></div>
             </div>
+            <section className="v33-profile-card" aria-label="Prediction Engine 2.0 Analyse">
+              <div className="v33-profile-head"><strong>✦ PREDICTION ENGINE 2.0</strong><span>Datenqualität: {selectedPlayer.modelV2.quality}</span></div>
+              {selectedPlayer.modelV2.applicable ? <>
+                <div className="v33-metrics">
+                  <div><small>Prognose inkl. DNP</small><strong>{fmt(selectedPlayer.modelV2.weighted)}</strong><span>Bei Einsatz {fmt(selectedPlayer.modelV2.expected)}</span></div>
+                  <div><small>Floor – Ceiling*</small><strong>{fmt(selectedPlayer.modelV2.floor)} – {fmt(selectedPlayer.modelV2.ceiling)}</strong><span>Bei Einsatz · heuristisch</span></div>
+                  <div><small>Risikoindex*</small><strong>{selectedPlayer.modelV2.riskIndex}/100</strong><span>{selectedPlayer.modelV2.riskLabel} · keine Ausfallwahrscheinlichkeit</span></div>
+                </div>
+                <div className="v33-interval">V2.0 gegenüber V1.8: <strong>{selectedPlayer.modelV18.applicable?`${selectedPlayer.modelV2.weighted>=selectedPlayer.modelV18.advancedWeighted?"+":""}${fmt(selectedPlayer.modelV2.weighted-selectedPlayer.modelV18.advancedWeighted)} Pkt.`:"kein Vergleich"}</strong> · Modellunterschied, keine gemessene Verbesserung</div>
+                <div className="v33-interval">Inkl. DNP: P10–P90 Modellband <strong>{fmt(selectedPlayer.modelV2.unconditionalP10)} – {fmt(selectedPlayer.modelV2.unconditionalP90)}</strong> · nicht kalibriert</div>
+                <div className="v33-signals"><span>Form-Gewicht: <strong>{Math.round(selectedPlayer.modelV2.recentWeight*100)} %</strong></span><span>Gegner: <strong>{selectedPlayer.modelV2.matchupPct>=0?"+":""}{fmt(selectedPlayer.modelV2.matchupPct)} %</strong></span><span>Minuten: <strong>{selectedPlayer.modelV2.minutesPct>=0?"+":""}{fmt(selectedPlayer.modelV2.minutesPct)} %</strong></span></div>
+              </> : <p>Keine verwertbare Scoregrundlage. V2.0 erstellt keine erfundene Vorhersage.</p>}
+              <ul>{selectedPlayer.modelV2.reasons.map((reason,i)=><li key={i}>{reason}</li>)}</ul>
+              <p className="v33-disclaimer">* Modellbasierte Orientierung, keine statistisch validierte Sicherheit. V2.0 nutzt ausschließlich die bereits vorhandenen Sorare- und Scouting-Eingaben.</p>
+            </section>
             <section className="v18-profile-card" aria-label="Modell-Vergleich und Score-Chancen">
               <div className="v18-profile-title"><strong>FORECAST LAB · V1.8</strong><span>{selectedPlayer.modelV18.quality}e Datenlage</span></div>
               <div className="v18-compare"><div><small>Bisherige Prognose</small><strong>{selectedPlayer.modelV18.applicable?fmt(selectedPlayer.modelV18.baselineWeighted):"—"}</strong></div><div><small>V1.8 Prognose</small><strong>{selectedPlayer.modelV18.applicable?fmt(selectedPlayer.modelV18.advancedWeighted):"—"}</strong></div><div><small>Änderung</small><strong>{selectedPlayer.modelV18.applicable?`${selectedPlayer.modelV18.changePercent>=0?"+":""}${fmt(selectedPlayer.modelV18.changePercent)} %`:"—"}</strong></div></div>

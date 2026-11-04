@@ -1,3 +1,5 @@
+> **Neu in V3.3:** Prediction Engine 2.0 für NBA und Fußball mit konservativem Formsignal, Risikoindex, heuristischem Floor/Ceiling und eingefrorenen V2-Snapshots. Siehe [Update V3.3](UPDATE_V3_3_PREDICTION_ENGINE_DE.md).
+
 > **Neu in V3.1:** NBA Stars Optimizer 2.0 (vier Profile, 16-★-DP, Smart Value, Matchup/Risiko und unterschiedliche Teamvarianten). Siehe [UPDATE_V3_1_DE.md](UPDATE_V3_1_DE.md).
 
 # V2.9 – Neon Lineup Builder Pro mit Captain Intelligence

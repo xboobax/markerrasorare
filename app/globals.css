@@ -1401,3 +1401,22 @@ body{background:#030407}
 .nba32-current strong{font-size:17px;color:#fff}
 .nba32-current small{font-size:11px;color:#aaa1bd}
 @media(max-width:760px){.nba32-diversity-buttons{width:100%}.nba32-diversity-buttons button{flex:1}.nba31-variants button{word-break:normal}}
+
+/* V3.3 – Prediction Engine 2.0: restrained black/purple explanatory panel. */
+.v33-profile-card{background:#0d0b16;border:1px solid #4b347a;border-radius:15px;padding:17px;margin:15px 0;color:#e7def8}
+.v33-profile-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.v33-profile-head strong{font-size:13px;letter-spacing:.045em;color:#d6b7ff}
+.v33-profile-head span{font-size:11px;color:#b8aacb}
+.v33-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.v33-metrics>div{display:flex;flex-direction:column;gap:4px;background:#171121;border:1px solid #352946;border-radius:11px;padding:12px}
+.v33-metrics small,.v33-metrics span{font-size:11px;color:#aaa2ba}
+.v33-metrics strong{font-size:19px;color:#fff}
+.v33-interval{margin:12px 0;color:#bcb4cb;font-size:12px}
+.v33-signals{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.v33-signals span{background:#21152f;border:1px solid #45315f;border-radius:9px;padding:7px 10px;font-size:11px;color:#d6c8e6}
+.v33-profile-card ul{margin:10px 0;padding-left:20px;font-size:12px;line-height:1.65;color:#c2b9d2}
+.v33-disclaimer{font-size:11px;color:#a69cb4;line-height:1.55}
+.v33-risk{display:inline-block;white-space:nowrap;padding:5px 8px;font-size:11px;font-weight:800;border-radius:7px;background:#17221b;color:#a2d6b2}
+.v33-risk-mittel{background:#2a2312;color:#e4cb8d}
+.v33-risk-hoch{background:#30171a;color:#efb7aa}
+@media(max-width:700px){.v33-metrics{grid-template-columns:1fr}.v33-profile-card{padding:12px}}
