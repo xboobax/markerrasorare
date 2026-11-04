@@ -1356,3 +1356,28 @@ body{background:#030407}
 
 .v30-th-sort{border:0;background:transparent;color:inherit;font:inherit;font-weight:inherit;white-space:nowrap;cursor:pointer}.v30-th-sort:hover{color:#c2a4ff}
 .v30-explain{background:#0b0e14;border:1px solid #292d39;border-radius:9px;margin:10px 0;padding:8px 10px;color:#c8d3e3;font-size:12px}.v30-explain summary{cursor:pointer;font-weight:650;color:#b99cf4}.v30-explain p{line-height:1.55}
+
+/* V3.1 · NBA Stars Optimizer 2.0, intentionally isolated from football UI */
+.nba31-panel {border:1px solid #4b3c79;border-radius:18px;padding:21px;margin:17px 0;background:linear-gradient(125deg,#12111e,#0a0b12 67%,#171127);box-shadow:0 10px 35px #0002}
+.nba31-heading {display:flex;gap:14px;align-items:flex-start;justify-content:space-between}
+.nba31-heading h3 {margin:5px 0;font-size:21px;letter-spacing:-.02em;color:#fbfaff}
+.nba31-heading p,.nba31-description,.nba31-note {color:#a7a1b9;font-size:12px;line-height:1.65;margin:4px 0}
+.nba31-tag {white-space:nowrap;border:1px solid #644ca4;border-radius:100px;padding:6px 10px;color:#d1b9ff;background:#2a1b45;font-size:11px;font-weight:800}
+.nba31-modes {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:19px 0 10px}
+.nba31-modes button {border:1px solid #322b43;border-radius:10px;background:#181522;color:#c5bfd0;padding:12px 8px;font-size:12px;font-weight:800;min-height:42px}
+.nba31-modes button:hover,.nba31-variants button:hover {border-color:#ae87f9}
+.nba31-modes button.active,.nba31-variants button.active {border-color:#a77afe;background:#34224c;color:white;box-shadow:inset 0 0 0 1px #b991ef55}
+.nba31-variants {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin:13px 0}
+.nba31-variants button {display:flex;text-align:left;flex-direction:column;gap:6px;align-items:flex-start;padding:12px;border-radius:11px;border:1px solid #373046;background:#13121d;color:#f8f6fd}
+.nba31-variants button>span {font-size:11px;font-weight:800;color:#ae9bd1}
+.nba31-variants button>strong {font-size:18px}
+.nba31-variants button>small {color:#a9a1be;font-size:11px}
+.nba31-metrics {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:15px 0 9px}
+.nba31-metrics>div {display:flex;flex-direction:column;gap:3px;border:1px solid #292435;background:#0e0d18;border-radius:12px;padding:12px 10px;min-width:0}
+.nba31-metrics small {color:#a9a0c0;font-size:10px;font-weight:700;letter-spacing:.04em}
+.nba31-metrics strong {font-size:22px;color:#e4cfff}
+.nba31-metrics span {color:#a19bb2;font-size:10px;line-height:1.4}
+.nba31-note {margin-top:11px}
+@media (max-width:760px){.nba31-modes,.nba31-variants,.nba31-metrics {grid-template-columns:repeat(2,minmax(0,1fr))}.nba31-heading {flex-wrap:wrap}.nba31-panel{padding:14px}}
+.nba31-target {font-size:11px;color:#c6b6f0;background:#1c1927;border:1px solid #42335a;padding:8px 12px;border-radius:9px;font-weight:750;margin:0 0 8px}
+.nba31-target.active {background:#382153;color:white;border-color:#b18af5}

@@ -397,7 +397,7 @@ export default function BuilderWorkspace({sport,league,availability,availability
   }).length;
   return <div className="workspace-v23" aria-label="V2.9 Neon Lineup Builder Pro">
     <header className="v23-toolbar v292-toolbar">
-      <div className="v23-toolbar-brand"><span className="v23-mark">M<span>★</span></span><span><strong>NEON LINEUP BUILDER PRO</strong><small>{sport==="nba"?"NBA · STERNE / VALUE SCOUT":"FOOTBALL · CAPTAIN +50 %"} · V2.9.2</small></span></div>
+      <div className="v23-toolbar-brand"><span className="v23-mark">M<span>★</span></span><span><strong>NEON LINEUP BUILDER PRO</strong><small>{sport==="nba"?"NBA · STERNE / VALUE SCOUT":"FOOTBALL · CAPTAIN +50 %"} · {sport==="nba"?"V3.1":"V3.0"}</small></span></div>
       <div className="v292-primary-controls">
         <label>Spieltag<select aria-label="Zeithorizont – Spiele am aktuellen Tag filtern" value={horizon===null?"all":horizon} onChange={e=>{const value=e.target.value;setMatchdayReady(false);setHorizon(value==="all"?null:value==="today"||value==="tomorrow"?value:Number(value) as MatchdayHorizon);}}>
           <option value="today">◉ Heute spielen (Berlin)</option><option value="tomorrow">Morgen spielen (Berlin)</option><option value="all">Alle bekannten Spiele</option><option value="24">≈ Nächste 24 Std.*</option><option value="72">Nächste 3 Tage*</option><option value="168">Nächste 7 Tage*</option>

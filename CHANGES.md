@@ -1,3 +1,7 @@
+## V3.1.0 — NBA Stars Optimizer 2.0
+
+Vier NBA-Profilstrategien (Max Points / Smart Value / Safety First / High Ceiling), Sternbudget-DP, erweiterte Gegner-/Risikotransparenz, echte Profilvarianten, V3.0-Kompatibilität und zusätzliche Regressionstests. Details: `UPDATE_V3_1_DE.md`.
+
 ## V2.9.2 – Obsidian Black, Matchday Ready & NBA Value Finder
 
 - Deutlich dunkleres, aufgeräumtes Builder-Interface mit einklappbaren sekundären Optionen und kompaktem Spielerpool.

@@ -14,6 +14,7 @@ import PredictionLabPro from "@/app/components/prediction-lab-pro";
 import AutoBuilderSettings from "@/app/components/auto-builder-settings";
 import {initialV30State,restoreV30State,v30Key,v30ForTeam,limitLineupReuse,type BuilderV30State,type BuilderV30Settings} from "@/lib/builder-v30";
 import {buildArcadeIntelligence} from "@/lib/arcade-intelligence";
+import {buildNbaStarsOptimizer,assessNbaStarsLineup,NBA_STARS_MODES,type NbaStarsMode} from "@/lib/nba-stars-optimizer";
 import type {FetchSummary} from "@/lib/data-health";
 import type {ScheduleData} from "@/lib/gameweek-center";
 import {canonicalNbaTeam} from "@/lib/nba-fixture-mapping";
@@ -176,6 +177,8 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const [activeResult, setActiveResult] = useState(0);
   const [builderMode, setBuilderMode] = useState<"automatic" | "manual">("manual");
   const [strategy, setStrategy] = useState<Strategy>("balanced");
+  const [nbaStarsMode,setNbaStarsMode]=useState<NbaStarsMode>("max");
+  const [nbaVariantKey,setNbaVariantKey]=useState<string|null>(null);
   const [v30State,setV30State]=useState<BuilderV30State>(initialV30State);
   const [v30Loaded,setV30Loaded]=useState<Sport|null>(null);
   const [v30EditTeam,setV30EditTeam]=useState("team-1");
@@ -453,34 +456,69 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const totalTarget = Number(target);
   const validTarget = target.trim() !== "" && Number.isFinite(totalTarget) && totalTarget > 0;
   const v30ActiveSettings=v30ForTeam(v30State,v30EditTeam);
+  const selectNbaOptimizerMode=(mode:NbaStarsMode,variantKey:string|null=null)=>{
+    setNbaStarsMode(mode);setNbaVariantKey(variantKey);setStrategy("balanced");setActiveResult(0);setIntelligencePickKey(null);
+    // A deliberate NBA profile selection changes only the optimization preset.
+    // All other saved V3.0 settings, manual teams and collection data remain.
+    if(v30ActiveSettings.preset==="safe"||v30ActiveSettings.preset==="ceiling"){
+      const settings={...v30ActiveSettings,preset:"custom" as const};
+      setV30State(prev=>prev.scope==="all"?{...prev,global:settings}:{...prev,teams:{...prev.teams,[v30EditTeam]:settings}});
+    }
+  };
+
   const v30AnyChanged=v30State.scope==="team"||JSON.stringify(v30State.global)!==JSON.stringify(initialV30State().global);
   const v30Strategy=(settings:BuilderV30Settings):Strategy=>settings.preset==="safe"?"safe":settings.preset==="ceiling"||settings.preset==="balanced"?"balanced":strategy;
   const v30Options=(settings:BuilderV30Settings)=>({sport,ownedOnly,limit:20,beamWidth:300,maxCandidatesPerSlot:120,
     strategy:v30Strategy(settings),targetScore:validTarget?totalTarget:null,lockedPlayerIds:lockedIds,excludedPlayerIds:excludedIds,
     advancedSettings:settings});
+  // V3.1 uses a separate multi-objective star-budget search only for NBA.
+  // V3.0 team scope, locked picks, injury exclusions, bonuses, projections,
+  // minimum scores and max-reuse rules continue to apply unchanged.
+  const nbaStarBoard=useMemo(()=>sport==="nba"&&builderMode==="automatic"&&!v30ActiveSettings.excludedLeagues.includes(league)?
+    buildNbaStarsOptimizer(eligibleCards,v30Options(v30ActiveSettings)):null,
+    [sport,builderMode,eligibleCards,ownedOnly,lockedIds,excludedIds,v30ActiveSettings,league,validTarget,totalTarget]);
+  const nbaProfileLines=(board:NonNullable<typeof nbaStarBoard>,settings:BuilderV30Settings)=>{
+    const effectiveMode=settings.preset==="safe"?"safe":settings.preset==="ceiling"?"upside":nbaStarsMode;
+    const candidates=board.pools[effectiveMode];
+    const prioritized=nbaVariantKey&&nbaStarsMode===effectiveMode?board.variants.find(v=>v.mode===effectiveMode&&v.lineup.picks.map(p=>p.player.id).sort().join("|")===nbaVariantKey)?.lineup:null;
+    const ordered=prioritized?[prioritized,...candidates.filter(l=>l.picks.map(p=>p.player.id).sort().join("|")!==nbaVariantKey)]:candidates;
+    // The existing Custom "Zielchance" strategy remains available for NBA.
+    if(settings.preset==="custom"&&strategy==="target"&&validTarget)
+      return [...new Map(Object.values(board.pools).flat().map(l=>[l.picks.map(p=>p.player.id).sort().join("|"),l])).values()].sort((a,b)=>(b.targetProbability??-1)-(a.targetProbability??-1));
+    if(settings.preset==="custom"&&strategy==="safe")return board.pools.safe;
+    if(settings.preset==="custom"&&strategy==="upside")return board.pools.upside;
+    return ordered;
+  };
   const lineups = useMemo(() => {
+    // Don't run four potentially costly NBA searches while editing manual lineups.
+    if(sport==="nba"&&builderMode!=="automatic")return [];
     const poolFor=(settings:BuilderV30Settings)=>settings.excludedLeagues.includes(league)?[]:eligibleCards;
+    const makeCandidates=(settings:BuilderV30Settings)=>sport==="nba"?
+      nbaProfileLines(buildNbaStarsOptimizer(poolFor(settings),v30Options(settings)),settings):
+      optimizeArcadeLineups(poolFor(settings),v30Options(settings));
     if(v30State.scope==="all"){
       const settings=v30State.global;
-      return limitLineupReuse(optimizeArcadeLineups(poolFor(settings),v30Options(settings)),settings.maxUses,5);
+      const lines=sport==="nba"&&nbaStarBoard?nbaProfileLines(nbaStarBoard,settings):
+        sport==="nba"?[]:optimizeArcadeLineups(poolFor(settings),v30Options(settings));
+      return limitLineupReuse(lines,settings.maxUses,5);
     }
     const picked:ReturnType<typeof optimizeArcadeLineups>=[],usage=new Map<string,number>();
     const cache=new Map<string,ReturnType<typeof optimizeArcadeLineups>>();
     for(let i=1;i<=5;i++){
       const settings=v30ForTeam(v30State,`team-${i}`);
       const cacheKey=JSON.stringify(settings);
-      if(!cache.has(cacheKey))cache.set(cacheKey,optimizeArcadeLineups(poolFor(settings),v30Options(settings)));
+      if(!cache.has(cacheKey))cache.set(cacheKey,makeCandidates(settings));
       const candidates=cache.get(cacheKey)!;
       const chosen=candidates.find(candidate=>candidate.picks.every(p=>(usage.get(p.player.id)??0)<settings.maxUses)&&
         !picked.some(already=>already.picks.map(p=>p.player.id).sort().join("|")===candidate.picks.map(p=>p.player.id).sort().join("|")));
       if(!chosen)continue;
-      picked.push(chosen);for(const pick of chosen.picks)usage.set(pick.player.id,(usage.get(pick.player.id)??0)+1);
+      picked.push(chosen);for(const pick of chosen.picks)usage.set(pick.player.id,(usage.get(p.player.id)??0)+1);
     }
     return picked;
-  }, [eligibleCards,sport,ownedOnly,strategy,validTarget,totalTarget,lockedIds,excludedIds,v30State,league]);
+  }, [eligibleCards,sport,ownedOnly,strategy,validTarget,totalTarget,lockedIds,excludedIds,v30State,league,nbaStarsMode,nbaVariantKey,nbaStarBoard,builderMode]);
   // The older Intelligence Lab builds independent candidates without V3 rules.
   // Hide it when any advanced constraints are active rather than bypassing them.
-  const intelligence=useMemo(()=>builderMode==="automatic"&&!v30AnyChanged ? buildArcadeIntelligence(eligibleCards,{
+  const intelligence=useMemo(()=>builderMode==="automatic"&&sport==="football"&&!v30AnyChanged ? buildArcadeIntelligence(eligibleCards,{
     sport,ownedOnly,limit:8,beamWidth:260,maxCandidatesPerSlot:115,
     targetScore:validTarget?totalTarget:null,lockedPlayerIds:lockedIds,excludedPlayerIds:excludedIds,
   }):null,[builderMode,eligibleCards,sport,ownedOnly,validTarget,totalTarget,lockedIds,excludedIds,v30AnyChanged]);
@@ -493,6 +531,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const autoCaptainKey=chosenBase?.picks.map(p=>p.player.id).join("|")??"";
   const chosenAuto=automaticCaptainLineup(chosenBase,sport,injuryById,validTarget?totalTarget:null,autoCaptainChoice?.key===autoCaptainKey?autoCaptainChoice.playerId:null);
   const chosen=chosenAuto.lineup;
+  const nbaChosenAssessment=sport==="nba"&&chosen?assessNbaStarsLineup(chosen):null;
   const shownLineups=useMemo(()=>lineups.map(l=>automaticCaptainLineup(l,sport,injuryById,validTarget?totalTarget:null).lineup!),[lineups,sport,injuryById,validTarget,totalTarget]);
   const selectedPlayer = players.find(p => p.id === selectedPlayerId) ?? null;
   const selectedCard = selectedPlayer ? cardStore[selectedPlayer.id] ?? {} : {};
@@ -553,7 +592,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
       <header className="app-topbar">
         <Link href="/?sport=football" className="brand" aria-label="Markerras Sorare Helper Startseite">
           <span className="brand-logo">M<span>◆</span></span>
-          <span className="brand-text"><strong>MARKERRAS SORARE HELPER</strong><small>ARCADE INTELLIGENCE · V2.2</small></span>
+          <span className="brand-text"><strong>MARKERRAS SORARE HELPER</strong><small>ARCADE INTELLIGENCE · V3.1</small></span>
         </Link>
         <nav className="sport-switch" aria-label="Sportart wählen">
           <Link href="/?sport=football" aria-current={sport === "football" ? "page" : undefined}>⚽ Football</Link>
@@ -708,15 +747,43 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
             <AutoBuilderSettings sport={sport} league={league} leagues={leagues} state={v30State} onChange={setV30State} teamId={v30EditTeam} onTeamChange={setV30EditTeam}/>
             <p className="v30-status" role="status">V3.0: {v30State.scope==="team"?"Individuelle Auto-Team-Strategien":"Gemeinsame Strategie"} · {v30ActiveSettings.projection.toUpperCase()} · {lineups.length} gültige Vorschläge. {v30ActiveSettings.projection==="q80"?"Q80 ist experimentell, nicht kalibriert; Spieler ohne mindestens 8 Scores werden ausgeschlossen.":""} {v30ActiveSettings.projection==="raw"?"Die Auswahl wird ohne Kartenbonus optimiert; die Teamanzeige enthält weiterhin tatsächliche Karten-/Captain-Zuschläge.":""} {v30ActiveSettings.excludedLeagues.includes(league)?"Die aktuell geladene Liga wurde ausgeschlossen.":""}</p>
             <p className="v283-auto-scope">{ownedOnly?"✓ Automatische Aufstellungen ausschließlich aus verifiziert eigenen Karten":"Alle Spieler im Datenbereich · theoretische Aufstellungen"} · Einstellung oben ändern.</p>
-            <div className="strategy-bar">
+            {sport==="football"&&<div className="strategy-bar">
               <div className="strategy-title"><strong>Optimierung</strong><small>Diese Auswahl gilt für „Custom“. Safe, Balanced und High Ceiling aus V3.0 setzen ein eigenes Optimierungsziel.</small></div>
               <div className="strategy-options" role="group" aria-label="Lineup-Strategie">
                 {(["balanced","safe","upside","target"] as Strategy[]).map(value => <button type="button" key={value} disabled={value === "target" && !validTarget} title={value === "target" && !validTarget ? "Bitte zuerst unten ein Score-Ziel eingeben" : undefined} className={strategy === value ? "active" : ""} onClick={() => {setStrategy(value);setActiveResult(0);setIntelligencePickKey(null);}}>{({balanced:"Ausgewogen",safe:"Sicher",upside:"Offensiv",target:"Zielchance"} as Record<Strategy,string>)[value]}</button>)}
               </div>
-            </div>
+            </div>}
             {intelligenceView&&<ArcadeIntelligenceLab sport={sport} board={intelligenceView} target={target}
               onTargetChange={value=>{setTarget(value);setIntelligencePickKey(null);}}
               selectedKey={activeIntelligence?.key??null} onSelect={key=>{setIntelligencePickKey(key);setActiveResult(0);}}/>}
+            {sport==="nba"&&<section className="nba31-panel" aria-label="NBA Stars Optimizer 2.0">
+              <div className="nba31-heading"><div><span className="section-kicker">V3.1 · NBA STARS OPTIMIZER 2.0</span><h3>Smart Star Budget</h3><p>Ganze Fünferteams unter 16 ★ optimieren · Matchups, Value, Risiko & echte Varianten.</p></div><span className="nba31-tag">5 Karten · ≤ 16 ★</span></div>
+              <div className="nba31-modes" role="group" aria-label="NBA-Optimierungsprofil">
+                {NBA_STARS_MODES.map(mode=><button type="button" key={mode.id} aria-pressed={nbaStarsMode===mode.id} className={nbaStarsMode===mode.id?"active":""} title={mode.detail}
+                  onClick={()=>selectNbaOptimizerMode(mode.id)}
+                  >{mode.label}</button>)}
+              </div>
+              {validTarget&&<button type="button" className={`nba31-target ${strategy==="target"?"active":""}`} aria-pressed={strategy==="target"} onClick={()=>{setStrategy(strategy==="target"?"balanced":"target");setNbaVariantKey(null);setActiveResult(0);}}>
+                ◎ Zielchance für {fmt(totalTarget)} Punkte priorisieren {strategy==="target"?"✓":""}
+              </button>}
+              {(v30ActiveSettings.preset==="safe"||v30ActiveSettings.preset==="ceiling")&&<p className="nba31-note">Aktives V3.0-Preset ({v30ActiveSettings.preset}): Dieses Ziel hat Vorrang, bis du oben eines der vier NBA-Profile aktiv auswählst. Andere Filter bleiben erhalten.</p>}
+              <p className="nba31-description">{NBA_STARS_MODES.find(m=>m.id===nbaStarsMode)?.detail}. Die gewählte NBA-Strategie ändert keine vorhandenen manuellen Teams.</p>
+              {nbaStarBoard&&<div className="nba31-variants" aria-label="Unterschiedliche NBA-Teamvarianten">
+                {nbaStarBoard.variants.map(v=><button type="button" key={v.mode} title="Diese Profil-Variante auswählen"
+                  onClick={()=>selectNbaOptimizerMode(v.mode,v.lineup.picks.map(p=>p.player.id).sort().join("|"))}
+                  className={nbaStarsMode===v.mode?"active":""}>
+                  <span>{NBA_STARS_MODES.find(m=>m.id===v.mode)?.label}</span>
+                  <strong>{fmt(v.lineup.projectedScore)} PS</strong><small>{fmt(v.lineup.starsUsed)} ★ · {fmt(v.assessment.pointsPerStar)} PS/★</small>
+                </button>)}
+              </div>}
+              {nbaChosenAssessment&&chosen&&<div className="nba31-metrics" role="status">
+                <div><small>Star Efficiency</small><strong>{fmt(nbaChosenAssessment.pointsPerStar)}</strong><span>Prognosepunkte / Stern</span></div>
+                <div><small>Budget übrig</small><strong>{fmt(nbaChosenAssessment.unusedStars)} ★</strong><span>Keine Pflicht, alle 16 ★ zu nutzen</span></div>
+                <div><small>Risikoindex*</small><strong>{nbaChosenAssessment.riskIndex}/100</strong><span>{nbaChosenAssessment.atRisk} Einsatzrisiken · {nbaChosenAssessment.lowData} schwache Daten</span></div>
+                <div><small>Matchup bekannt</small><strong>{nbaChosenAssessment.matchupKnown}/5</strong><span>{nbaChosenAssessment.matchupFavorable} günstig · {nbaChosenAssessment.matchupDifficult} schwierig</span></div>
+              </div>}
+              <p className="nba31-note">{nbaStarBoard?.note??"Kein NBA-Ergebnis für die aktuelle Auswahl."} {nbaChosenAssessment?.matchupPercentAverage!==null&&nbaChosenAssessment?.matchupPercentAverage!==undefined?`Ø Matchup-Anpassung der bewerteten Spieler: ${fmt(nbaChosenAssessment.matchupPercentAverage)} % (bereits enthalten).`:"Ohne Gegnerdaten wird kein fiktiver Matchup-Bonus vergeben."} * Risiko ist eine nicht kalibrierte Heuristik aus Einsatzchance, Formstreuung und Datenqualität. {v30State.scope==="team"?"Im Pro-Team-Modus gelten die individuellen V3.0-Einstellungen je Team.":""}</p>
+            </section>}
             <div className="lock-info"><span>🔒 {lockedIds.length} Spieler fixiert · 🚫 {excludedIds.length} ausgeschlossen</span><button type="button" onClick={() => setCardStore(store => Object.fromEntries(Object.entries(store).map(([id,v])=>[id,{...v,locked:false,excluded:false}]))) }>Auswahl zurücksetzen</button></div>
             {sport === "nba" ? (
               <div className="budget-row">
@@ -734,7 +801,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
                   <div className="slot-icon">{item ? <PlayerAvatar player={item.player} small/> : (sport === "nba" ? "★" : ({GK:"◈",DEF:"⬡",MID:"✦",FWD:"◆",FLEX:"✧"} as Record<string,string>)[slot])}</div>
                   <div className="slot-content"><span className="slot-name">{sport === "nba" ? `Karte ${index + 1}` : `${POS_SHORT[slot]} · ${POS_LABEL[slot]}`}{sport==="football"&&item&&chosenAuto.captainId===item.player.id?" · 👑 CAPTAIN +50 %":""}</span>
                     {item ? <button className="player-open" type="button" onClick={() => setSelectedPlayerId(item.player.id)}>{item.player.name} ↗</button> : <strong>Noch kein passender Pick</strong>}
-                    <small>{item ? `${item.player.team} · ${item.player.confidence ?? "mittel"} Datenlage` : sport === "nba" ? "Sterne für Spieler erfassen" : "Spieler aus dem Pool auswählen"}</small>
+                    <small>{item ? `${item.player.team} · ${item.player.confidence ?? "mittel"} Datenlage${sport==="nba"?` · Gegner: ${item.player.opponent??"unbekannt"} (${matchupLabel((item.player as Forecast&{opponentRating?:number|null}).opponentRating??null)})`:""}` : sport === "nba" ? "Sterne für Spieler erfassen" : "Spieler aus dem Pool auswählen"}</small>
                   </div>
                   <div className="slot-score">{item ? <><strong>{fmt(item.projectedScore)}</strong><small>{sport === "nba" ? `${fmt(item.stars ?? 0)} ★ · +${fmt(item.bonusPercent)} % Kartenbonus` : `${chosenAuto.captainId===item.player.id?"👑 ":""}+${item.bonusPercent}% inkl. aller Boni`}</small></> : "—"}</div>
                 </div>;

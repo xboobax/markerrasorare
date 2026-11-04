@@ -1,3 +1,5 @@
+> **Neu in V3.1:** NBA Stars Optimizer 2.0 (vier Profile, 16-★-DP, Smart Value, Matchup/Risiko und unterschiedliche Teamvarianten). Siehe [UPDATE_V3_1_DE.md](UPDATE_V3_1_DE.md).
+
 # V2.9 – Neon Lineup Builder Pro mit Captain Intelligence
 
 **Fußball: exakt ein Captain mit festem +50-%-Bonus. NBA: kein Captain.**

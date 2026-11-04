@@ -47,6 +47,9 @@ console.log('V2.0 fixture deduplication, progression, undo, score goals, invento
   const oldKey=process.env.BALLDONTLIE_API_KEY,originalFetch=global.fetch;
   try {
     delete process.env.BALLDONTLIE_API_KEY;
+    // V3.1 test isolation: prevent the keyless ESPN fallback making a real
+    // network request in offline CI while testing the missing-key state.
+    global.fetch=async()=>({ok:false,status:503});
     const missing=await getNbaGameweekSchedule(new Date('2026-11-03T12:00:00Z'));
     assert.equal(missing.status,'not-configured');assert.equal(missing.fixtures.length,0);
     process.env.BALLDONTLIE_API_KEY='local-test-secret';
