@@ -93,7 +93,12 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const injuryTipoffs=useMemo(()=>basePlayers.map(p=>p.nextGameTipoff),[basePlayers]);
   const availability=useAvailability(sport,league,injuryTipoffs);
   const injuryById=useMemo(()=>availability.data?availabilityForPlayers(basePlayers,availability.data.reports,sport):{},[availability.data,basePlayers,sport]);
-  const [activeTab,setActiveTab]=useState<"builder"|"players"|"analytics"|"collection">("builder");
+  const [activeTab,setActiveTab]=useState<"builder"|"players"|"analytics"|"collection"|"missions">("builder");
+  // Preserve the Mission workspace when users switch a league/team or sport via a URL.
+  useEffect(()=>{
+    try {if(new URLSearchParams(window.location.search).get("tab")==="missions")setActiveTab("missions");}
+    catch { /* URL access is optional; the default Builder tab still works. */ }
+  },[]);
   const [compactExplorer,setCompactExplorer]=useState(true);
   const [showCloudLearning,setShowCloudLearning]=useState(false);
   const [search, setSearch] = useState("");
@@ -668,16 +673,16 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   return (
     <div className="app-shell">
       <header className="app-topbar v35-topbar">
-        <Link href="/?sport=football" className="brand" aria-label="Neon Builder Pro Startseite"><span className="brand-logo">N<span>◆</span></span><span className="brand-text"><strong>NEON BUILDER PRO</strong><small>V3.6 · DAILY MISSIONS</small></span></Link>
-        <nav className="sport-switch" aria-label="Sportart wählen"><Link href="/?sport=football" aria-current={sport==="football"?"page":undefined}>⚽ Fußball</Link><Link href="/?sport=nba" aria-current={sport==="nba"?"page":undefined}>🏀 NBA</Link></nav>
+        <Link href={activeTab==="missions"?"/?sport=football&tab=missions":"/?sport=football"} className="brand" aria-label="Neon Builder Pro Startseite"><span className="brand-logo">N<span>◆</span></span><span className="brand-text"><strong>NEON BUILDER PRO</strong><small>V3.7 · DAILY MISSION INTELLIGENCE</small></span></Link>
+        <nav className="sport-switch" aria-label="Sportart wählen"><Link href={activeTab==="missions"?"/?sport=football&tab=missions":"/?sport=football"} aria-current={sport==="football"?"page":undefined}>⚽ Fußball</Link><Link href={activeTab==="missions"?"/?sport=nba&tab=missions":"/?sport=nba"} aria-current={sport==="nba"?"page":undefined}>🏀 NBA</Link></nav>
         <span className="topbar-pill"><span className="status-dot" style={error?{background:"#d9a06f"}:undefined}/>{error?"API prüfen":players.length?`${players.length} Spieler geladen`:"Sorare verbindet"}</span>
       </header>
 
       <nav className="v35-tabs" aria-label="Arbeitsbereiche" role="tablist">
-        {([ ["builder","◈","Builder"], ["players","⌕","Spieler"], ["analytics","▥","Analyse"], ["collection","▣","Sammlung"] ] as const).map(([id,icon,label])=><button type="button" role="tab" key={id} aria-selected={activeTab===id} className={activeTab===id?"is-active":""} onClick={()=>navigate(id)}><span aria-hidden="true">{icon}</span> {label}</button>)}
+        {([ ["builder","◈","Builder"], ["players","⌕","Spieler"], ["analytics","▥","Analyse"], ["collection","▣","Sammlung"], ["missions","⚡","Daily Missions"] ] as const).map(([id,icon,label])=><button type="button" role="tab" key={id} aria-selected={activeTab===id} className={activeTab===id?"is-active":""} onClick={()=>navigate(id)}><span aria-hidden="true">{icon}</span> {label}</button>)}
       </nav>
       <main className="dashboard-main v35-main" data-workspace={activeTab}>
-        <div className="v35-workspace-title" data-tab="builder"><div><span className="section-kicker">NEON STUDIO / V3.6</span><h1>{sport==="nba"?"NBA":"Fußball"} Lineup Studio</h1></div><div className="v36-title-actions"><a href="#daily-mission" onClick={()=>{setActiveTab("builder");}}>⚡ Daily Mission</a><span className="v35-title-hint">{sport==="nba"?"5 Karten · max. 16 ★":"5 Karten · Captain +50 %"}</span></div></div>
+        <div className="v35-workspace-title" data-tab="builder"><div><span className="section-kicker">NEON STUDIO / V3.7</span><h1>{sport==="nba"?"NBA":"Fußball"} Lineup Studio</h1></div><div className="v36-title-actions"><button type="button" className="v37-mission-link" onClick={()=>navigate("missions")}>⚡ Daily Missions öffnen</button><span className="v35-title-hint">{sport==="nba"?"5 Karten · max. 16 ★":"5 Karten · Captain +50 %"}</span></div></div>
         <div className="metric-grid v35-metrics" data-tab="builder">
           <div className="metric-card"><span className="metric-label">Spieler im Datensatz</span><strong>{players.length.toLocaleString("de-DE")}</strong><small>Aktuell ausgewählter Datenbereich</small></div>
           <div className="metric-card"><span className="metric-label">Mögliche Einsätze</span><strong>{hasGameCount.toLocaleString("de-DE")}</strong><small>Spielerbilder: {imageCount} von {players.length}</small></div>
@@ -707,9 +712,24 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
           )}
         </section>
 
-        <div className="v35-tab-section" data-tab="builder" id="daily-mission"><details className="v35-advanced v36-mission-disclosure"><summary>⚡ Daily Mission Picker · beste Spieler für die heutige Mission</summary>
-          <DailyMissionPicker sport={sport} players={players} nbaSchedule={nbaSchedule} ownedIds={dailyMissionOwnedIds} excludedIds={dailyMissionExcludedIds} onOpenPlayer={setSelectedPlayerId} onSendToBuilder={queueManualPlayer} scope={team?clubs.find(c=>c.slug===team)?.name??team:league==='__all'?'Alle vier Fußballligen':sport==='nba'?'NBA · geladene Teams':league} verifiedOwned={verifiedCollection?.complete===true}/>
-        </details></div>
+        <section className="v35-tab-section v37-mission-workspace" data-tab="missions" id="daily-mission">
+          <div className="v37-mission-title">
+            <div><span className="section-kicker">NEON / DAILY MISSIONS · V3.7</span><h1>⚡ Daily Missions</h1><p>Die besten verfügbaren Picks für deine tägliche Sorare-Mission – kostenlos, ohne Zusatz-API oder Datenbank.</p></div>
+            <span className="v37-mission-coverage">{players.length.toLocaleString("de-DE")} Spieler geladen · {sport==="nba"?"NBA":"Fußball"}</span>
+          </div>
+          <div className="v37-mission-scope">
+            <div className="v37-mission-scope-head"><strong>Spielerpool wählen</strong><span>{team?clubs.find(c=>c.slug===team)?.name??team:league==='__all'?"Vier Fußballligen":sport==="nba"?"Alle NBA-Teams":league}</span></div>
+            {sport==="football"&&<div className="v37-mission-leagues" aria-label="Daily Mission Fußball-Ligen">
+              <Link className={league==="__all"&&!team?"chip active":"chip"} href={makeLink({sport,league:"__all",tab:"missions"})}>Alle 4 Ligen</Link>
+              {leagues.map(l=><Link className={league===l&&!team?"chip active":"chip"} key={l} href={makeLink({sport,league:l,tab:"missions"})}>{l}</Link>)}
+            </div>}
+            {clubs.length>0&&<details className="v37-mission-team-filter"><summary>Teamfilter · {team?clubs.find(c=>c.slug===team)?.name??team:"Alle Teams"}</summary><div className="chip-strip chip-teams" aria-label="Daily Mission Teams">
+              <Link className={!team?"chip active":"chip"} href={makeLink({sport,league:sport==="football"?league:undefined,tab:"missions"})}>Alle Teams</Link>
+              {clubs.map(c=><Link className={team===c.slug?"chip active":"chip"} key={c.slug} href={makeLink({sport,league:sport==="football"?league:undefined,team:c.slug,tab:"missions"})}>{c.name}</Link>)}
+            </div></details>}
+          </div>
+          <DailyMissionPicker active={activeTab==="missions"} sport={sport} players={players} nbaSchedule={nbaSchedule} ownedIds={dailyMissionOwnedIds} excludedIds={dailyMissionExcludedIds} onOpenPlayer={setSelectedPlayerId} onSendToBuilder={queueManualPlayer} scope={team?clubs.find(c=>c.slug===team)?.name??team:league==='__all'?'Alle vier Fußballligen':sport==='nba'?'NBA · geladene Teams':league} verifiedOwned={verifiedCollection?.complete===true}/>
+        </section>
         <div className="v35-tab-section" data-tab="builder"><details className="v35-advanced"><summary>◷ Gameweek Center · Spielplan, Ziele und Details anzeigen</summary><GameweekCenter sport={sport} players={players} cardStore={effectiveCardStore} nbaSchedule={nbaSchedule}
           currentTarget={validTarget?totalTarget:null} onApplyTarget={applyArcadeGoal}
           onOpenPlayer={setSelectedPlayerId} onAddPlayer={queueManualPlayer} onExploreTeam={exploreGameweekTeam}/></details></div>

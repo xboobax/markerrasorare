@@ -52,7 +52,7 @@ assert.ok(missionDescription('nba').includes('L10'));
 const dashboard=fs.readFileSync(path.join(__dirname,'../app/components/arcade-dashboard.tsx'),'utf8');
 const component=fs.readFileSync(path.join(__dirname,'../app/components/daily-mission-picker.tsx'),'utf8');
 assert.match(dashboard,/DailyMissionPicker/);
-assert.match(dashboard,/data-tab="builder" id="daily-mission"/);
+assert.match(dashboard,/data-tab="missions" id="daily-mission"/);
 assert.match(component,/rankDailyMissionPlayers/);
 assert.match(component,/L10/);
 assert.match(component,/Einzelscores/);

@@ -1471,7 +1471,8 @@ body{background:#030407}
 .v35-main[data-workspace="builder"]>[data-tab]:not([data-tab="builder"]),
 .v35-main[data-workspace="players"]>[data-tab]:not([data-tab="players"]),
 .v35-main[data-workspace="analytics"]>[data-tab]:not([data-tab="analytics"]),
-.v35-main[data-workspace="collection"]>[data-tab]:not([data-tab="collection"]){display:none!important}
+.v35-main[data-workspace="collection"]>[data-tab]:not([data-tab="collection"]),
+.v35-main[data-workspace="missions"]>[data-tab]:not([data-tab="missions"]){display:none!important}
 .v35-main .panel{background:#0e0e12;border-color:#292531;box-shadow:none;padding:16px;margin-top:10px}
 .v35-main .section-top{margin-bottom:10px}
 .v35-main .section-top h2{font-size:19px;letter-spacing:-.025em;margin:3px 0}
@@ -1582,3 +1583,25 @@ body{background:#030407}
 .v36-mission-warning{color:#f1c5a7}
 .v36-mission-empty{padding:12px}
 @media(max-width:580px){.v36-mission-row{flex-wrap:wrap}.v36-mission-add{margin-left:auto}.v36-title-actions{justify-content:flex-start}}
+
+/* V3.7 / fifth dedicated Daily Missions workspace, black + muted purple */
+.v37-mission-workspace{min-width:0;max-width:1240px;margin:0 auto}
+.v37-mission-title{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0 15px;flex-wrap:wrap}
+.v37-mission-title h1{font-size:24px;letter-spacing:-.04em;color:#faf8ff;margin:3px 0}
+.v37-mission-title p{margin:0;color:#a9a4b7;font-size:12px;line-height:1.5}
+.v37-mission-coverage{padding:7px 11px;border-radius:9px;background:#14111a;border:1px solid #2b2339;color:#bdb1ce;font-size:11px}
+.v37-mission-scope{border:1px solid #282231;background:#0d0c11;border-radius:12px;padding:12px 14px;margin-bottom:11px}
+.v37-mission-scope-head{display:flex;align-items:center;gap:12px;justify-content:space-between;font-size:12px;margin-bottom:8px}
+.v37-mission-scope-head strong{color:#f3e7ff}.v37-mission-scope-head span{color:#aaa0b9;font-size:11px}
+.v37-mission-leagues{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.v37-mission-team-filter{margin-top:7px;border-top:1px solid #25212f;padding-top:9px}
+.v37-mission-team-filter summary{cursor:pointer;color:#cbb0f3;font-size:12px;font-weight:650}
+.v37-mission-team-filter .chip-strip{margin-top:10px;max-height:185px;overflow:auto}
+.v37-mission-workspace>.v36-mission{margin-top:0}
+.v37-mission-link{background:#23172f;border:1px solid #4b3864;color:#dfc4ff;padding:8px 12px;border-radius:8px;font-weight:700;cursor:pointer}
+.v37-mission-link:hover{background:#352048}
+@media(max-width:740px){.v35-tabs{overflow-x:auto;justify-content:flex-start;scrollbar-width:thin;scrollbar-color:#4e395f #09090c;gap:4px}.v35-tabs button{flex:0 0 auto;white-space:nowrap;padding:9px 11px;font-size:11px}.v37-mission-title h1{font-size:21px}.v37-mission-scope{padding:10px}}
+
+.v37-mission-spotlight{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 13px;border:1px solid #503472;background:#1c1427;border-radius:10px;margin-bottom:12px;font-size:12px}
+.v37-mission-spotlight strong{color:#dec3ff}.v37-mission-spotlight span{color:#fff}.v37-mission-spotlight small{font-size:10px;color:#aaa1bd}
+.v37-data-quality{opacity:.82}

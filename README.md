@@ -1,4 +1,4 @@
-# Neon Builder Pro V3.5 — Clean Workspace
+# Neon Builder Pro V3.7 — Daily Mission Intelligence
 
 **Neu:** Vier kompakte Tabs (Builder, Spieler, Analyse, Sammlung), Sticky Lineup, Quick Filters, Smart Swap, Lineup Doctor, Team Battle mit Spieler-Differenzen, lokale Optimierungs-Presets und eine schlankere Spieler-Tabelle. Fußball- und NBA-Regeln bleiben erhalten. **Keine Upstash-Pflicht; Cron-Jobs standardmäßig deaktiviert.**
 
