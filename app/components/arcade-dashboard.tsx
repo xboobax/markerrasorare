@@ -512,7 +512,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
       const chosen=candidates.find(candidate=>candidate.picks.every(p=>(usage.get(p.player.id)??0)<settings.maxUses)&&
         !picked.some(already=>already.picks.map(p=>p.player.id).sort().join("|")===candidate.picks.map(p=>p.player.id).sort().join("|")));
       if(!chosen)continue;
-      picked.push(chosen);for(const pick of chosen.picks)usage.set(pick.player.id,(usage.get(p.player.id)??0)+1);
+      picked.push(chosen);for(const pick of chosen.picks)usage.set(pick.player.id,(usage.get(pick.player.id)??0)+1);
     }
     return picked;
   }, [eligibleCards,sport,ownedOnly,strategy,validTarget,totalTarget,lockedIds,excludedIds,v30State,league,nbaStarsMode,nbaVariantKey,nbaStarBoard,builderMode]);

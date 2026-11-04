@@ -1,3 +1,9 @@
+## V3.1.1 — Vercel TypeScript Build-Fix
+
+- Behebt einen `Cannot find name 'p'`-Fehler in `app/components/arcade-dashboard.tsx` (Zeile 515), indem der Player-Reuse-Zähler die gültige Schleifenvariable `pick` verwendet.
+- NBA Stars Optimizer 2.0, Fußballfunktionen und vorhandene Nutzerdaten sind unverändert.
+- Regressionstest prüft den korrekten Zugriff auf die Team-Nutzungszählung.
+
 ## V3.1.0 — NBA Stars Optimizer 2.0
 
 Vier NBA-Profilstrategien (Max Points / Smart Value / Safety First / High Ceiling), Sternbudget-DP, erweiterte Gegner-/Risikotransparenz, echte Profilvarianten, V3.0-Kompatibilität und zusätzliche Regressionstests. Details: `UPDATE_V3_1_DE.md`.
