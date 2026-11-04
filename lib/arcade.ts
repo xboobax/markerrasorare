@@ -1,6 +1,7 @@
 import type {Forecast, Sport} from "./model";
 import {ARCADE} from "../config/divination";
 import {estimateTargetChance} from "./target-probability";
+import {projectionValue,satisfiesV30Constraints,reachesV30Minimum, type BuilderV30Settings} from "./builder-v30";
 
 export type Strategy = "balanced" | "safe" | "upside" | "target";
 export type CardInput = {
@@ -37,6 +38,7 @@ export type OptimizeOptions = {
   targetScore?: number | null;
   lockedPlayerIds?: string[];
   excludedPlayerIds?: string[];
+  advancedSettings?: BuilderV30Settings;
 };
 const footballSlots: string[] = [...ARCADE.football.slots];
 const nbaSlots: string[] = [...ARCADE.nba.slots];
@@ -68,10 +70,10 @@ function result(picks: LineupPick[]): OptimizedLineup {
     targetProbability: null,
   };
 }
-function dedupe(lineups: OptimizedLineup[], limit: number, strategy: Strategy, target?: number | null) {
+function dedupe(lineups: OptimizedLineup[], limit: number, strategy: Strategy, target?: number | null, advanced?:BuilderV30Settings) {
   const withChance = lineups.map(l=>({...l, targetProbability: target && target > 0 ? estimateTargetChance(l.picks, target) : null}));
   const byPlayers = new Map<string,OptimizedLineup>();
-  const metric = (l:OptimizedLineup) => strategy === "safe" ? l.floorScore : strategy === "upside" ? l.ceilingScore : strategy === "target" ? (l.targetProbability ?? -1) : l.projectedScore;
+  const metric = (l:OptimizedLineup) => strategy === "safe" ? l.floorScore : strategy === "upside" ? l.ceilingScore : strategy === "target" ? (l.targetProbability ?? -1) : advanced&&advanced.projection!=="ps"?l.picks.reduce((sum,p)=>sum+p.optimizeScore,0):l.projectedScore;
   for (const line of withChance) {
     const key = line.picks.map(p=>p.player.id).sort().join("|");
     const prev = byPlayers.get(key);
@@ -98,12 +100,13 @@ export function optimizeArcadeLineups(cards: CardInput[], opts: OptimizeOptions)
     if (!(typeof opts.targetScore === "number" && Number.isFinite(opts.targetScore) && opts.targetScore > 0)) return [];
     const pool = (["balanced", "safe", "upside"] as const).flatMap(objective =>
       optimizeArcadeLineups(cards, {...opts, strategy: objective, limit: 20}));
-    return dedupe(pool, limit, "target", opts.targetScore);
+    return dedupe(pool, limit, "target", opts.targetScore,opts.advancedSettings);
   }
   const lockedIds = new Set(opts.lockedPlayerIds??[]);
   const excludedIds = new Set(opts.excludedPlayerIds??[]);
   if (lockedIds.size > 5 || [...lockedIds].some(id=>excludedIds.has(id))) return [];
-  const clean: LineupPick[] = cards.filter(c=>!excludedIds.has(c.player.id) && candidateIsEligible(c,opts))
+  const advanced=opts.advancedSettings;
+  const clean: LineupPick[] = cards.filter(c=>!excludedIds.has(c.player.id) && candidateIsEligible(c,opts) && (!advanced||projectionValue(c,advanced.projection)!==null))
     .map(card=>{
       const bonusPercent = clampBonus(card.bonusPercent);
       const factor=1+bonusPercent/100;
@@ -113,7 +116,7 @@ export function optimizeArcadeLineups(cards: CardInput[], opts: OptimizeOptions)
       const ceilingScore=(Number.isFinite(p.ceiling)?p.ceiling:p.expected)*p.playProb*factor;
       return {slot:"",player:p,stars:opts.sport==="nba"?(card.stars as number):null,
         bonusPercent,projectedScore,floorScore,ceilingScore,
-        optimizeScore:strategy==="safe"?floorScore:strategy==="upside"?ceilingScore:projectedScore};
+        optimizeScore:strategy==="safe"?floorScore:strategy==="upside"?ceilingScore:advanced?projectionValue(card,advanced.projection)??0:projectedScore};
     });
   // Distinct players: until multi-edition card support use the best edition per player.
   const byId=new Map<string,LineupPick>();
@@ -145,7 +148,7 @@ export function optimizeArcadeLineups(cards: CardInput[], opts: OptimizeOptions)
         }
       }
     }
-    return dedupe(dp[5].flat().map(s=>result(s.picks)),limit,strategy,opts.targetScore);
+    return dedupe(dp[5].flat().map(s=>result(s.picks)).filter(line=>!advanced||(satisfiesV30Constraints(line.picks,opts.sport,advanced)&&reachesV30Minimum(line,opts.sport,advanced))),limit,strategy,opts.targetScore,advanced);
   }
 
   // Enumerate legal assignments for locked players, including a possible FLEX pick.
@@ -156,7 +159,7 @@ export function optimizeArcadeLineups(cards: CardInput[], opts: OptimizeOptions)
     if(idx===pinned.length){assignmentGroups.push({picks,usedSlots:used});return;}
     const pick=pinned[idx];
     for(const slot of footballSlots) {
-      if(used.has(slot)||!slotAccepts(slot,pick.player.position)) continue;
+      if(used.has(slot)||!slotAccepts(slot,pick.player.position)||(advanced&&slot==="FLEX"&&advanced.extraPosition!=="ANY"&&pick.player.position!==advanced.extraPosition)) continue;
       assign(idx+1,[...picks,{...pick,slot}],new Set([...used,slot]));
     }
   }
@@ -168,13 +171,18 @@ export function optimizeArcadeLineups(cards: CardInput[], opts: OptimizeOptions)
     type State={picks:LineupPick[];used:Set<string>;rank:number};
     let beam:State[]=[{picks:group.picks,used:new Set(group.picks.map(p=>p.player.id)),rank:group.picks.reduce((n,p)=>n+ranking(p),0)}];
     for(const slot of orderedSlots.filter(slot=>!group.usedSlots.has(slot))) {
-      const pool=remaining.filter(p=>slotAccepts(slot,p.player.position))
+      const pool=remaining.filter(p=>slotAccepts(slot,p.player.position)&&(!advanced||slot!=="FLEX"||advanced.extraPosition==="ANY"||p.player.position===advanced.extraPosition))
         .sort((a,b)=>ranking(b)-ranking(a)).slice(0,perSlot);
       if(!pool.length){beam=[];break;}
       const next:State[]=[];
       for(const state of beam) for(const pick of pool) {
-        if(state.used.has(pick.player.id))continue;
-        next.push({picks:[...state.picks,{...pick,slot}],used:new Set([...state.used,pick.player.id]),rank:state.rank+ranking(pick)});
+        if(state.used.has(pick.player.id)|| (advanced?.avoidOpponents&& !satisfiesV30Constraints([...state.picks,{...pick,slot}],opts.sport,{...advanced,stack:"none",extraPosition:"ANY",minProjected:null})))continue;
+        const stackBoost=advanced&&advanced.stack!=="none"?state.picks.reduce((total,older)=>{
+          if(older.player.team!==pick.player.team)return total;
+          const pair=[older.player.position,pick.player.position];
+          return total+((advanced.stack==="team"||advanced.stack==="defensive"&&pair.includes("GK")&&pair.includes("DEF")||advanced.stack==="offensive"&&pair.includes("MID")&&pair.includes("FWD"))?5:0);
+        },0):0;
+        next.push({picks:[...state.picks,{...pick,slot}],used:new Set([...state.used,pick.player.id]),rank:state.rank+ranking(pick)+stackBoost-(advanced?.preferPrimary&&slot==="FLEX"?2:0)});
       }
       next.sort((a,b)=>b.rank-a.rank);
       const seen=new Set<string>();beam=[];
@@ -190,5 +198,5 @@ export function optimizeArcadeLineups(cards: CardInput[], opts: OptimizeOptions)
       candidates.push(result([...state.picks].sort((a,b)=>footballSlots.indexOf(a.slot)-footballSlots.indexOf(b.slot))));
     }
   }
-  return dedupe(candidates,limit,strategy,opts.targetScore);
+  return dedupe(advanced?candidates.filter(line=>satisfiesV30Constraints(line.picks,opts.sport,advanced)&&reachesV30Minimum(line,opts.sport,advanced)):candidates,limit,strategy,opts.targetScore,advanced);
 }

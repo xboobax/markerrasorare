@@ -11,6 +11,8 @@ import HiddenGems from "@/app/components/hidden-gems";
 import DataHealthCenter from "@/app/components/data-health-center";
 import ArcadeIntelligenceLab from "@/app/components/arcade-intelligence-lab";
 import PredictionLabPro from "@/app/components/prediction-lab-pro";
+import AutoBuilderSettings from "@/app/components/auto-builder-settings";
+import {initialV30State,restoreV30State,v30Key,v30ForTeam,limitLineupReuse,type BuilderV30State,type BuilderV30Settings} from "@/lib/builder-v30";
 import {buildArcadeIntelligence} from "@/lib/arcade-intelligence";
 import type {FetchSummary} from "@/lib/data-health";
 import type {ScheduleData} from "@/lib/gameweek-center";
@@ -174,6 +176,16 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const [activeResult, setActiveResult] = useState(0);
   const [builderMode, setBuilderMode] = useState<"automatic" | "manual">("manual");
   const [strategy, setStrategy] = useState<Strategy>("balanced");
+  const [v30State,setV30State]=useState<BuilderV30State>(initialV30State);
+  const [v30Loaded,setV30Loaded]=useState<Sport|null>(null);
+  const [v30EditTeam,setV30EditTeam]=useState("team-1");
+  useEffect(()=>{
+    setV30Loaded(null);setV30EditTeam("team-1");
+    try{setV30State(restoreV30State(JSON.parse(window.localStorage.getItem(v30Key(sport))??"null")));}
+    catch{setV30State(initialV30State());}
+    setV30Loaded(sport);
+  },[sport]);
+  useEffect(()=>{if(v30Loaded!==sport)return;try{window.localStorage.setItem(v30Key(sport),JSON.stringify(v30State));}catch{}},[v30State,sport,v30Loaded]);
   const [intelligencePickKey,setIntelligencePickKey]=useState<string|null>(null);
   const [autoCaptainChoice,setAutoCaptainChoice]=useState<{key:string;playerId:string}|null>(null);
   const [target, setTarget] = useState(sport === "football" ? "180" : "");
@@ -440,14 +452,38 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const imageCount = players.filter(p => Boolean(p.imageUrl)).length;
   const totalTarget = Number(target);
   const validTarget = target.trim() !== "" && Number.isFinite(totalTarget) && totalTarget > 0;
-  const lineups = useMemo(() => optimizeArcadeLineups(eligibleCards, {
-    sport, ownedOnly, limit: 5, beamWidth: 320, maxCandidatesPerSlot: 150,
-    strategy, targetScore: validTarget ? totalTarget : null, lockedPlayerIds: lockedIds, excludedPlayerIds: excludedIds,
-  }), [eligibleCards, sport, ownedOnly, strategy, validTarget, totalTarget, lockedIds, excludedIds]);
-  const intelligence=useMemo(()=>builderMode==="automatic" ? buildArcadeIntelligence(eligibleCards,{
+  const v30ActiveSettings=v30ForTeam(v30State,v30EditTeam);
+  const v30AnyChanged=v30State.scope==="team"||JSON.stringify(v30State.global)!==JSON.stringify(initialV30State().global);
+  const v30Strategy=(settings:BuilderV30Settings):Strategy=>settings.preset==="safe"?"safe":settings.preset==="ceiling"||settings.preset==="balanced"?"balanced":strategy;
+  const v30Options=(settings:BuilderV30Settings)=>({sport,ownedOnly,limit:20,beamWidth:300,maxCandidatesPerSlot:120,
+    strategy:v30Strategy(settings),targetScore:validTarget?totalTarget:null,lockedPlayerIds:lockedIds,excludedPlayerIds:excludedIds,
+    advancedSettings:settings});
+  const lineups = useMemo(() => {
+    const poolFor=(settings:BuilderV30Settings)=>settings.excludedLeagues.includes(league)?[]:eligibleCards;
+    if(v30State.scope==="all"){
+      const settings=v30State.global;
+      return limitLineupReuse(optimizeArcadeLineups(poolFor(settings),v30Options(settings)),settings.maxUses,5);
+    }
+    const picked:ReturnType<typeof optimizeArcadeLineups>=[],usage=new Map<string,number>();
+    const cache=new Map<string,ReturnType<typeof optimizeArcadeLineups>>();
+    for(let i=1;i<=5;i++){
+      const settings=v30ForTeam(v30State,`team-${i}`);
+      const cacheKey=JSON.stringify(settings);
+      if(!cache.has(cacheKey))cache.set(cacheKey,optimizeArcadeLineups(poolFor(settings),v30Options(settings)));
+      const candidates=cache.get(cacheKey)!;
+      const chosen=candidates.find(candidate=>candidate.picks.every(p=>(usage.get(p.player.id)??0)<settings.maxUses)&&
+        !picked.some(already=>already.picks.map(p=>p.player.id).sort().join("|")===candidate.picks.map(p=>p.player.id).sort().join("|")));
+      if(!chosen)continue;
+      picked.push(chosen);for(const pick of chosen.picks)usage.set(pick.player.id,(usage.get(pick.player.id)??0)+1);
+    }
+    return picked;
+  }, [eligibleCards,sport,ownedOnly,strategy,validTarget,totalTarget,lockedIds,excludedIds,v30State,league]);
+  // The older Intelligence Lab builds independent candidates without V3 rules.
+  // Hide it when any advanced constraints are active rather than bypassing them.
+  const intelligence=useMemo(()=>builderMode==="automatic"&&!v30AnyChanged ? buildArcadeIntelligence(eligibleCards,{
     sport,ownedOnly,limit:8,beamWidth:260,maxCandidatesPerSlot:115,
     targetScore:validTarget?totalTarget:null,lockedPlayerIds:lockedIds,excludedPlayerIds:excludedIds,
-  }):null,[builderMode,eligibleCards,sport,ownedOnly,validTarget,totalTarget,lockedIds,excludedIds]);
+  }):null,[builderMode,eligibleCards,sport,ownedOnly,validTarget,totalTarget,lockedIds,excludedIds,v30AnyChanged]);
   const intelligenceView=useMemo(()=>intelligence&&sport==="football"?{...intelligence,variants:intelligence.variants.map(v=>{
     const lineup=automaticCaptainLineup(v.lineup,sport,injuryById,validTarget?totalTarget:null).lineup!;
     return {...v,lineup,targetGap:intelligence.target===null?null:lineup.projectedScore-intelligence.target};
@@ -578,7 +614,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
           <div className="nba-star-metrics"><div><small>OFFIZIELL VON SORARE</small><strong>{automaticStarCount}</strong><span>der geladenen NBA-Spieler</span></div><div><small>MANUELLER FALLBACK</small><strong>{manualStarCount}</strong><span>falls Sorare keine Bewertung liefert</span></div><div><small>OHNE STERNWERT</small><strong>{players.length-ratedCount}</strong><span>bewusst nicht geschätzt</span></div><div><small>LETZTER ABRUF</small><strong className="nba-star-date">{starSync.snapshot?new Date(starSync.snapshot.fetchedAt).toLocaleString("de-DE",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}):starSync.phase==="loading"?"Lädt …":"—"}</strong><span>Sorare-API · 15 Min. Cache</span></div></div>
           {starSync.phase==="error"&&<p className="nba-star-warning" role="status">⚠ {starSync.message} Bisherige manuelle Sternwerte bleiben als Fallback verfügbar.</p>}
           {starSync.phase==="ready"&&starSync.snapshot?.partial&&<p className="nba-star-warning">⚠ Einige Teile des Sterneabrufs sind fehlgeschlagen. Für fehlende Bewertungen gilt weiterhin der manuelle Fallback.</p>}
-          <p className="nba-star-note">Sorare aktualisiert Spieler-Tiers spieltagabhängig. Für bereits eröffnete Gameweeks kann der auf Sorare festgeschriebene Sternpreis vom aktuellen <em>gameplayTierStars</em>-Wert abweichen. Vor dem Einreichen bitte die konkrete Wettbewerbs-GW prüfen. Kartenbesitz und Boni bleiben manuell.</p>
+          <p className="nba-star-note">Sorare aktualisiert Spieler-Tiers spieltagabhängig. Für bereits eröffnete Gameweeks kann der auf Sorare festgeschriebene Sternpreis vom aktuellen <em>gameplayTierStars</em>-Wert abweichen. Vor dem Einreichen bitte die konkrete Wettbewerbs-GW prüfen. Kartenbesitz und Kartenboni kommen aus Sorare, soweit verfügbar; sonst manuelle Ersatzwerte.</p>
         </section>}
         <DataHealthCenter sport={sport} players={basePlayers} summary={fetchSummary}
           archiveBackend={archiveBackend} pendingResults={autoPending}
@@ -663,15 +699,17 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
               <input id="manual-target" type="number" min="1" step="1" inputMode="numeric" value={target} placeholder="Score-Ziel eingeben" onChange={e=>setTarget(e.target.value)}/>
               {sport === "football" && <><button type="button" onClick={()=>setTarget("180")}>180 Pkt.</button><button type="button" onClick={()=>setTarget("360")}>360 Pkt.</button></>}
             </div>}
-            {builderMode === "manual" ? <BuilderWorkspace sport={sport} league={league} availability={availability} availabilityById={injuryById} players={players} cardStore={effectiveCardStore} ownedOnly={ownedOnly} verifiedOwnedReady={verifiedOwnedReady} verifiedCollection={verifiedCollection}
+            {builderMode === "manual" ? <BuilderWorkspace sport={sport} league={league} availability={availability} availabilityById={injuryById} players={players} cardStore={effectiveCardStore} ownedOnly={ownedOnly} verifiedOwnedReady={verifiedOwnedReady} verifiedCollection={verifiedCollection} v30State={v30State} onV30Change={setV30State} leagues={leagues}
               updateCard={updateCard} targetScore={validTarget ? totalTarget : null}
               onOpenProfile={setSelectedPlayerId}
               onSavePredictions={items => items.forEach(saveTracked)} requestedPlayer={manualRequest}
               favorites={watchlist} onToggleFavorite={toggleFavorite}
               nbaSchedule={nbaSchedule} matchupRatings={effectiveRatings} matchupSource={automaticMatchups.source}/> : <>
+            <AutoBuilderSettings sport={sport} league={league} leagues={leagues} state={v30State} onChange={setV30State} teamId={v30EditTeam} onTeamChange={setV30EditTeam}/>
+            <p className="v30-status" role="status">V3.0: {v30State.scope==="team"?"Individuelle Auto-Team-Strategien":"Gemeinsame Strategie"} · {v30ActiveSettings.projection.toUpperCase()} · {lineups.length} gültige Vorschläge. {v30ActiveSettings.projection==="q80"?"Q80 ist experimentell, nicht kalibriert; Spieler ohne mindestens 8 Scores werden ausgeschlossen.":""} {v30ActiveSettings.projection==="raw"?"Die Auswahl wird ohne Kartenbonus optimiert; die Teamanzeige enthält weiterhin tatsächliche Karten-/Captain-Zuschläge.":""} {v30ActiveSettings.excludedLeagues.includes(league)?"Die aktuell geladene Liga wurde ausgeschlossen.":""}</p>
             <p className="v283-auto-scope">{ownedOnly?"✓ Automatische Aufstellungen ausschließlich aus verifiziert eigenen Karten":"Alle Spieler im Datenbereich · theoretische Aufstellungen"} · Einstellung oben ändern.</p>
             <div className="strategy-bar">
-              <div className="strategy-title"><strong>Optimierung</strong><small>Ausgewogen = Erwartungswert · Sicher = Floor · Offensiv = Ceiling · Zielchance = geschätzte Zielerreichung</small></div>
+              <div className="strategy-title"><strong>Optimierung</strong><small>Diese Auswahl gilt für „Custom“. Safe, Balanced und High Ceiling aus V3.0 setzen ein eigenes Optimierungsziel.</small></div>
               <div className="strategy-options" role="group" aria-label="Lineup-Strategie">
                 {(["balanced","safe","upside","target"] as Strategy[]).map(value => <button type="button" key={value} disabled={value === "target" && !validTarget} title={value === "target" && !validTarget ? "Bitte zuerst unten ein Score-Ziel eingeben" : undefined} className={strategy === value ? "active" : ""} onClick={() => {setStrategy(value);setActiveResult(0);setIntelligencePickKey(null);}}>{({balanced:"Ausgewogen",safe:"Sicher",upside:"Offensiv",target:"Zielchance"} as Record<Strategy,string>)[value]}</button>)}
               </div>
@@ -707,12 +745,13 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
               <div><span>PROGNOSE GESAMT</span><strong>{chosen ? fmt(chosen.projectedScore) : "—"}<small> Pkt.</small></strong></div>
               <div className="target-input"><label htmlFor="target">Score-Ziel (frei einstellbar)</label><input id="target" type="number" min="1" step="1" inputMode="numeric" value={target} placeholder="z. B. 360" onChange={e=>setTarget(e.target.value)} /></div>
             </div>
+            {!chosen&&<p className="v30-status">Kein passendes Lineup: Prüfe Bundesliga-/Liga-Ausschlüsse, Mindestpunkte, Team-Stack, Extra-Position, Q80-Datenabdeckung oder NBA-Sternelimit. Es werden keine fehlenden Daten ergänzt.</p>}
             {chosen && <div className="lineup-range"><span>Floor (heuristisch): <strong>{fmt(chosen.floorScore)}</strong></span><span>Ceiling (heuristisch): <strong>{fmt(chosen.ceilingScore)}</strong></span></div>}
             {chosen && validTarget && chosen.targetProbability !== null && <div className="target-chance" role="status"><div><span>GESCHÄTZTE ZIELCHANCE</span><strong>{Math.round(chosen.targetProbability * 100)} %</strong></div><small>Modellschätzung mit Formstreuung, DNP-Risiko und angenommener Team-Korrelation. Nicht kalibriert, keine garantierte Gewinnchance.</small></div>}
             {chosen && validTarget && (
               <div className="target-progress"><div className="target-track"><div style={{width: `${progress}%`}}/></div><p>Modellprognose {fmt(chosen.projectedScore)} / {fmt(totalTarget)} · <strong>{chosen.projectedScore >= totalTarget ? "Prognose über Ziel" : `${fmt(Math.max(0,totalTarget - chosen.projectedScore))} Punkte unter Ziel`}</strong></p></div>
             )}
-            <p className="model-note">Mit „Fixieren“ zwingst du Spieler ins Lineup, mit „Sperren“ entfernst du sie aus der Auswahl. Sterne werden aus Sorare geladen, falls verfügbar; Boni bleiben manuell. {ownedOnly ? "Aufstellung nur aus vollständig synchronisierten Sorare-Karten." : "Theoretische Bestbesetzung aus dem geladenen Spielerpool – dein Kartenbesitz ist nicht geprüft."} Fehlende NBA-Sterne kannst du weiterhin manuell eintragen. Prognosen sind keine garantierten Ergebnisse.</p>
+            <p className="model-note">Mit „Fixieren“ zwingst du Spieler ins Lineup, mit „Sperren“ entfernst du sie aus der Auswahl. Sterne werden aus Sorare geladen, falls verfügbar; Kartenboni kommen aus Sorare, soweit verfügbar; sonst manuelle Ersatzwerte. {ownedOnly ? "Aufstellung nur aus vollständig synchronisierten Sorare-Karten." : "Theoretische Bestbesetzung aus dem geladenen Spielerpool – dein Kartenbesitz ist nicht geprüft."} Fehlende NBA-Sterne kannst du weiterhin manuell eintragen. Prognosen sind keine garantierten Ergebnisse.</p>
             {shownLineups.length > 1 && <div className="variants" role="group" aria-label="Aufstellungen vergleichen">{shownLineups.map((l, i) => <button key={i} className={Math.min(activeResult,lineups.length-1) === i ? "active" : ""} onClick={()=>{setActiveResult(i);setIntelligencePickKey(null);}}>Lineup {i+1} <strong>{validTarget && l.targetProbability !== null ? `${Math.round(l.targetProbability * 100)} % Zielchance` : `${fmt(l.projectedScore)} Pkt.`}</strong></button>)}</div>}
             {shownLineups.length > 1 && <div className="lineup-compare"><h3>Lineups im direkten Vergleich</h3><div className="tracking-scroll"><table className="tracking-table"><thead><tr><th>Lineup</th><th>Prognose</th><th>Floor</th><th>Ceiling</th>{sport === "nba" && <th>Sterne</th>}{validTarget && <th>Zielchance*</th>}</tr></thead><tbody>{shownLineups.map((l,i) => <tr key={i} className={Math.min(activeResult,lineups.length-1)===i ? "compare-selected" : ""} onClick={() => {setActiveResult(i);setIntelligencePickKey(null);}}><td><button type="button" onClick={() => {setActiveResult(i);setIntelligencePickKey(null);}}>#{i+1} wählen</button></td><td>{fmt(l.projectedScore)}</td><td>{fmt(l.floorScore)}</td><td>{fmt(l.ceilingScore)}</td>{sport === "nba" && <td>{fmt(l.starsUsed)} ★</td>}{validTarget && <td>{l.targetProbability===null ? "—" : `${Math.round(l.targetProbability*100)} %`}</td>}</tr>)}</tbody></table></div><p className="profile-muted">* Zielchance: nicht kalibrierte Modellschätzung. Lineups sind nicht automatisch offiziell spielberechtigt; Kartenbesitz und aktuelle Set-Regeln prüfen.</p></div>}
             {!chosen && <div className="empty-state"><strong>Für dieses Regelset fehlt eine vollständige gültige Aufstellung.</strong><p>{sport === "nba" ? "Vergib im Spielertableau zunächst echte Sterne (1–5 in 0,5-Schritten) für mindestens fünf geeignete Karten. Zusammen dürfen sie höchstens 16 Sterne haben." : "Es werden je ein TW, VER, MF, FWD sowie ein zusätzlicher Feldspieler benötigt."}{ownedOnly ? " Prüfe den vollständig synchronisierten Kartenbestand, den gewählten Datenbereich und die NBA-Sterne." : ""} Fixierungen müssen zum Regelset passen; NBA zusammen höchstens 16 Sterne.</p></div>}

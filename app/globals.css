@@ -1334,3 +1334,25 @@ body{background:#030407}
 
 /* V2.9.3: verified card bonuses, equally visible on basketball and football */
 .workspace-v23 .v293-sorare-bonus,.v293-sorare-bonus{display:inline-block;font-size:11px;line-height:1.5;color:#a2f2cb;background:#0d1b18;border:1px solid #245344;border-radius:7px;padding:3px 7px;white-space:normal;}
+/* V3.0 Advanced Strategy — Obsidian Black */
+.v30-strategy{margin:15px 0;background:#06070a;border:1px solid #24272f;border-radius:15px;padding:15px;color:#eeeef4}
+.v30-strategy-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.v30-strategy-head h3{font-size:16px;margin:3px 0}.v30-strategy-head p,.v30-strategy small{font-size:11px;line-height:1.5;color:#9ba2b2}
+.v30-kicker{font-size:10px;letter-spacing:.14em;color:#b99cf4;font-weight:700}
+.v30-strategy button,.v30-strategy select,.v30-strategy input[type=number]{border:1px solid #353742;background:#15171e;border-radius:9px;color:#f4f3fa;padding:8px 10px;font:inherit;font-size:12px}
+.v30-strategy button{cursor:pointer}.v30-strategy button.active{border-color:#8862cd;background:#282036;color:#e2ceff}.v30-strategy button:focus-visible{outline:2px solid #b292e7}
+.v30-scope-row{display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin:12px 0}.v30-scope-row span,.v30-strategy legend{font-size:12px;font-weight:750}.v30-scope-row small{flex-basis:100%}
+.v30-core-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.v30-strategy fieldset{border:1px solid #292b36;border-radius:10px;margin:0;min-width:0;padding:9px}.v30-strategy legend{padding:0 5px}
+.v30-strategy fieldset button{margin:2px 3px 7px 0}.v30-strategy fieldset small{display:block}
+.v30-options-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:14px}
+.v30-options-grid>section{border:1px solid #272a34;background:#0e1015;border-radius:10px;padding:13px;display:flex;flex-direction:column;gap:9px;min-width:0}
+.v30-options-grid section>strong{font-size:12px}.v30-options-grid section>small{display:block}.v30-options-grid label{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:#dadee7}
+.v30-options-grid label:has(select),.v30-options-grid label:has(input[type=number]){justify-content:space-between}.v30-options-grid input[type=checkbox]{accent-color:#ab7bfa}
+.v30-options-grid select{max-width:100%;width:auto}.v30-options-grid p{font-size:12px;color:#aab1be;line-height:1.5;margin:0}
+.v30-status{font-size:12px;border-left:3px solid #9875d6;background:#15111f;padding:9px 12px;margin:8px 0;border-radius:5px;color:#cfc5df}
+.v30-footnote{font-size:11px;color:#9eacbb;line-height:1.5}
+.v30-roster-extra th{white-space:nowrap}.v30-raw{color:#aab4c7;font-weight:600}.v30-quantile{color:#8edfe7;font-weight:750}
+@media(max-width:760px){.v30-core-row,.v30-options-grid{grid-template-columns:1fr}.v30-strategy{padding:12px}}
+
+.v30-th-sort{border:0;background:transparent;color:inherit;font:inherit;font-weight:inherit;white-space:nowrap;cursor:pointer}.v30-th-sort:hover{color:#c2a4ff}
+.v30-explain{background:#0b0e14;border:1px solid #292d39;border-radius:9px;margin:10px 0;padding:8px 10px;color:#c8d3e3;font-size:12px}.v30-explain summary{cursor:pointer;font-weight:650;color:#b99cf4}.v30-explain p{line-height:1.55}

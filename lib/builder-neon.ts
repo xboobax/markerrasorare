@@ -2,6 +2,7 @@ import {ARCADE} from "../config/divination";
 import {isValidNbaStars,slotAccepts,type CardInput,type Strategy} from "./arcade";
 import {evaluateManualLineup,normalizeManualSelection,type ManualSelection} from "./manual-lineup";
 import {estimateTargetChance} from "./target-probability";
+import {projectionValue,satisfiesV30Constraints,type BuilderV30Settings} from "./builder-v30";
 import type {Sport} from "./model";
 
 export type SelectionResult={selection:ManualSelection;reason:string|null};
@@ -10,10 +11,10 @@ export type QuickSwap={id:string;name:string;team:string;newScore:number;delta:n
 const required=(sport:Sport):readonly string[]=>sport==="nba"?ARCADE.nba.slots:ARCADE.football.slots;
 const normalizedIds=(value:ManualSelection)=>normalizeManualSelection(value);
 const validStars=(card:CardInput|undefined,sport:Sport)=>sport!=="nba"||isValidNbaStars(card?.stars);
-const weighted=(card:CardInput,mode:Strategy)=>{
+const weighted=(card:CardInput,mode:Strategy,settings?:BuilderV30Settings)=>{
   const p=card.player;
   const bonus=1+Math.max(0,Math.min(50,card.bonusPercent??0))/100;
-  return Math.max(0,(mode==="safe"?p.floor*p.playProb:mode==="upside"?p.ceiling*p.playProb:p.weighted)*bonus);
+  return Math.max(0,mode==="safe"?p.floor*p.playProb*bonus:mode==="upside"?p.ceiling*p.playProb*bonus:settings?projectionValue(card,settings.projection)??0:p.weighted*bonus);
 };
 /** Validate partial/manual edits without treating an intentionally incomplete five-card lineup as invalid. */
 export function checkPartial(selection:ManualSelection,cards:CardInput[],sport:Sport):string|null{
@@ -56,25 +57,26 @@ export function moveBetweenSelections(args:{source:ManualSelection;target:Manual
 /** Only empty slots are filled. No manual pick or locked card is displaced or reordered.
  * Bounded beam search with explicit slot/duplicate/budget validation; target is a model estimate.
  */
-export function smartFillEmptySlots(selection:ManualSelection,cards:CardInput[],sport:Sport,options:{strategy?:Strategy;targetScore?:number|null;excludedIds?:string[];maxCandidates?:number;beamWidth?:number;allowedIds?:string[]}={}):SmartFillResult{
+export function smartFillEmptySlots(selection:ManualSelection,cards:CardInput[],sport:Sport,options:{strategy?:Strategy;targetScore?:number|null;excludedIds?:string[];maxCandidates?:number;beamWidth?:number;allowedIds?:string[];advancedSettings?:BuilderV30Settings}={}):SmartFillResult{
   const current=normalizedIds(selection);const invalid=checkPartial(current,cards,sport);
   if(invalid)return {selection:current,reason:invalid,added:0};
   const open=Array.from({length:5},(_,i)=>i).filter(i=>!current[i]);
   if(!open.length)return {selection:current,reason:"Alle Slots sind bereits belegt. Für einen neuen Vorschlag nutze Quick Swap.",added:0};
   const strategy=options.strategy??"balanced";
+  const settings=options.advancedSettings;
   const byId=new Map(cards.map(c=>[c.player.id,c]));
   const excluded=new Set(options.excludedIds??[]);
   const allowed=options.allowedIds?new Set(options.allowedIds):null;
   const occupied=new Set(current.filter((id):id is string=>!!id));
   const possible=cards.filter(card=>(!allowed||allowed.has(card.player.id))&&!occupied.has(card.player.id)&&!excluded.has(card.player.id)&&card.player.hasGame!==false&&
-    Number.isFinite(card.player.weighted)&&card.player.weighted>0&&validStars(card,sport));
+    Number.isFinite(card.player.weighted)&&card.player.weighted>0&&validStars(card,sport)&&(!settings||projectionValue(card,settings.projection)!==null));
   type State={selection:ManualSelection;used:Set<string>;stars:number;rank:number};
   const existingStars=current.reduce((sum,id)=>sum+(id&&sport==="nba"?byId.get(id)?.stars??0:0),0);
-  const initialRank=current.reduce((sum,id)=>sum+(id&&byId.has(id)?weighted(byId.get(id)!,strategy):0),0);
+  const initialRank=current.reduce((sum,id)=>sum+(id&&byId.has(id)?weighted(byId.get(id)!,strategy,settings):0),0);
   let beam:State[]=[{selection:current,used:new Set(occupied),stars:existingStars,rank:initialRank}];
   for(const [step,slotIndex] of open.entries()){
-    const byScore=possible.filter(c=>slotAccepts(required(sport)[slotIndex],c.player.position))
-      .sort((a,b)=>weighted(b,strategy)-weighted(a,strategy));
+    const byScore=possible.filter(c=>slotAccepts(required(sport)[slotIndex],c.player.position)&&(!settings||required(sport)[slotIndex]!=="FLEX"||settings.extraPosition==="ANY"||settings.extraPosition===c.player.position))
+      .sort((a,b)=>weighted(b,strategy,settings)-weighted(a,strategy,settings));
     // Include affordable high-value NBA options so an expensive top ranking cannot exhaust the budget.
     const cap=Math.max(30,Math.min(160,options.maxCandidates??100));
     const pool=sport==="nba"?[...new Map([...byScore.slice(0,cap),...byScore.slice().sort((a,b)=>(a.stars??5)-(b.stars??5)).slice(0,Math.min(35,cap))].map(c=>[c.player.id,c])).values()]
@@ -83,18 +85,29 @@ export function smartFillEmptySlots(selection:ManualSelection,cards:CardInput[],
     for(const state of beam){
       for(const card of pool){
         if(state.used.has(card.player.id))continue;
+        if(settings?.avoidOpponents&&!satisfiesV30Constraints(
+          [...state.selection.filter((id):id is string=>!!id).map(id=>({player:byId.get(id)!.player,slot:"ANY"})),{player:card.player,slot:"ANY"}],sport,{...settings,stack:"none",extraPosition:"ANY",minProjected:null}))continue;
         const starTotal=state.stars+(sport==="nba"?card.stars!:0);
         if(sport==="nba"&&starTotal+(open.length-step-1)>ARCADE.nba.maxStars+1e-9)continue;
         const result=state.selection.slice();result[slotIndex]=card.player.id;
-        next.push({selection:result,used:new Set([...state.used,card.player.id]),stars:starTotal,rank:state.rank+weighted(card,strategy)});
+        next.push({selection:result,used:new Set([...state.used,card.player.id]),stars:starTotal,rank:state.rank+weighted(card,strategy,settings)-(settings?.preferPrimary&&required(sport)[slotIndex]==="FLEX"?2:0)});
       }
     }
     next.sort((a,b)=>b.rank-a.rank);
     beam=next.slice(0,Math.max(20,Math.min(350,options.beamWidth??220)));
     if(!beam.length)return {selection:current,reason:"Für die freien Slots wurde keine gültige Aufstellung gefunden. Prüfe Positionen, Sterne oder ausgeschlossene Spieler.",added:0};
   }
-  const valid=beam.filter(item=>evaluateManualLineup(item.selection,cards,sport,options.targetScore).valid);
-  if(!valid.length)return {selection:current,reason:"Die verfügbaren Spieler ergeben kein vollständig regelkonformes Team.",added:0};
+  const valid=beam.filter(item=>{
+    const result=evaluateManualLineup(item.selection,cards,sport,options.targetScore);
+    if(!result.valid)return false;
+    if(settings){
+      if(!satisfiesV30Constraints(result.picks,sport,settings))return false;
+      const captain=sport==="football"?Math.max(0,...result.picks.map(p=>p.player.weighted))*.5:0;
+      if(settings.minProjected!==null&&result.projectedScore+captain<settings.minProjected)return false;
+    }
+    return true;
+  });
+  if(!valid.length)return {selection:current,reason:"Kein Team erfüllt alle Vorgaben (Position, 16 ★, Liga, Stack, Mindestpunkte oder Gegnerkonflikte). Lockere die Auto-Builder-Einstellungen.",added:0};
   // Probability optimization: rank actual finished candidates rather than treating probabilities as additive.
   if(strategy==="target"&&options.targetScore&&options.targetScore>0){
     const objective=(item:State)=>{

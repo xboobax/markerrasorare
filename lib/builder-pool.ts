@@ -3,7 +3,7 @@ import type {ScheduleData} from "./gameweek-center";
 import {canonicalNbaTeam} from "./nba-fixture-mapping";
 
 export type MatchdayHorizon="today"|"tomorrow"|24|72|168|null;
-export type PoolSort="weighted"|"floor"|"ceiling"|"upside"|"l5"|"l10"|"play"|"stars"|"value"|"valueFloor"|"valueCeiling"|"name"|"matchup"|"games"|"kickoff";
+export type PoolSort="raw"|"q80"|"historical70"|"weighted"|"floor"|"ceiling"|"upside"|"l5"|"l10"|"play"|"stars"|"value"|"valueFloor"|"valueCeiling"|"name"|"matchup"|"games"|"kickoff";
 
 /** The dashboard uses German calendar days, not UTC days or 24-hour rolling windows. */
 export const berlinCalendarDay=(value:Date):string=>new Intl.DateTimeFormat("sv-SE",{

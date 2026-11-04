@@ -121,3 +121,11 @@ Neu: Lineup Doctor (regelvalidierte Wechselideen), Hidden Gems Finder (NBA Punkt
 - `app/api/collection/route.ts`: `CurrentUser.anyCards` durch dokumentiertes `Query.cardsWhere(first, after, ownedByMe: true)` ersetzt und die paginierte Antwort auf Root-Ebene ausgewertet.
 - Fehlerfälle behalten den bisherigen bestätigten lokalen Sammlungsstand bei; keine Änderungen am OAuth-Login, den Sorare-Scores oder dem NBA-Sterne-Feed.
 - V2.8.2-Schema-Regressionsschutz und deutsche Update-Anleitung ergänzt.
+
+## V3.0 — Advanced Strategy & Projection Intelligence
+- NBA und Fußball: gemeinsam gespeicherte / je-Team gespeicherte Auto-Builder-Optionen mit PS Standard, PS Raw und experimenteller (nicht kalibrierter) Q80-Schätzung.
+- Strategievorlagen Safe / Balanced / High Ceiling sowie Mindestpunkte, Einsatzlimits über mehrere Teams und optionale Matchup-Konflikte.
+- Fußball-spezifisch: Defensive/Offensive/Team-Stacks, Zusatzposition, Liga-Ausschluss und weiterhin Captain +50 %.
+- NBA-spezifisch: unverändertes 16-Sterne-Limit ohne Captain.
+- Fußball-Spielerpool: sortierbare PS Raw-/Q80-/Historisch-70+-Werte, zusätzliche Spalten mit bewusst leerer Anzeige bei fehlender Datenbasis, „Explain My Projection“.
+- Classic-Karten-Priorisierung bleibt deaktiviert, bis belastbare Daten vorliegen. Sorare-Login, Collection-Sync und API-Keys unangetastet.

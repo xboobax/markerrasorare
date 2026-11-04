@@ -66,12 +66,12 @@ export function chooseCardAsset(options:OwnedSorareCard[],stored:string|undefine
   if(!options.length)return null;
   return options.find(c=>c.assetId===stored)??options[0];
 }
-export const defaultColumns=["date","status","games","matchup","form","play","l5","l10","projection","floor","ceiling","stars","value","bonus","card"] as const;
+export const defaultColumns=["date","status","games","matchup","form","play","l5","l10","psRaw","projection","psBonus","q80","q80Bonus","historical70","p70","p80","startPct","teamXg","csPct","gaPct","winPct","xga","floor","ceiling","stars","value","bonus","card"] as const;
 export type ColumnKey=typeof defaultColumns[number];
-export const columnsLabels:Record<ColumnKey,string>={date:"Datum",status:"Ausfälle",games:"Spiele",matchup:"Gegnerstärke",form:"Form",play:"Einsatz",l5:"L5",l10:"L10",projection:"Prognose",floor:"Floor",ceiling:"Ceiling",stars:"Sterne",value:"Wert/★",bonus:"Bonus",card:"Karte"};
+export const columnsLabels:Record<ColumnKey,string>={date:"Datum",status:"Ausfälle",games:"Spiele",matchup:"Gegnerstärke",form:"Form",play:"Einsatz",l5:"L5",l10:"L10",psRaw:"PS Raw",projection:"PS Standard",psBonus:"PS + Karte",q80:"Q80*",q80Bonus:"Q80 + Karte*",historical70:"70+ historisch",p70:"P70 % (fehlt)",p80:"P80 % (fehlt)",startPct:"Start % (fehlt)",teamXg:"Team xG (fehlt)",csPct:"CS % (fehlt)",gaPct:"G/A % (fehlt)",winPct:"Win % (fehlt)",xga:"xGA (fehlt)",floor:"Floor",ceiling:"Ceiling",stars:"Sterne",value:"Wert/★",bonus:"Bonus",card:"Karte"};
 export function columnsForPreset(preset:"all"|"compact"|"scouting",sport:Sport):ColumnKey[]{
   if(preset==="compact")return ["date","status","projection",...(sport==="nba"?["stars" as const]:[]),"bonus","card"];
-  if(preset==="scouting")return ["date","status","matchup","form","play","l5","l10","projection","floor","ceiling",...(sport==="nba"?["games" as const,"stars" as const]:[]),"bonus"];
+  if(preset==="scouting")return ["date","status","matchup","form","play","l5","l10","psRaw","projection","psBonus","q80","q80Bonus","historical70","floor","ceiling",...(sport==="nba"?["games" as const,"stars" as const]:[]),"bonus"];
   return defaultColumns.filter(k=>sport==="nba"?true:k!=="games"&&k!=="stars"&&k!=="value");
 }
 
