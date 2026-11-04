@@ -5,7 +5,7 @@ const { forecast } = require('../.test-build/lib/model.js');
 const oldFetch = global.fetch;
 const club = { slug: 'los-angeles-lakers', name: 'Los Angeles Lakers', league: 'NBA' };
 const player = { slug: 'nba-player', displayName: 'NBA Player', anyPositions: ['Guard'], avatarPictureUrl: 'https://example.org/nba.png',
-  lastFiveSo5AverageScore: 36, lastTenPlayedSo5AverageScore: 40, nextClassicFixtureProjectedScore: null,
+  averageL5: 36, averageL10: 40, rawPlayerGameScores: [36,36,36,36,36,44,44,44,44,44], nextClassicFixtureProjectedScore: null,
   nextDailyFixtureProjectedScore: 42, lastFiveSo5Appearances: 5 };
 (async () => {
   try {
@@ -13,7 +13,7 @@ const player = { slug: 'nba-player', displayName: 'NBA Player', anyPositions: ['
     global.fetch = async (_url, init) => {
       const q = JSON.parse(init.body).query;
       queries.push(q);
-      assert.ok(!q.includes('rawPlayerGameScores'), 'NBA must not use football rawPlayerGameScores');
+      assert.match(q, /rawPlayerGameScores\(last: 10\)/, 'NBA should use valid rawPlayerGameScores');
       assert.ok(!q.includes('activeInjuries') && !q.includes('nextGame'), 'NBA roster should be compact');
       return {ok:true,text:async () => JSON.stringify({data:{team:{anyActivePlayers:{nodes:[player]}}}})};
     };
@@ -44,11 +44,11 @@ const player = { slug: 'nba-player', displayName: 'NBA Player', anyPositions: ['
         return {ok:true,text:async()=>JSON.stringify({data:{team:{anyActivePlayers:{nodes:[{
           slug:'nba-player', displayName:'NBA Player', anyPositions:['Guard'],
           avatarPictureUrl:'https://example.org/nba.png',
-          lastFiveSo5AverageScore:41, lastTenPlayedSo5AverageScore:45
+          averageL5:41, averageL10:45, rawPlayerGameScores:[45,42,39]
         }]}}}})};
       };
       getTeamRoster('nba',{slug:'nba-team',name:'NBA Team',league:'NBA'}).then(r=>{
-        assert.equal(count,3);
+        assert.equal(count,2);
         assert.equal(r.scoringFieldsUnavailable,false);
         assert.equal(r.players[0].avg,45);
         assert.equal(r.players[0].averageL5,41);

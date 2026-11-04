@@ -7,11 +7,13 @@ const original = global.fetch;
     let invalidNBAFields = 0;
     global.fetch = async (_url,init)=>{
       const query = JSON.parse(init.body).query;
-      if (query.includes('rawPlayerGameScores') || query.includes('activeInjuries') || query.includes('nextGame')) invalidNBAFields++;
-      assert.match(query,/lastFiveSo5AverageScore/);
-      assert.match(query,/lastTenPlayedSo5AverageScore/);
+      if (query.includes('lastFiveSo5AverageScore') || query.includes('lastTenPlayedSo5AverageScore') || query.includes('activeInjuries') || query.includes('nextGame')) invalidNBAFields++;
+      assert.match(query,/averageL5: averageScore\(type: LAST_FIVE_SO5_AVERAGE_SCORE\)/);
+      assert.match(query,/averageL10: averageScore\(type: LAST_TEN_PLAYED_SO5_AVERAGE_SCORE\)/);
+      assert.match(query,/rawPlayerGameScores\(last: 10\)/);
+      assert.match(query,/anyActivePlayers\(first: 20/);
       const nodes=[{slug:'player-a',displayName:'Player A',anyPositions:['Guard'],
-        lastFiveSo5AverageScore:41,lastTenPlayedSo5AverageScore:44,
+        averageL5:41,averageL10:44,rawPlayerGameScores:[41,41,41,41,41,47,47,47,47,47],
         nextDailyFixtureProjectedScore:46,lastFiveSo5Appearances:5,
         playingStatus:'STARTER'}];
       return {ok:true,text:async()=>JSON.stringify({data:{team:{anyActivePlayers:{nodes}}}})};

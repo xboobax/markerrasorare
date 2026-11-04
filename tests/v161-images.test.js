@@ -17,8 +17,8 @@ const names = {
         assert.ok(!/\bpictureUrl\b/.test(query), 'Legacy pictureUrl must not break NBA GraphQL');
         calls++;
         const record = {...names[sport],
-          ...(sport === 'football' ? {rawPlayerGameScores:[47,53]} : {}),
-          lastFiveSo5AverageScore:50, lastTenPlayedSo5AverageScore:48,
+          rawPlayerGameScores: sport === 'football' ? [47,53] : [49,51],
+          averageL5:50, averageL10:48,
           nextClassicFixtureProjectedScore:52};
         const data = sport === 'nba'
           ? {team:{anyActivePlayers:{nodes:[record]}}}
@@ -30,7 +30,7 @@ const names = {
       assert.equal(calls,1);
       assert.equal(result.players.length,1);
       assert.equal(result.players[0].imageUrl,names[sport].avatarPictureUrl);
-      assert.deepEqual(result.players[0].recentScores,sport === 'football' ? [47,53] : []);
+      assert.deepEqual(result.players[0].recentScores,sport === 'football' ? [47,53] : [49,51]);
       if(sport === 'nba') assert.equal(result.players[0].averageL5,50);
       assert.equal(result.players[0].proj,52);
     }
@@ -49,7 +49,7 @@ const names = {
         if(q.includes('nextClassicFixtureProjectedScore')) return {ok:true,text:async()=>JSON.stringify({errors:[{message:'Cannot query field "nextClassicFixtureProjectedScore" on type "NBAPlayer".'}]})};
         return {ok:true,text:async()=>JSON.stringify({data:{team:{anyActivePlayers:{nodes:[{
           slug:'nba2',displayName:'NBA2',anyPositions:['Guard'],avatarPictureUrl:'https://example.org/2.jpg',
-          lastFiveSo5AverageScore:45,nextDailyFixtureProjectedScore:48
+          averageL5:45,averageL10:43,rawPlayerGameScores:[45,41],nextDailyFixtureProjectedScore:48
         }]}}}})};
       };
       getTeamRoster('nba',{slug:'nba-test',name:'NBA Test',league:'NBA'}).then(r=>{
