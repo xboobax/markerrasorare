@@ -6,6 +6,7 @@ import GameweekCenter from "@/app/components/gameweek-center";
 import HiddenGems from "@/app/components/hidden-gems";
 import DataHealthCenter from "@/app/components/data-health-center";
 import ArcadeIntelligenceLab from "@/app/components/arcade-intelligence-lab";
+import PredictionLabPro from "@/app/components/prediction-lab-pro";
 import {buildArcadeIntelligence} from "@/lib/arcade-intelligence";
 import type {FetchSummary} from "@/lib/data-health";
 import type {ScheduleData} from "@/lib/gameweek-center";
@@ -551,7 +552,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
           matchupSource={automaticMatchups.source} scheduleStatus={nbaSchedule.status}/>
 
         <section className="panel forecast-lab" id="forecast-lab">
-          <div className="section-top"><div><span className="section-kicker">03 / FORECAST LAB · VERSION 1.8</span><h2>Prognosen, die sich beweisen müssen.</h2></div><span className="lab-stage">EXPERIMENTELL · NICHT VALIDIERT</span></div>
+          <div className="section-top"><div><span className="section-kicker">03 / FORECAST LAB · V1.8 + LAB PRO</span><h2>Prognosen, die sich beweisen müssen.</h2></div><span className="lab-stage">EXPERIMENTELL · NICHT VALIDIERT</span></div>
           <p className="lab-intro">Das neue Modell gewichtet reale Formdaten robuster, dämpft Ausreißer und berücksichtigt Nicht-Einsatz-Risiken. <strong>Die bestehende V1.7.2-Prognose bleibt zum Vergleich gespeichert.</strong> Verbesserungen werden erst nach echten Spielergebnissen bewertet.</p>
           <div className="lab-model-switch" role="group" aria-label="Prognosemodell wählen">
             <button type="button" aria-pressed={modelMode==="v18"} className={modelMode==="v18"?"active":""} onClick={()=>setModelMode("v18")}>◆ V1.8 · Experiment</button>
@@ -750,6 +751,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
             </div>
             <p className="backtest-foot">Basis: {backtest.official} offiziell bestätigte Paare an {backtest.distinctDays} unterschiedlichen Spieltagen. Bereits gespeicherte V1.7-Prognosen ohne vorab aufgezeichnete V1.8-Vorhersage werden <strong>nicht rückwirkend</strong> umgerechnet. {backtest.holdout?`Zeitlich zurückgehaltener Test: ${backtest.holdout.count} Vorhersagen, MAE alt ${fmt(backtest.holdout.baselineMae)} / neu ${fmt(backtest.holdout.challengerMae)}.`:"Ein zeitlicher Holdout wird erst nach mindestens 20 bestätigten Paaren aus 6 Spieltagen angezeigt."} Auch bei besserem MAE besteht Unsicherheit; das Modell wird nicht automatisch umtrainiert.</p>
           </div>
+          <PredictionLabPro rows={tracked} sport={sport}/>
           <div className="tracking-tools">
             <button className="action-primary" type="button" disabled={trackingCheck.running || !autoPending} onClick={()=>void checkSavedResults()}>{trackingCheck.running ? "Prüfung läuft …" : `Ergebnisse prüfen (${autoPending} offen)`}</button>
             <button type="button" onClick={exportTracking} disabled={!tracked.length}>Prognosen sichern (JSON)</button>

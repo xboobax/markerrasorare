@@ -18,6 +18,7 @@ export type TrackedPrediction = {
   playerId: string;
   playerName: string;
   team: string;
+  position?: string; // frozen at snapshot time, never inferred retroactively
   fixture: string | null;
   savedAt: string;
   predicted: number;
@@ -37,7 +38,7 @@ export function createTrackedPrediction(p: Forecast, sport: Sport, now = new Dat
   const fixture = p.nextGame ?? null;
   return {
     key: `${sport}:${p.id}:${fixture ?? now.toISOString().slice(0,10)}`,
-    sport, playerId: p.id, playerName: p.name, team: p.team,
+    sport, playerId: p.id, playerName: p.name, team: p.team, position:p.position,
     fixture, savedAt: now.toISOString(), predicted: Math.round(p.weighted * 10)/10,
     playProbability: p.playProb, actual: null,
     ...(comparison ? {baselinePredicted:Math.round(comparison.baselinePredicted*10)/10,
@@ -95,6 +96,7 @@ export function parseTrackingBackup(raw: unknown, sport: Sport): TrackedPredicti
         typeof x === "number" && Number.isFinite(x) && x >= 0 && x <= 500) &&
       r.intervalP10 <= r.intervalP90 && (r.selectedMode === "classic" || r.selectedMode === "v18");
     out.push({key:r.key,sport:r.sport,playerId:r.playerId,playerName:r.playerName,team:r.team,
+      position:typeof r.position === "string" && /^(GK|DEF|MID|FWD|FLEX|G|F|C|ANY)$/.test(r.position) ? r.position : undefined,
       fixture:r.fixture ?? null,savedAt:r.savedAt,predicted:r.predicted,playProbability:r.playProbability,
       actual:r.actual, actualSource:r.actualSource === "sorare" || r.actualSource === "manual" ? r.actualSource : undefined,
       actualGameDate:typeof r.actualGameDate === "string" && Number.isFinite(Date.parse(r.actualGameDate)) ? r.actualGameDate : undefined,

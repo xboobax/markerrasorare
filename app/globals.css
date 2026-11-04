@@ -1115,3 +1115,41 @@ body { background:#090d17; color:var(--ink); -webkit-font-smoothing:antialiased;
 .v26-risk-alert{color:#fbbf74}
 @media(max-width:900px){.v26-injury-toolbar{align-items:flex-start;gap:8px}.v26-injury-toolbar button{margin-left:0}}
 @media(max-width:550px){.v26-injury-toolbar>*{flex:1 1 45%}.v26-injury-toolbar button{flex-basis:100%}}
+
+/* V2.7 Prediction Lab Pro — Obsidian Neon, additional to existing Forecast Lab. */
+.prediction-pro{margin:22px 0 16px;padding:22px;border:1px solid rgba(157,104,245,.42);border-radius:18px;background:radial-gradient(circle at 0 0,rgba(168,85,247,.14),transparent 45%),radial-gradient(circle at 100% 70%,rgba(34,211,238,.07),transparent 50%),#0d1423;box-shadow:inset 0 1px 0 rgba(255,255,255,.035)}
+.prediction-pro-head{display:flex;gap:16px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+.prediction-pro-head h3{font-size:clamp(19px,2vw,25px);margin:5px 0;color:#f8f1ff}
+.prediction-pro-head p{color:#b4bdd6;font-size:12px;line-height:1.6;max-width:690px;margin:4px 0 0}
+.prediction-pro-range{font-size:11px;color:#bec9dd;display:flex;gap:8px;flex-direction:column}
+.prediction-pro-range select{color:#f3eeff;border:1px solid #665486;background:#1d2840;border-radius:8px;padding:9px 12px;min-width:165px}
+.prediction-pro-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:19px 0 12px}
+.prediction-pro-kpis>div{min-width:0;border:1px solid #36445f;background:linear-gradient(145deg,#1c2a41,#141d30);border-radius:11px;padding:13px;display:flex;flex-direction:column;gap:6px}
+.prediction-pro-kpis small,.prediction-pro-candidate-grid small{color:#aebbd5;font-size:10px;letter-spacing:.04em;font-weight:700;text-transform:uppercase}
+.prediction-pro-kpis strong{font-size:24px;font-weight:800;line-height:1.2;font-variant-numeric:tabular-nums}
+.prediction-pro-kpis span,.prediction-pro-candidate-grid span{font-size:10px;line-height:1.5;color:#a4b2c9}
+.prediction-kpi-mint strong{color:#2ee6b5}.prediction-kpi-cyan strong{color:#22d3ee}.prediction-kpi-violet strong{color:#cf9cff}.prediction-kpi-gold strong{color:#fbbf24}
+.prediction-pro-audit,.prediction-pro-small{font-size:11px;line-height:1.75;color:#a9bad2}
+.prediction-pro-audit strong{color:#dbeafb}
+.prediction-pro-two{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px}
+.prediction-pro-block{min-width:0;border:1px solid rgba(118,130,171,.35);border-radius:12px;background:linear-gradient(145deg,rgba(23,32,53,.96),rgba(17,27,45,.95));padding:15px;margin:0}
+.prediction-pro-title{display:flex;gap:7px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:12px}
+.prediction-pro-title h4{font-size:15px;color:#f0e9ff;margin:0}.prediction-pro-title>span{font-size:10px;color:#aebed6}
+.prediction-pro-chart{height:148px;display:flex;justify-content:space-around;gap:5px;align-items:end;border-bottom:1px solid #4c5372;padding:0 2px 4px}
+.prediction-trend-day{min-width:0;flex:1;max-width:54px;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px}
+.prediction-trend-bars{width:100%;flex:1;display:flex;align-items:end;justify-content:center;gap:3px;min-height:0}
+.prediction-trend-bars span{display:block;width:35%;border-radius:5px 5px 1px 1px;min-height:2px}
+.prediction-bar-base{background:linear-gradient(0deg,#7f49cb,#b584ff)}.prediction-bar-new{background:linear-gradient(0deg,#118994,#22d3ee)}
+.prediction-trend-day small{font-size:9px;color:#adbbd1;white-space:nowrap}.prediction-trend-day em{font-style:normal;font-size:9px;color:#657f97}
+.prediction-pro-legend{display:flex;gap:13px;align-items:center;flex-wrap:wrap;margin-top:10px;color:#bfcbe1;font-size:10px}
+.prediction-pro-legend span{display:inline-flex;align-items:center;gap:5px}.prediction-pro-legend i{width:11px;height:8px;display:inline-block;border-radius:2px}.prediction-legend-base{background:#a855f7}.prediction-legend-new{background:#22d3ee}
+.prediction-pro-legend small{color:#9dadc3}
+.prediction-pro-experiment>p{font-size:11px;color:#afbed7;line-height:1.7}.prediction-pro-experiment strong{color:#e8defa}
+.prediction-pro-experiment.prediction-candidate-promising{border-color:rgba(46,230,181,.65)}.prediction-label-ready{color:#2ee6b5!important}.prediction-label-pending{color:#fbbf24!important}
+.prediction-candidate-weight{display:flex;justify-content:space-between;gap:5px;font-size:10px;color:#c2cce1;margin:15px 0 5px}.prediction-candidate-track{height:9px;background:#a855f7;border-radius:99px;overflow:hidden}.prediction-candidate-track>div{height:100%;background:linear-gradient(90deg,#22d3ee,#2ee6b5)}
+.prediction-pro-candidate-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:13px}.prediction-pro-candidate-grid>div{border:1px solid #324660;background:#13243a;padding:9px;border-radius:9px;display:flex;flex-direction:column;gap:6px}.prediction-pro-candidate-grid strong{font-size:18px;color:#e5f6ff;font-variant-numeric:tabular-nums}
+.prediction-pro-guard{padding:10px;border-radius:8px;background:#2c2440;border-left:3px solid #a855f7;margin-bottom:0}
+.prediction-pro-empty{margin:13px 0;color:#aabbd1;padding:14px;background:#14243b;border-radius:8px;font-size:12px;line-height:1.7}
+.prediction-pro-breakdown,.prediction-pro-misses{margin-top:12px}.prediction-pro-tabs{display:flex;gap:7px;flex-wrap:wrap;margin:10px 0 13px}.prediction-pro-tabs button{background:#26314d;color:#d1daed;border:1px solid #45516c;padding:8px 11px;border-radius:8px;cursor:pointer;font-size:11px}.prediction-pro-tabs button.active{background:#48326f;color:#f2e8ff;border-color:#b57af5}
+.prediction-pro-table{min-width:540px;width:100%}.prediction-pro-table th{white-space:nowrap}.prediction-pro-table small{display:block;color:#a4b6cc;font-size:10px;margin-top:4px}.prediction-pro-table td{font-variant-numeric:tabular-nums}.prediction-positive{color:#2ee6b5!important}.prediction-negative{color:#fb7185!important}
+@media(max-width:1040px){.prediction-pro-two{grid-template-columns:1fr}}@media(max-width:750px){.prediction-pro{padding:14px}.prediction-pro-kpis{grid-template-columns:1fr 1fr}.prediction-pro-head{flex-direction:column;gap:9px}.prediction-pro-range{flex-direction:row;align-items:center}}@media(max-width:380px){.prediction-pro-kpis{grid-template-columns:1fr}.prediction-pro-candidate-grid{grid-template-columns:1fr}}

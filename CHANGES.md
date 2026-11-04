@@ -1,3 +1,14 @@
+## V2.7 – Prediction Lab Pro
+
+- NBA- und Fußball-Prognosen aus dem bestehenden IndexedDB-Archiv nach offiziellen Spieltags-Ergebnissen bewerten; keine neuen API-Zugänge erforderlich.
+- Zeitlich getrennte historische Modellprüfung: blend weights ausschließlich auf Trainingstagen auswählen und auf späteren Holdout-Tagen vergleichen, keine automatische Promotion.
+- Anzeige von MAE/Bias, Win-Rate, 80-%-Intervallabdeckung, Spieltag-Trends, Segmentanalyse nach prognostiziertem Score, eingefrorener Position und Verein sowie den größten Fehlprognosen.
+- Strenge Datenqualität: ausschließlich vor Spielbeginn gespeicherte, offiziell markierte FINAL-Resultate für den Modellvergleich; Dubletten pro Spieler/Spiel entfernen und manuelle Scores separat halten.
+- Neue Vor-Spiel-Snapshots speichern `position` als optionales historisches Feld. Bestehende V1.7/V1.8-Archivdaten werden nicht rückwirkend verändert.
+- Vorhandene Sorare-, NBA-Sterne-, Spielplan-, Verletzungs- und Prognose-API-Dateien unverändert. Weitere Details in `UPDATE_V2_7_DE.md`.
+
+---
+
 ## V2.6 – Injury & Availability Center
 
 - Auto refresh on visible app sessions: 30/10/5 minutes depending on verifiable tipoff timing, manual refresh, visibility/focus checks.

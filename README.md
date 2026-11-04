@@ -1,3 +1,11 @@
+# Markerras Sorare Helper V2.7 – Prediction Lab Pro
+
+**Aktuelle Version V2.7**, aufbauend auf V2.6. Ein neues Obsidian-Neon-Analyseboard vergleicht eingefrorene Vor-Spiel-Prognosen mit späteren offiziellen Sorare-Ergebnissen. Es zeigt MAE, Bias und Intervallabdeckung, Fehler nach Spieltag, Punktbereich, Position und Verein sowie die größten Ausreißer. Experimentelle Modellmischungen werden auf älteren Daten gewählt und nur auf späteren Spieltagen getestet. **Keine automatische Änderung der aktiven Prognosen**, keine neuen API-Abhängigkeiten und keine Umrechnung älterer Vorhersagen. Die Archivdaten bleiben lokal.
+
+**Update-Anleitung: [UPDATE_V2_7_DE.md](UPDATE_V2_7_DE.md)**.
+
+---
+
 # Markerras Sorare Helper V2.6 – Injury & Availability Center
 
 Installationsanleitung: **[UPDATE_V2_6_DE.md](UPDATE_V2_6_DE.md)**. V2.6 baut auf V2.5 auf und ergänzt eine getrennte Verfügbarkeitsprüfung für NBA und die vier Fußballligen. ESPN-Best-Effort-Feeds ohne Zugangsschlüssel, API-Football optional über die Server-Variable `API_FOOTBALL_KEY` (siehe `.env.example`). Verletzungsdaten werden nicht als Gesundheitsbestätigung interpretiert, wenn keine Meldung vorhanden ist. Kein Monitoring bei geschlossener Webseite.
