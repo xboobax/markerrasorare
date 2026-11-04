@@ -1,3 +1,11 @@
+## V3.4.0 – Automatisches Prediction Learning Lab (NBA + Fußball)
+- 17 tägliche Vercel-Cron-Teiljobs für öffentliche Vor-Spiel-Snapshots und offizielle Score-Abgleiche, unabhängig von geöffnetem Browser.
+- Dauerhaftes, einmalig einzurichtendes Upstash-Redis-Archiv mit unveränderlichen Modellvergleichen V1.7/V1.8/V2.0.
+- Neue NBA-/Fußball-Accuracy-Zentrale mit Serverstatus, MAE, RMSE, Bias und Wochen-/Spieltagtrends.
+- Scharfe Schutzbedingungen gegen nachträgliche Prognosen, UTC-/US-Zeitzonenfehler, Mehrfachspeicherung, unbekannte Scores und ungesicherte Cron-Routen.
+- Keine automatische Modelländerung: nur offizielle, vorab eingefrorene Vergleiche; alte Browserdaten und Builder bleiben erhalten.
+- Vollständige Einrichtungs-/Sicherheitsdokumentation: UPDATE_V3_4_AUTOMATION_DE.md.
+
 ## V3.3.0 – Prediction Engine 2.0 (NBA & Fußball)
 
 - Neues, optional wählbares Modell V2.0 im Forecast Lab; V1.7- und V1.8-Modell bleiben unverändert auswählbar. Bestehende manuelle Builder, NBA-Sterne, Captain-Regeln, Kartenbonus- und Sammlungsdaten bleiben erhalten.

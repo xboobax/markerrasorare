@@ -61,7 +61,7 @@ const crypto=require('node:crypto');
 const root=path.join(__dirname,'..');
 const ui=fs.readFileSync(path.join(root,'app/components/arcade-dashboard.tsx'),'utf8');
 const studio=fs.readFileSync(path.join(root,'app/components/arcade-intelligence-lab.tsx'),'utf8');
-for(const needle of ['<ArcadeIntelligenceLab','setIntelligencePickKey','activeIntelligence','ARCADE INTELLIGENCE · V3.1']) assert(ui.includes(needle),`missing UI integration: ${needle}`);
+for(const needle of ['<ArcadeIntelligenceLab','setIntelligencePickKey','activeIntelligence','V3.5 · CLEAN WORKSPACE']) assert(ui.includes(needle),`missing UI integration: ${needle}`);
 for(const needle of ['intelligence-studio','intelligence-scenario','intelligence-risk','intelligence-probability','nicht kalibrierte Modellschätzung']) assert(studio.includes(needle),`missing Studio UI: ${needle}`);
 const originalScoreHash='32d3189f8de56bd2d358e179803ed297589244d0d4132b4349b7a0575d3fa8db';
 const scoreHash=crypto.createHash('sha256').update(fs.readFileSync(path.join(root,'lib/sorare.ts'))).digest('hex');

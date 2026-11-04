@@ -6,6 +6,7 @@
  */
 import type {Sport} from "./model";
 import type {TrackedPrediction} from "./tracking";
+import {matchingGameDay} from "./tracking-auto";
 
 export type LabRange="all"|"30"|"90";
 export type LabGroup="score"|"position"|"team";
@@ -60,8 +61,11 @@ export function validProRow(r:TrackedPrediction,sport:Sport):r is Row{
     typeof r.baselinePredicted==="number" && Number.isFinite(r.baselinePredicted) && r.baselinePredicted>=0 && r.baselinePredicted<=500 &&
     typeof r.advancedPredicted==="number" && Number.isFinite(r.advancedPredicted) && r.advancedPredicted>=0 && r.advancedPredicted<=500 &&
     typeof r.actualGameDate==="string" && Number.isFinite(Date.parse(r.actualGameDate)) &&
-    Number.isFinite(Date.parse(r.savedAt)) && Date.parse(r.savedAt)<Date.parse(r.actualGameDate) &&
-    (!/^\d{4}-\d{2}-\d{2}/.test(r.fixture??"") || r.fixture!.slice(0,10)===r.actualGameDate.slice(0,10));
+    Number.isFinite(Date.parse(r.savedAt)) &&
+    (r.sport==='nba' && r.fixtureTipoff && Number.isFinite(Date.parse(r.fixtureTipoff))
+      ? Date.parse(r.fixtureTipoff)>Date.parse(r.savedAt)
+      : Date.parse(r.savedAt)<Date.parse(r.actualGameDate)) &&
+    matchingGameDay(r,r.actualGameDate);
 }
 
 /** The candidate and its blend weight are trained ONLY on earlier games.

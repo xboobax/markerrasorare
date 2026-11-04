@@ -88,7 +88,7 @@ const root=path.join(__dirname,'..');
 const ui=fs.readFileSync(path.join(root,'app/components/arcade-dashboard.tsx'),'utf8');
 const manual=fs.readFileSync(path.join(root,'app/components/manual-lineup.tsx'),'utf8');
 const healthUI=fs.readFileSync(path.join(root,'app/components/data-health-center.tsx'),'utf8');
-for(const needle of ['<HiddenGems','<DataHealthCenter','fetchSummary','ARCADE INTELLIGENCE · V3.1'])assert.ok(ui.includes(needle),needle);
+for(const needle of ['<HiddenGems','<DataHealthCenter','fetchSummary','V3.5 · CLEAN WORKSPACE'])assert.ok(ui.includes(needle),needle);
 for(const needle of ['diagnoseLineup','doctor-recommendations','Diesen Wechsel übernehmen','doctor-issue-details'])assert.ok(manual.includes(needle),needle);
 for(const needle of ['createLocalBackup','parseLocalBackup','window.location.reload','window.confirm','Sorare-Abfragen'])assert.ok(healthUI.includes(needle),needle);
 const sorare=fs.readFileSync(path.join(root,'lib/sorare.ts'));

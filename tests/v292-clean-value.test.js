@@ -26,7 +26,7 @@ assert.match(ui,/\(matchdayReady\|\|\(sport==="nba"&&valueFilter!=="all"\)\)\&\&
 assert.match(ui,/valueFilter!=="all"/);
 assert.match(ui,/nbaValueScore\(p,cardStore\[p.id\]\?\.stars,"floor"\)/);
 assert.match(ui,/aria-label="NBA Value Filter auswählen"/);
-assert.match(ui,/sport==="nba"&&<div className="v292-value-panel"/);
+assert.match(ui,/sport==="nba"&&<details className="v35-value-details"/);
 assert.match(ui,/sport==="football"&&<div className="v29-captain-toolbar"/);
 const css=fs.readFileSync(path.join(__dirname,'../app/globals.css'),'utf8');
 assert.match(css,/\.workspace-v23\s*\{--wb:#030406/);

@@ -34,3 +34,7 @@
 - Bereits markierte Karten werden auf derselben Domain über den vorherigen lokalen Speicherschlüssel `divisorare.cards.v2.*` übernommen. Beim Domainwechsel ist der Browserspeicher nicht automatisch verfügbar.
 - Die Alias-Namen für die vier Fußballligen werden in `lib/leagues.ts` gepflegt. Wenn Sorare die offiziellen Anzeigenamen ändert, können betroffene Teams fehlen, bis diese Liste angepasst wird.
 - Ein authentifizierter Sorare-Live-API-Test und ein vollständiger Next.js-Produktions-Build sind beim Upload auf Vercel nötig.
+
+
+## V3.4: tägliche Hintergrund-Automatisierung aktivieren
+Neben dem bisherigen Sorare-Deployment muss eine persistente Upstash-Datenbank verbunden werden. `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` und `CRON_SECRET` in Vercel nur als **serverseitige Production-Secrets** hinterlegen. Die Cron-Jobs werden aus `vercel.json` bei einem Production-Deployment registriert. Vollständige Anleitung: `UPDATE_V3_4_AUTOMATION_DE.md`.

@@ -23,6 +23,7 @@ export type TrackedPrediction = {
   team: string;
   position?: string; // frozen at snapshot time, never inferred retroactively
   fixture: string | null;
+  fixtureTipoff?: string; // independently verified UTC tipoff for NBA day-boundary checks
   savedAt: string;
   predicted: number;
   playProbability: number;
@@ -45,7 +46,7 @@ export function createTrackedPrediction(p: Forecast, sport: Sport, now = new Dat
   return {
     key: `${sport}:${p.id}:${fixture ?? now.toISOString().slice(0,10)}`,
     sport, playerId: p.id, playerName: p.name, team: p.team, position:p.position,
-    fixture, savedAt: now.toISOString(), predicted: Math.round(p.weighted * 10)/10,
+    fixture, ...(typeof p.nextGameTipoff === "string" && Number.isFinite(Date.parse(p.nextGameTipoff)) ? {fixtureTipoff:p.nextGameTipoff} : {}), savedAt: now.toISOString(), predicted: Math.round(p.weighted * 10)/10,
     playProbability: p.playProb, actual: null,
     ...(comparison ? {baselinePredicted:Math.round(comparison.baselinePredicted*10)/10,
       advancedPredicted:Math.round(comparison.advancedPredicted*10)/10,
@@ -110,7 +111,9 @@ export function parseTrackingBackup(raw: unknown, sport: Sport): TrackedPredicti
       typeof x === "number" && Number.isFinite(x) && x >= 0 && x <= 500) && r.engineV2P10 <= r.engineV2P90;
     out.push({key:r.key,sport:r.sport,playerId:r.playerId,playerName:r.playerName,team:r.team,
       position:typeof r.position === "string" && /^(GK|DEF|MID|FWD|FLEX|G|F|C|ANY)$/.test(r.position) ? r.position : undefined,
-      fixture:r.fixture ?? null,savedAt:r.savedAt,predicted:r.predicted,playProbability:r.playProbability,
+      fixture:r.fixture ?? null,
+      ...(typeof r.fixtureTipoff === "string" && Number.isFinite(Date.parse(r.fixtureTipoff)) && r.fixtureTipoff.length<55 ? {fixtureTipoff:r.fixtureTipoff} : {}),
+      savedAt:r.savedAt,predicted:r.predicted,playProbability:r.playProbability,
       actual:r.actual, actualSource:r.actualSource === "sorare" || r.actualSource === "manual" ? r.actualSource : undefined,
       actualGameDate:typeof r.actualGameDate === "string" && Number.isFinite(Date.parse(r.actualGameDate)) ? r.actualGameDate : undefined,
       ...(validModel ? {baselinePredicted:r.baselinePredicted,advancedPredicted:r.advancedPredicted,

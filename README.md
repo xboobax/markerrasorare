@@ -1,3 +1,13 @@
+# Neon Builder Pro V3.5 — Clean Workspace
+
+**Neu:** Vier kompakte Tabs (Builder, Spieler, Analyse, Sammlung), Sticky Lineup, Quick Filters, Smart Swap, Lineup Doctor, Team Battle mit Spieler-Differenzen, lokale Optimierungs-Presets und eine schlankere Spieler-Tabelle. Fußball- und NBA-Regeln bleiben erhalten. **Keine Upstash-Pflicht; Cron-Jobs standardmäßig deaktiviert.**
+
+Siehe `UPDATE_V3_5_CLEAN_WORKSPACE_DE.md` für Details und Deployment-Anleitung.
+
+---
+
+> **Neu in V3.4:** Automatisches Prediction Learning Lab für NBA und Fußball. Tägliche Vercel-Cron-Jobs frieren öffentliche Vor-Spiel-Prognosen (V1.7/V1.8/V2.0) in Upstash Redis ein und gleichen nach Spielende eindeutige Sorare-FINAL-Scores ab. **Einmalige Einrichtung erforderlich:** [V3.4-Anleitung](UPDATE_V3_4_AUTOMATION_DE.md). Bestehende lokale Archiv-Funktionen bleiben erhalten.
+
 > **Neu in V3.3:** Prediction Engine 2.0 für NBA und Fußball mit konservativem Formsignal, Risikoindex, heuristischem Floor/Ceiling und eingefrorenen V2-Snapshots. Siehe [Update V3.3](UPDATE_V3_3_PREDICTION_ENGINE_DE.md).
 
 > **Neu in V3.1:** NBA Stars Optimizer 2.0 (vier Profile, 16-★-DP, Smart Value, Matchup/Risiko und unterschiedliche Teamvarianten). Siehe [UPDATE_V3_1_DE.md](UPDATE_V3_1_DE.md).

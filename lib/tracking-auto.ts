@@ -5,7 +5,7 @@ import type { TrackedPrediction } from "./tracking";
 
 export type GameScore = { date: string; score: number; status: string };
 export type AutomaticResult = { key: string; score: number; gameDate: string };
-export type AutoCheckItem = Pick<TrackedPrediction, "key" | "sport" | "playerId" | "fixture" | "savedAt">;
+export type AutoCheckItem = Pick<TrackedPrediction, "key" | "sport" | "playerId" | "fixture" | "fixtureTipoff" | "savedAt">;
 
 export function fixtureDay(fixture: string | null | undefined): string | null {
   if (typeof fixture !== "string") return null;
@@ -22,21 +22,34 @@ export function pendingForAutoCheck(items: TrackedPrediction[], now = new Date()
     if (!day || day >= today || row.actual !== null || (row.sport !== "nba" && row.sport !== "football")) return false;
     const age = now.getTime() - new Date(day + "T00:00:00Z").getTime();
     return age >= 0 && age <= 90 * 86400000 && Number.isFinite(Date.parse(row.savedAt));
-  }).map(({key,sport,playerId,fixture,savedAt}) => ({key,sport,playerId,fixture,savedAt}));
+  }).map(({key,sport,playerId,fixture,fixtureTipoff,savedAt}) => ({key,sport,playerId,fixture,fixtureTipoff,savedAt}));
 }
 
-/** A match must be FINAL, dated, unique for the stored fixture day, and
- * kick off AFTER the prediction was saved. No guessing from latest scores.
- * The UTC fixture day must match exactly; adjacent NBA games are not interchangeable.
- */
+/** Only a verified NBA UTC tipoff permits a UTC-date difference of one day.
+ * Score provider timestamps may represent the fixture's local calendar day.
+ * Never allow an adjacent day without the independently verified tipoff. */
+export function matchingGameDay(item: Pick<AutoCheckItem,'fixture'|'fixtureTipoff'|'sport'>,date:string):boolean {
+  const day=fixtureDay(item.fixture),scoreDay=date.slice(0,10);
+  if(!day)return false;
+  if(scoreDay===day)return true;
+  if(item.sport!=='nba'||!item.fixtureTipoff||!Number.isFinite(Date.parse(item.fixtureTipoff)))return false;
+  return scoreDay===item.fixtureTipoff.slice(0,10) &&
+    Math.abs(Date.parse(item.fixtureTipoff)-Date.parse(`${day}T00:00:00Z`))<=36*3600000;
+}
+/** FINAL scores are unique for the fixture day. A verified tipoff can prove a
+ * same-day snapshot was taken before kickoff even when Sorare only returns
+ * a calendar date (midnight) for the score. */
 export function findFinalForSnapshot(item: AutoCheckItem, results: GameScore[]): AutomaticResult | null {
   const day = fixtureDay(item.fixture);
   if (!day || !Number.isFinite(Date.parse(item.savedAt))) return null;
   const predictionTime = Date.parse(item.savedAt);
   const candidates = results.filter(r => {
     const t = Date.parse(r.date);
+    const verifiedStart= item.sport==='nba' && item.fixtureTipoff && Number.isFinite(Date.parse(item.fixtureTipoff))
+      ? Date.parse(item.fixtureTipoff):null;
     return r.status === "FINAL" && Number.isFinite(r.score) && r.score >= 0 && r.score <= 500 &&
-      Number.isFinite(t) && t > predictionTime && r.date.slice(0,10) === day;
+      Number.isFinite(t) && matchingGameDay(item,r.date) &&
+      (verifiedStart!==null ? verifiedStart>predictionTime : t>predictionTime);
   });
   if (candidates.length !== 1) return null;
   return {key:item.key,score:candidates[0].score,gameDate:candidates[0].date};

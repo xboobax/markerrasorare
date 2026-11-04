@@ -21,10 +21,11 @@ export async function POST(request: Request) {
         typeof item.key !== "string" || item.key.length > 500 ||
         typeof item.playerId !== "string" || !/^[a-z0-9-]{2,130}$/i.test(item.playerId) ||
         typeof item.savedAt !== "string" || !Number.isFinite(Date.parse(item.savedAt)) ||
-        typeof item.fixture !== "string" || item.fixture.length > 220) {
+        typeof item.fixture !== "string" || item.fixture.length > 220 ||
+        (item.fixtureTipoff !== undefined && (typeof item.fixtureTipoff !== "string" || item.fixtureTipoff.length > 55 || !Number.isFinite(Date.parse(item.fixtureTipoff))))) {
         return Response.json({error:"Ungültige Prognose"},{status:400});
       }
-      items.push({key:item.key,sport:item.sport,playerId:item.playerId,fixture:item.fixture,savedAt:item.savedAt});
+      items.push({key:item.key,sport:item.sport,playerId:item.playerId,fixture:item.fixture,fixtureTipoff:item.fixtureTipoff,savedAt:item.savedAt});
     }
     // Validate on server; data in the browser may be tampered with.
     const validated = pendingForAutoCheck(items.map(item=>({...item,playerName:"",team:"",predicted:0,playProbability:0,actual:null})) as TrackedPrediction[]);

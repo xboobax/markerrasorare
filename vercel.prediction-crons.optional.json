@@ -1,0 +1,73 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    {
+      "path": "/api/cron/predictions/nba-0",
+      "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/cron/predictions/nba-1",
+      "schedule": "5 13 * * *"
+    },
+    {
+      "path": "/api/cron/predictions/nba-2",
+      "schedule": "10 13 * * *"
+    },
+    {
+      "path": "/api/cron/predictions/football-Bundesliga-0",
+      "schedule": "15 13 * * *"
+    },
+    {
+      "path": "/api/cron/predictions/football-Bundesliga-1",
+      "schedule": "20 13 * * *"
+    },
+    {
+      "path": "/api/cron/predictions/football-LaLiga-0",
+      "schedule": "25 13 * * *"
+    },
+    {
+      "path": "/api/cron/predictions/football-LaLiga-1",
+      "schedule": "30 13 * * *"
+    },
+    {
+      "path": "/api/cron/predictions/football-Ligue%201-0",
+      "schedule": "35 13 * * *"
+    },
+    {
+      "path": "/api/cron/predictions/football-Ligue%201-1",
+      "schedule": "40 13 * * *"
+    },
+    {
+      "path": "/api/cron/predictions/football-Premier%20League-0",
+      "schedule": "45 13 * * *"
+    },
+    {
+      "path": "/api/cron/predictions/football-Premier%20League-1",
+      "schedule": "50 13 * * *"
+    },
+    {
+      "path": "/api/cron/results/football/0",
+      "schedule": "5 9 * * *"
+    },
+    {
+      "path": "/api/cron/results/football/1",
+      "schedule": "15 9 * * *"
+    },
+    {
+      "path": "/api/cron/results/football/2",
+      "schedule": "25 9 * * *"
+    },
+    {
+      "path": "/api/cron/results/nba/0",
+      "schedule": "5 10 * * *"
+    },
+    {
+      "path": "/api/cron/results/nba/1",
+      "schedule": "15 10 * * *"
+    },
+    {
+      "path": "/api/cron/results/nba/2",
+      "schedule": "25 10 * * *"
+    }
+  ]
+}
