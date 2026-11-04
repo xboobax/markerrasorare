@@ -164,3 +164,9 @@ Neu: Lineup Doctor (regelvalidierte Wechselideen), Hidden Gems Finder (NBA Punkt
 - NBA-spezifisch: unverändertes 16-Sterne-Limit ohne Captain.
 - Fußball-Spielerpool: sortierbare PS Raw-/Q80-/Historisch-70+-Werte, zusätzliche Spalten mit bewusst leerer Anzeige bei fehlender Datenbasis, „Explain My Projection“.
 - Classic-Karten-Priorisierung bleibt deaktiviert, bis belastbare Daten vorliegen. Sorare-Login, Collection-Sync und API-Keys unangetastet.
+
+## 3.6.0 – Daily Mission Assistant
+- Fußball: Entscheidender-Spieler-Picker, getrennte Listen für Feldspieler und Torhüter; transparente Bewertung ohne vorgetäuschte Ereigniswahrscheinlichkeiten.
+- NBA: Daily Picker Classic mit offizieller L10+7-Punkte-Regel und 20-Managerpunkte-Untergrenze, Prognoseabstand und historischen Treffern.
+- Berlin-Zeitraum Heute/Morgen sowie NBA +24h, verifizierte Startzeiten, Besitzfilter und Ausschluss bestätigter Ausfälle.
+- Kompakte Builder-Integration ohne fünften Haupt-Tab; zusätzliche Tests; Upstash optional wie bisher.

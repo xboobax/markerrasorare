@@ -5,6 +5,7 @@ import {ownedSlugs,mergeVerifiedOwned,ownedViewKey,isInSelectedCollection,bestOw
 
 import Link from "next/link";
 import BuilderWorkspace from "@/app/components/builder-workspace";
+import DailyMissionPicker from "@/app/components/daily-mission-picker";
 import {automaticCaptainLineup} from "@/lib/lineup-v29";
 import GameweekCenter from "@/app/components/gameweek-center";
 import HiddenGems from "@/app/components/hidden-gems";
@@ -495,6 +496,8 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
     bonusPercent: effectiveCardStore[p.id]?.bonusPercent ?? 0,
   })), [players, effectiveCardStore, ownedOnly, verifiedOwnedReady]);
 
+  const dailyMissionOwnedIds=useMemo(()=>new Set(Object.entries(effectiveCardStore).filter(([,card])=>card.owned===true).map(([id])=>id)),[effectiveCardStore]);
+  const dailyMissionExcludedIds=useMemo(()=>new Set(excludedIds),[excludedIds]);
   const favoriteSet=useMemo(()=>new Set(watchlist),[watchlist]);
   const ownedCount = players.filter(p => effectiveCardStore[p.id]?.owned).length;
   const ratedCount = players.filter(p => isValidNbaStars(effectiveCardStore[p.id]?.stars)).length;
@@ -665,7 +668,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   return (
     <div className="app-shell">
       <header className="app-topbar v35-topbar">
-        <Link href="/?sport=football" className="brand" aria-label="Neon Builder Pro Startseite"><span className="brand-logo">N<span>◆</span></span><span className="brand-text"><strong>NEON BUILDER PRO</strong><small>V3.5 · CLEAN WORKSPACE</small></span></Link>
+        <Link href="/?sport=football" className="brand" aria-label="Neon Builder Pro Startseite"><span className="brand-logo">N<span>◆</span></span><span className="brand-text"><strong>NEON BUILDER PRO</strong><small>V3.6 · DAILY MISSIONS</small></span></Link>
         <nav className="sport-switch" aria-label="Sportart wählen"><Link href="/?sport=football" aria-current={sport==="football"?"page":undefined}>⚽ Fußball</Link><Link href="/?sport=nba" aria-current={sport==="nba"?"page":undefined}>🏀 NBA</Link></nav>
         <span className="topbar-pill"><span className="status-dot" style={error?{background:"#d9a06f"}:undefined}/>{error?"API prüfen":players.length?`${players.length} Spieler geladen`:"Sorare verbindet"}</span>
       </header>
@@ -674,7 +677,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
         {([ ["builder","◈","Builder"], ["players","⌕","Spieler"], ["analytics","▥","Analyse"], ["collection","▣","Sammlung"] ] as const).map(([id,icon,label])=><button type="button" role="tab" key={id} aria-selected={activeTab===id} className={activeTab===id?"is-active":""} onClick={()=>navigate(id)}><span aria-hidden="true">{icon}</span> {label}</button>)}
       </nav>
       <main className="dashboard-main v35-main" data-workspace={activeTab}>
-        <div className="v35-workspace-title" data-tab="builder"><div><span className="section-kicker">NEON STUDIO / V3.5</span><h1>{sport==="nba"?"NBA":"Fußball"} Lineup Studio</h1></div><span className="v35-title-hint">{sport==="nba"?"5 Karten · max. 16 ★":"5 Karten · Captain +50 %"}</span></div>
+        <div className="v35-workspace-title" data-tab="builder"><div><span className="section-kicker">NEON STUDIO / V3.6</span><h1>{sport==="nba"?"NBA":"Fußball"} Lineup Studio</h1></div><div className="v36-title-actions"><a href="#daily-mission" onClick={()=>{setActiveTab("builder");}}>⚡ Daily Mission</a><span className="v35-title-hint">{sport==="nba"?"5 Karten · max. 16 ★":"5 Karten · Captain +50 %"}</span></div></div>
         <div className="metric-grid v35-metrics" data-tab="builder">
           <div className="metric-card"><span className="metric-label">Spieler im Datensatz</span><strong>{players.length.toLocaleString("de-DE")}</strong><small>Aktuell ausgewählter Datenbereich</small></div>
           <div className="metric-card"><span className="metric-label">Mögliche Einsätze</span><strong>{hasGameCount.toLocaleString("de-DE")}</strong><small>Spielerbilder: {imageCount} von {players.length}</small></div>
@@ -704,6 +707,9 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
           )}
         </section>
 
+        <div className="v35-tab-section" data-tab="builder" id="daily-mission"><details className="v35-advanced v36-mission-disclosure"><summary>⚡ Daily Mission Picker · beste Spieler für die heutige Mission</summary>
+          <DailyMissionPicker sport={sport} players={players} nbaSchedule={nbaSchedule} ownedIds={dailyMissionOwnedIds} excludedIds={dailyMissionExcludedIds} onOpenPlayer={setSelectedPlayerId} onSendToBuilder={queueManualPlayer} scope={team?clubs.find(c=>c.slug===team)?.name??team:league==='__all'?'Alle vier Fußballligen':sport==='nba'?'NBA · geladene Teams':league} verifiedOwned={verifiedCollection?.complete===true}/>
+        </details></div>
         <div className="v35-tab-section" data-tab="builder"><details className="v35-advanced"><summary>◷ Gameweek Center · Spielplan, Ziele und Details anzeigen</summary><GameweekCenter sport={sport} players={players} cardStore={effectiveCardStore} nbaSchedule={nbaSchedule}
           currentTarget={validTarget?totalTarget:null} onApplyTarget={applyArcadeGoal}
           onOpenPlayer={setSelectedPlayerId} onAddPlayer={queueManualPlayer} onExploreTeam={exploreGameweekTeam}/></details></div>
