@@ -1,3 +1,12 @@
+## V3.8.0 – Daily Mission Intelligence 2.0 (kostenlos)
+- Neuer One-Click Mission Pick: wählt nur verifiziert eigene Karten und überspringt Kandidaten mit hohem Einsatzrisiko; überträgt nur in den lokalen manuellen Builder, keine automatische Sorare-Abgabe.
+- Mission Safety verknüpft vorhandene Verfügbarkeitsberichte (OUT / Doubtful / Questionable), Alter des Gesundheitsstatus, Prognosedaten und Einsatzmodell. Risiken werden als heuristischer INDEX, nicht als behauptete Wahrscheinlichkeit angezeigt.
+- Kein zusätzlicher Datenanbieter: kostenlose Sorare- und bereits vorhandene Quellen, weder neue API-Keys noch Upstash oder Cron nötig.
+- NBA: exakte Zielmarke max(20, Sorare L10 + 7), Form und historische Überschreitungen, konservative Glättung; korrekte Berliner Spieltage und bestätigte Tipoff-Zeiten.
+- Fußball: Positionen getrennt, Tor- und Assist-Signale nur aus tatsächlich vorhandenen optionalen xG/xA; keine erfundenen Ereigniswahrscheinlichkeiten für Tore/Assists/Torlinienklärung/Clean Sheets/Elfmeter.
+- Auswahl- und Ausschlussbericht, kompakter schwarzer/lila UI-Bereich im bestehenden fünften Daily-Missions-Tab. V3.7.1 Divination Set Sync bleibt erhalten.
+- Zusätzliche Regressionstests für Regeln, Sicherheit, Besitz und Ein-Klick-Auswahl.
+
 ## V3.4.0 – Automatisches Prediction Learning Lab (NBA + Fußball)
 - 17 tägliche Vercel-Cron-Teiljobs für öffentliche Vor-Spiel-Snapshots und offizielle Score-Abgleiche, unabhängig von geöffnetem Browser.
 - Dauerhaftes, einmalig einzurichtendes Upstash-Redis-Archiv mit unveränderlichen Modellvergleichen V1.7/V1.8/V2.0.
