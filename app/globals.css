@@ -1217,3 +1217,9 @@ body { background:#090d17; color:var(--ink); -webkit-font-smoothing:antialiased;
 .v29-auto-captain{margin:11px 0;border:1px solid #c69a37;background:linear-gradient(115deg,#29291d,#141e36);border-radius:11px;padding:10px 13px;display:flex;gap:9px;align-items:center;flex-wrap:wrap;color:#ffe3a0}.v29-auto-captain>strong{color:#ffdb82;font-size:12px}.v29-auto-captain>span{font-size:11px;flex:1}.v29-auto-captain label{font-size:10px;display:grid;gap:4px}.v29-auto-captain select{border:1px solid #bd9745;background:#1c2437;color:#ffe6ac;padding:7px;border-radius:7px;max-width:180px}.v29-auto-captain small{width:100%;font-size:9px;color:#bcb3a4}
 
 .workspace-v23 .v29-card-bonus-edit{font-size:9px;color:#d7e7e1;display:flex;align-items:center;gap:4px}.workspace-v23 .v29-card-bonus-edit input{width:45px;min-width:0;background:#16273a;border:1px solid #5f9c84;color:#edfff4;padding:3px;border-radius:5px;font-size:10px}
+
+/* V2.9.1 – live Berlin matchday indicator and sorting */
+.workspace-v23 .v291-day-chip{border:1px solid #5d4a82!important;padding:4px 9px!important;border-radius:999px;background:linear-gradient(100deg,#35234c,#172841);color:#f0dcff!important;font-weight:800;box-shadow:inset 0 0 14px #a855f718}
+.workspace-v23 .v291-sort-direction{white-space:nowrap;min-height:36px;padding:7px 10px;border:1px solid #75619a;border-radius:9px;background:#282040;color:#f4e7ff;font-weight:800;font-size:10px;cursor:pointer}
+.workspace-v23 .v291-sort-direction:hover{background:#40305e;border-color:#be86ff}
+.workspace-v23 .v291-day-warning{color:#ffbf81;border:1px solid #a7653c;border-radius:8px;padding:4px 8px;background:#39251e;font-weight:800}
