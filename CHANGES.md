@@ -1,3 +1,12 @@
+## V2.9.0 – Neon Lineup Builder Pro / Captain Intelligence (04.11.2026)
+
+- **Nur Fußball:** feste 50 % Captain-Bonusregel für je ein Mitglied einer 5er-Aufstellung, goldene Krone, Auswahl pro Team und Speicherung im bestehenden V2.3-Workspace-Key. Smart Captain nach Erwartungswert oder sicherheitsbewusstem Floor und Ausfallmeldungen; manuelle Wahl bleibt erhalten.
+- **Nie NBA-Captain:** keine Krone, kein Captain-Extra, kein NBA-Captain-State. Das NBA-16-Sterne-Limit bleibt unverändert.
+- Neuer Captain-Aufsatz für Teamprognose, Floor, Ceiling, Target Chance, Team Battle, Arcade Goal Meter und automatische Fußball-Vorschauen; bestehendes Prognosemodell unverändert. Aktive automatische Mannschaftsselektion nutzt weiterhin den vorherigen Optimizer (nicht global neu nach Captainbonus optimiert).
+- Neu: Player Intelligence Panel, bestätigungspflichtige Quick-Swap-Vorschau, Final Lineup Check, Explain My Lineup und Tabellenspalten mit gespeicherter Ansicht pro Sport.
+- Echte Sorare-Kartenexemplare auswählbar (assetId, rarity, seasonYear, serialNumber). Da keine verifizierten Bonusprozente geliefert werden, kann ein eigener Wert je Kartenexemplar manuell hinterlegt werden. Keine behauptete offizielle Wettbewerbseignung.
+- Rollbackfreundlich: keine Änderung an Sorare-Scores, NBA-Star-Sync, OAuth-Tokens, Sammlungssync, Verletzungsquellen oder bestehenden Browser-Speicherschlüsseln.
+
 ## V2.8.3 – Deutlich sichtbarer „Nur meine Karten“-Schalter
 
 - Ein gemeinsamer, prominenter Schalter im Team Builder statt zweier widersprüchlicher Menüs; NBA und Fußball speichern ihre Auswahl separat.

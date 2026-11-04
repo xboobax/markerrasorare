@@ -5,6 +5,7 @@ import {ownedSlugs,mergeVerifiedOwned,ownedViewKey,isInSelectedCollection,type O
 
 import Link from "next/link";
 import BuilderWorkspace from "@/app/components/builder-workspace";
+import {automaticCaptainLineup} from "@/lib/lineup-v29";
 import GameweekCenter from "@/app/components/gameweek-center";
 import HiddenGems from "@/app/components/hidden-gems";
 import DataHealthCenter from "@/app/components/data-health-center";
@@ -171,6 +172,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const [builderMode, setBuilderMode] = useState<"automatic" | "manual">("manual");
   const [strategy, setStrategy] = useState<Strategy>("balanced");
   const [intelligencePickKey,setIntelligencePickKey]=useState<string|null>(null);
+  const [autoCaptainChoice,setAutoCaptainChoice]=useState<{key:string;playerId:string}|null>(null);
   const [target, setTarget] = useState(sport === "football" ? "180" : "");
 
   // Personal watchlist is kept apart from "owned cards" (favorite != owned).
@@ -443,8 +445,16 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
     sport,ownedOnly,limit:8,beamWidth:260,maxCandidatesPerSlot:115,
     targetScore:validTarget?totalTarget:null,lockedPlayerIds:lockedIds,excludedPlayerIds:excludedIds,
   }):null,[builderMode,eligibleCards,sport,ownedOnly,validTarget,totalTarget,lockedIds,excludedIds]);
+  const intelligenceView=useMemo(()=>intelligence&&sport==="football"?{...intelligence,variants:intelligence.variants.map(v=>{
+    const lineup=automaticCaptainLineup(v.lineup,sport,injuryById,validTarget?totalTarget:null).lineup!;
+    return {...v,lineup,targetGap:intelligence.target===null?null:lineup.projectedScore-intelligence.target};
+  })}:intelligence,[intelligence,sport,injuryById,validTarget,totalTarget]);
   const activeIntelligence=intelligence?.variants.find(v=>v.key===intelligencePickKey)??null;
-  const chosen = activeIntelligence?.lineup??lineups[Math.min(activeResult, lineups.length - 1)] ?? null;
+  const chosenBase = activeIntelligence?.lineup??lineups[Math.min(activeResult, lineups.length - 1)] ?? null;
+  const autoCaptainKey=chosenBase?.picks.map(p=>p.player.id).join("|")??"";
+  const chosenAuto=automaticCaptainLineup(chosenBase,sport,injuryById,validTarget?totalTarget:null,autoCaptainChoice?.key===autoCaptainKey?autoCaptainChoice.playerId:null);
+  const chosen=chosenAuto.lineup;
+  const shownLineups=useMemo(()=>lineups.map(l=>automaticCaptainLineup(l,sport,injuryById,validTarget?totalTarget:null).lineup!),[lineups,sport,injuryById,validTarget,totalTarget]);
   const selectedPlayer = players.find(p => p.id === selectedPlayerId) ?? null;
   const selectedCard = selectedPlayer ? cardStore[selectedPlayer.id] ?? {} : {};
   const profileScores = selectedPlayer ? ((selectedPlayer.recentScores?.length ?? 0) > 0 ? selectedPlayer.recentScores! : profileHistories[selectedPlayer.id] ?? []) : [];
@@ -650,7 +660,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
               <input id="manual-target" type="number" min="1" step="1" inputMode="numeric" value={target} placeholder="Score-Ziel eingeben" onChange={e=>setTarget(e.target.value)}/>
               {sport === "football" && <><button type="button" onClick={()=>setTarget("180")}>180 Pkt.</button><button type="button" onClick={()=>setTarget("360")}>360 Pkt.</button></>}
             </div>}
-            {builderMode === "manual" ? <BuilderWorkspace sport={sport} league={league} availability={availability} availabilityById={injuryById} players={players} cardStore={effectiveCardStore} ownedOnly={ownedOnly} verifiedOwnedReady={verifiedOwnedReady}
+            {builderMode === "manual" ? <BuilderWorkspace sport={sport} league={league} availability={availability} availabilityById={injuryById} players={players} cardStore={effectiveCardStore} ownedOnly={ownedOnly} verifiedOwnedReady={verifiedOwnedReady} verifiedCollection={verifiedCollection}
               updateCard={updateCard} targetScore={validTarget ? totalTarget : null}
               onOpenProfile={setSelectedPlayerId}
               onSavePredictions={items => items.forEach(saveTracked)} requestedPlayer={manualRequest}
@@ -663,7 +673,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
                 {(["balanced","safe","upside","target"] as Strategy[]).map(value => <button type="button" key={value} disabled={value === "target" && !validTarget} title={value === "target" && !validTarget ? "Bitte zuerst unten ein Score-Ziel eingeben" : undefined} className={strategy === value ? "active" : ""} onClick={() => {setStrategy(value);setActiveResult(0);setIntelligencePickKey(null);}}>{({balanced:"Ausgewogen",safe:"Sicher",upside:"Offensiv",target:"Zielchance"} as Record<Strategy,string>)[value]}</button>)}
               </div>
             </div>
-            {intelligence&&<ArcadeIntelligenceLab sport={sport} board={intelligence} target={target}
+            {intelligenceView&&<ArcadeIntelligenceLab sport={sport} board={intelligenceView} target={target}
               onTargetChange={value=>{setTarget(value);setIntelligencePickKey(null);}}
               selectedKey={activeIntelligence?.key??null} onSelect={key=>{setIntelligencePickKey(key);setActiveResult(0);}}/>}
             <div className="lock-info"><span>🔒 {lockedIds.length} Spieler fixiert · 🚫 {excludedIds.length} ausgeschlossen</span><button type="button" onClick={() => setCardStore(store => Object.fromEntries(Object.entries(store).map(([id,v])=>[id,{...v,locked:false,excluded:false}]))) }>Auswahl zurücksetzen</button></div>
@@ -675,20 +685,21 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
             ) : (
               <div className="target-shortcuts"><span>HOT STREAKS · ZIEL:</span><button className={target === "180" ? "active" : ""} onClick={() => setTarget("180")}>Schritt 2 · 180</button><button className={target === "360" ? "active" : ""} onClick={() => setTarget("360")}>Schritt 3 · 360</button></div>
             )}
-            {activeIntelligence&&<div className="intelligence-selected-notice" role="status"><span>✦ Aktives Intelligence-Lineup: <strong>{activeIntelligence.label}</strong> · {fmt(activeIntelligence.lineup.projectedScore)} Pkt.</span><button type="button" onClick={()=>setIntelligencePickKey(null)}>Zur Standard-Optimierung zurück</button></div>}
+            {activeIntelligence&&<div className="intelligence-selected-notice" role="status"><span>✦ Aktives Intelligence-Lineup: <strong>{activeIntelligence.label}</strong> · {fmt(chosen?.projectedScore??0)} Pkt.</span><button type="button" onClick={()=>setIntelligencePickKey(null)}>Zur Standard-Optimierung zurück</button></div>}
             <div className="lineup-board" id="auto-lineup-visual">
               {(sport === "football" ? ARCADE.football.slots : ARCADE.nba.slots).map((slot, index) => {
                 const item = chosen?.picks[index];
                 return <div className={`lineup-slot ${item ? "is-filled" : ""}`} key={`${slot}-${index}`}>
                   <div className="slot-icon">{item ? <PlayerAvatar player={item.player} small/> : (sport === "nba" ? "★" : ({GK:"◈",DEF:"⬡",MID:"✦",FWD:"◆",FLEX:"✧"} as Record<string,string>)[slot])}</div>
-                  <div className="slot-content"><span className="slot-name">{sport === "nba" ? `Karte ${index + 1}` : `${POS_SHORT[slot]} · ${POS_LABEL[slot]}`}</span>
+                  <div className="slot-content"><span className="slot-name">{sport === "nba" ? `Karte ${index + 1}` : `${POS_SHORT[slot]} · ${POS_LABEL[slot]}`}{sport==="football"&&item&&chosenAuto.captainId===item.player.id?" · 👑 CAPTAIN +50 %":""}</span>
                     {item ? <button className="player-open" type="button" onClick={() => setSelectedPlayerId(item.player.id)}>{item.player.name} ↗</button> : <strong>Noch kein passender Pick</strong>}
                     <small>{item ? `${item.player.team} · ${item.player.confidence ?? "mittel"} Datenlage` : sport === "nba" ? "Sterne für Spieler erfassen" : "Spieler aus dem Pool auswählen"}</small>
                   </div>
-                  <div className="slot-score">{item ? <><strong>{fmt(item.projectedScore)}</strong><small>{sport === "nba" ? `${fmt(item.stars ?? 0)} ★` : `+${item.bonusPercent}% Bonus`}</small></> : "—"}</div>
+                  <div className="slot-score">{item ? <><strong>{fmt(item.projectedScore)}</strong><small>{sport === "nba" ? `${fmt(item.stars ?? 0)} ★` : `${chosenAuto.captainId===item.player.id?"👑 ":""}+${item.bonusPercent}% inkl. aller Boni`}</small></> : "—"}</div>
                 </div>;
               })}
             </div>
+            {sport==="football"&&chosen&&<div className="v29-auto-captain"><strong>👑 AUTO SMART CAPTAIN · +50 %</strong><span>Empfehlung: {chosen.picks.find(p=>p.player.id===chosenAuto.captainId)?.player.name??"Kein sicher verfügbarer Spieler"} · +{fmt(chosenAuto.extra)} Punkte</span><label>Captain manuell wählen<select aria-label="Captain der automatischen Fußballaufstellung auswählen" value={chosenAuto.captainId??""} onChange={e=>setAutoCaptainChoice({key:autoCaptainKey,playerId:e.target.value})}><option value="">Bitte wählen</option>{chosen.picks.map(p=><option key={p.player.id} value={p.player.id}>{p.player.name}</option>)}</select></label><small>Ein Vorschlag, keine offizielle Einreichung. NBA hat keine Captain-Regel.</small></div>}
             <div className="lineup-footer">
               <div><span>PROGNOSE GESAMT</span><strong>{chosen ? fmt(chosen.projectedScore) : "—"}<small> Pkt.</small></strong></div>
               <div className="target-input"><label htmlFor="target">Score-Ziel (frei einstellbar)</label><input id="target" type="number" min="1" step="1" inputMode="numeric" value={target} placeholder="z. B. 360" onChange={e=>setTarget(e.target.value)} /></div>
@@ -699,8 +710,8 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
               <div className="target-progress"><div className="target-track"><div style={{width: `${progress}%`}}/></div><p>Modellprognose {fmt(chosen.projectedScore)} / {fmt(totalTarget)} · <strong>{chosen.projectedScore >= totalTarget ? "Prognose über Ziel" : `${fmt(Math.max(0,totalTarget - chosen.projectedScore))} Punkte unter Ziel`}</strong></p></div>
             )}
             <p className="model-note">Mit „Fixieren“ zwingst du Spieler ins Lineup, mit „Sperren“ entfernst du sie aus der Auswahl. Sterne werden aus Sorare geladen, falls verfügbar; Boni bleiben manuell. {ownedOnly ? "Aufstellung nur aus vollständig synchronisierten Sorare-Karten." : "Theoretische Bestbesetzung aus dem geladenen Spielerpool – dein Kartenbesitz ist nicht geprüft."} Fehlende NBA-Sterne kannst du weiterhin manuell eintragen. Prognosen sind keine garantierten Ergebnisse.</p>
-            {lineups.length > 1 && <div className="variants" role="group" aria-label="Aufstellungen vergleichen">{lineups.map((l, i) => <button key={i} className={Math.min(activeResult,lineups.length-1) === i ? "active" : ""} onClick={()=>{setActiveResult(i);setIntelligencePickKey(null);}}>Lineup {i+1} <strong>{validTarget && l.targetProbability !== null ? `${Math.round(l.targetProbability * 100)} % Zielchance` : `${fmt(l.projectedScore)} Pkt.`}</strong></button>)}</div>}
-            {lineups.length > 1 && <div className="lineup-compare"><h3>Lineups im direkten Vergleich</h3><div className="tracking-scroll"><table className="tracking-table"><thead><tr><th>Lineup</th><th>Prognose</th><th>Floor</th><th>Ceiling</th>{sport === "nba" && <th>Sterne</th>}{validTarget && <th>Zielchance*</th>}</tr></thead><tbody>{lineups.map((l,i) => <tr key={i} className={Math.min(activeResult,lineups.length-1)===i ? "compare-selected" : ""} onClick={() => {setActiveResult(i);setIntelligencePickKey(null);}}><td><button type="button" onClick={() => {setActiveResult(i);setIntelligencePickKey(null);}}>#{i+1} wählen</button></td><td>{fmt(l.projectedScore)}</td><td>{fmt(l.floorScore)}</td><td>{fmt(l.ceilingScore)}</td>{sport === "nba" && <td>{fmt(l.starsUsed)} ★</td>}{validTarget && <td>{l.targetProbability===null ? "—" : `${Math.round(l.targetProbability*100)} %`}</td>}</tr>)}</tbody></table></div><p className="profile-muted">* Zielchance: nicht kalibrierte Modellschätzung. Lineups sind nicht automatisch offiziell spielberechtigt; Kartenbesitz und aktuelle Set-Regeln prüfen.</p></div>}
+            {shownLineups.length > 1 && <div className="variants" role="group" aria-label="Aufstellungen vergleichen">{shownLineups.map((l, i) => <button key={i} className={Math.min(activeResult,lineups.length-1) === i ? "active" : ""} onClick={()=>{setActiveResult(i);setIntelligencePickKey(null);}}>Lineup {i+1} <strong>{validTarget && l.targetProbability !== null ? `${Math.round(l.targetProbability * 100)} % Zielchance` : `${fmt(l.projectedScore)} Pkt.`}</strong></button>)}</div>}
+            {shownLineups.length > 1 && <div className="lineup-compare"><h3>Lineups im direkten Vergleich</h3><div className="tracking-scroll"><table className="tracking-table"><thead><tr><th>Lineup</th><th>Prognose</th><th>Floor</th><th>Ceiling</th>{sport === "nba" && <th>Sterne</th>}{validTarget && <th>Zielchance*</th>}</tr></thead><tbody>{shownLineups.map((l,i) => <tr key={i} className={Math.min(activeResult,lineups.length-1)===i ? "compare-selected" : ""} onClick={() => {setActiveResult(i);setIntelligencePickKey(null);}}><td><button type="button" onClick={() => {setActiveResult(i);setIntelligencePickKey(null);}}>#{i+1} wählen</button></td><td>{fmt(l.projectedScore)}</td><td>{fmt(l.floorScore)}</td><td>{fmt(l.ceilingScore)}</td>{sport === "nba" && <td>{fmt(l.starsUsed)} ★</td>}{validTarget && <td>{l.targetProbability===null ? "—" : `${Math.round(l.targetProbability*100)} %`}</td>}</tr>)}</tbody></table></div><p className="profile-muted">* Zielchance: nicht kalibrierte Modellschätzung. Lineups sind nicht automatisch offiziell spielberechtigt; Kartenbesitz und aktuelle Set-Regeln prüfen.</p></div>}
             {!chosen && <div className="empty-state"><strong>Für dieses Regelset fehlt eine vollständige gültige Aufstellung.</strong><p>{sport === "nba" ? "Vergib im Spielertableau zunächst echte Sterne (1–5 in 0,5-Schritten) für mindestens fünf geeignete Karten. Zusammen dürfen sie höchstens 16 Sterne haben." : "Es werden je ein TW, VER, MF, FWD sowie ein zusätzlicher Feldspieler benötigt."}{ownedOnly ? " Prüfe den vollständig synchronisierten Kartenbestand, den gewählten Datenbereich und die NBA-Sterne." : ""} Fixierungen müssen zum Regelset passen; NBA zusammen höchstens 16 Sterne.</p></div>}
             </>}
           </div>

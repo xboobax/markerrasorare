@@ -1,3 +1,11 @@
+# V2.9 – Neon Lineup Builder Pro mit Captain Intelligence
+
+**Fußball: exakt ein Captain mit festem +50-%-Bonus. NBA: kein Captain.**
+
+Neu: Goldene Captain-Krone, manuelle Captainwahl, Smart Captain (Erwartungswert oder Floor/Risiko), sichere Warnungen vor Ausfällen, Captain-Bonus in Team-Prognosen, Floor, Ceiling, Modell-Zielchance, Team Battle und automatischen Lineup-Vorschauen. Außerdem: Player Intelligence Panel, bestätigungspflichtige Quick-Swap-Vorschau, kartenexemplarbezogene Auswahl aus der authentifizierten Sorare-Sammlung, lokal einstellbare Bonuswerte pro Kartenexemplar, speicherbare Tabellenansichten, Explain My Lineup und Final Lineup Check.
+
+Die V2.8.3-Teams werden weiter aus demselben Browser-Speicherschlüssel geladen. Die Sorare-GraphQL- und OAuth-Routen, offizielle NBA-Sterne und Prognoseformeln wurden nicht geändert. Der Captain-Modifier wurde als neue, separate Nachberechnung angebaut. Zusätzliche konkrete Kartenboni werden **nicht aus Seltenheit oder Seriennummer erfunden** und bleiben manuell. Weitere Details und Installation: `UPDATE_V2_9_DE.md`.
+
 # Markerras Sorare Helper V2.8.3 – Meine Karten für NBA und Fußball
 
 **Neu:** Im Lineup Builder lässt sich über einen deutlich hervorgehobenen Schalter „Nur meine NBA-Karten“ bzw. „Nur meine Fußball-Karten“ aktivieren. Der Schalter gilt für manuelle und automatische Aufstellungen, bleibt pro Sportart separat gespeichert und verwendet ausschließlich vollständig synchronisierten Sorare-Kartenbesitz. Siehe [`UPDATE_V2_8_3_DE.md`](UPDATE_V2_8_3_DE.md).

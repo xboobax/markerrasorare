@@ -3,11 +3,11 @@ import {isValidNbaStars,slotAccepts,type CardInput} from "./arcade";
 import {emptyManualSelection,normalizeManualSelection,type ManualSelection} from "./manual-lineup";
 import type {Sport} from "./model";
 
-export type WorkspaceTeam = {id:string;selection:ManualSelection;goal:number|null;collapsed:boolean;locks:string[]};
+export type WorkspaceTeam = {id:string;selection:ManualSelection;goal:number|null;collapsed:boolean;locks:string[];captainId?:string|null;captainMode?:"projection"|"safety";assetIds?:Record<string,string>;assetBonuses?:Record<string,number>};
 export type WorkspaceData = {teams:WorkspaceTeam[];activeTeamId:string};
 const isGoal=(v:unknown):v is number=>typeof v==="number"&&Number.isFinite(v)&&v>0&&v<=10000;
 export const workspaceKey=(sport:Sport)=>`markerras.sorare.builder-workspace.v23.${sport}`;
-export const initialTeams=():WorkspaceTeam[]=>Array.from({length:4},(_,i)=>({id:`team-${i+1}`,selection:emptyManualSelection(),goal:null,collapsed:false,locks:[]}));
+export const initialTeams=():WorkspaceTeam[]=>Array.from({length:4},(_,i)=>({id:`team-${i+1}`,selection:emptyManualSelection(),goal:null,collapsed:false,locks:[],captainId:null,assetIds:{},assetBonuses:{}}));
 export function restoreWorkspace(raw:unknown,legacy:unknown):WorkspaceData {
   const fallback=initialTeams();
   if(raw&&typeof raw==="object"&&!Array.isArray(raw)) {
@@ -21,7 +21,11 @@ export function restoreWorkspace(raw:unknown,legacy:unknown):WorkspaceData {
         usedIds.add(id);
         return {id,selection:normalizeManualSelection(obj.selection),
           goal:isGoal(obj.goal)?obj.goal:null,collapsed:obj.collapsed===true,
-          locks:Array.isArray(obj.locks)?[...new Set(obj.locks.filter((id:unknown)=>typeof id==="string"&&normalizeManualSelection(obj.selection).includes(id)))].slice(0,5) as string[]:[]};
+          locks:Array.isArray(obj.locks)?[...new Set(obj.locks.filter((id:unknown)=>typeof id==="string"&&normalizeManualSelection(obj.selection).includes(id)))].slice(0,5) as string[]:[],
+          captainId:typeof obj.captainId==="string"&&normalizeManualSelection(obj.selection).includes(obj.captainId)?obj.captainId:null,
+          captainMode:obj.captainMode==="safety"?"safety":"projection",
+          assetIds:obj.assetIds&&typeof obj.assetIds==="object"&&!Array.isArray(obj.assetIds)?Object.fromEntries(Object.entries(obj.assetIds).filter(([k,v])=>normalizeManualSelection(obj.selection).includes(k)&&typeof v==="string"&&v.length<260)) as Record<string,string>:{},
+          assetBonuses:obj.assetBonuses&&typeof obj.assetBonuses==="object"&&!Array.isArray(obj.assetBonuses)?Object.fromEntries(Object.entries(obj.assetBonuses).filter(([k,v])=>k.length<260&&typeof v==="number"&&Number.isFinite(v)&&v>=0&&v<=50)) as Record<string,number>:{} };
       });
       return {teams,activeTeamId:teams.some(t=>t.id===input.activeTeamId)?String(input.activeTeamId):teams[0].id};
     }
