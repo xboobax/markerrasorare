@@ -60,7 +60,7 @@ export function swapPreview(args:{result:ManualLineupResult;sport:Sport;captainI
 }
 export function cardsForPlayer(cards:OwnedSorareCard[]|undefined,sport:Sport,playerId:string):OwnedSorareCard[]{
   return (cards??[]).filter(c=>c.playerSlug===playerId&&c.sport===(sport==="nba"?"NBA":"FOOTBALL"))
-    .sort((a,b)=>a.rarity.localeCompare(b.rarity)||String(b.seasonYear??"").localeCompare(String(a.seasonYear??"")));
+    .sort((a,b)=>(b.bonusPercent??-1)-(a.bonusPercent??-1)||a.rarity.localeCompare(b.rarity)||String(b.seasonYear??"").localeCompare(String(a.seasonYear??"")));
 }
 export function chooseCardAsset(options:OwnedSorareCard[],stored:string|undefined){
   if(!options.length)return null;
@@ -70,9 +70,9 @@ export const defaultColumns=["date","status","games","matchup","form","play","l5
 export type ColumnKey=typeof defaultColumns[number];
 export const columnsLabels:Record<ColumnKey,string>={date:"Datum",status:"Ausfälle",games:"Spiele",matchup:"Gegnerstärke",form:"Form",play:"Einsatz",l5:"L5",l10:"L10",projection:"Prognose",floor:"Floor",ceiling:"Ceiling",stars:"Sterne",value:"Wert/★",bonus:"Bonus",card:"Karte"};
 export function columnsForPreset(preset:"all"|"compact"|"scouting",sport:Sport):ColumnKey[]{
-  if(preset==="compact")return ["date","status","projection",...(sport==="nba"?["stars" as const]:["bonus" as const]),"card"];
-  if(preset==="scouting")return ["date","status","matchup","form","play","l5","l10","projection","floor","ceiling",...(sport==="nba"?["games" as const,"stars" as const]:["bonus" as const])];
-  return defaultColumns.filter(k=>sport==="nba"?k!=="bonus":k!=="games"&&k!=="stars"&&k!=="value");
+  if(preset==="compact")return ["date","status","projection",...(sport==="nba"?["stars" as const]:[]),"bonus","card"];
+  if(preset==="scouting")return ["date","status","matchup","form","play","l5","l10","projection","floor","ceiling",...(sport==="nba"?["games" as const,"stars" as const]:[]),"bonus"];
+  return defaultColumns.filter(k=>sport==="nba"?true:k!=="games"&&k!=="stars"&&k!=="value");
 }
 
 /** Suggest a captain on an automatic football lineup without touching the base Sorare optimizer. */

@@ -1,12 +1,13 @@
 import {NextRequest,NextResponse} from "next/server";
 import {sessionForRequest,setSessionCookie,graphQl} from "@/lib/sorare-oauth-session";
+import {parseSorareBonuses} from "@/lib/my-collection";
 export const dynamic="force-dynamic";
 const QUERY=`query MarkerrasOwnedCollection($after: String) {
   currentUser { slug }
   # "cardsWhere" is a paginated root field. CurrentUser has NO "anyCards" field.
   # "ownedByMe" is scoped to the authenticated Sorare OAuth user.
   cardsWhere(first: 50, after: $after, ownedByMe: true) {
-    nodes { assetId slug sport rarityTyped seasonYear serialNumber anyPlayer { slug displayName } }
+    nodes { assetId slug sport rarityTyped seasonYear serialNumber grade bonuses { key title bonusBasisPoints } anyPlayer { slug displayName } }
     pageInfo { hasNextPage endCursor }
     totalCount
   }
@@ -25,8 +26,10 @@ export async function GET(request:NextRequest){
     const nodes=data.nodes!;
     const cards=nodes.filter((n):n is Record<string,unknown>=>!!n&&typeof n==="object").map(c=>{
       const p=c.anyPlayer as Record<string,unknown>|null;
+      const parsed=parseSorareBonuses(c.bonuses);
       return {assetId:String(c.assetId||""),slug:String(c.slug||""),sport:String(c.sport||""),rarity:String(c.rarityTyped||""),seasonYear:c.seasonYear??null,serialNumber:c.serialNumber??null,
-        playerSlug:typeof p?.slug==="string"?p.slug:"",playerName:typeof p?.displayName==="string"?p.displayName:""};
+        playerSlug:typeof p?.slug==="string"?p.slug:"",playerName:typeof p?.displayName==="string"?p.displayName:"",grade:typeof c.grade==="number"?c.grade:null,
+        bonusPercent:parsed.bonusPercent,bonusDetails:parsed.bonusDetails};
     }).filter(c=>c.assetId&&c.playerSlug&&(c.sport==="NBA"||c.sport==="FOOTBALL"));
     const res=NextResponse.json({userSlug:current.slug,cards,pageInfo:data.pageInfo??{hasNextPage:false,endCursor:null},totalCount:data.totalCount??cards.length,fetchedAt:new Date().toISOString()},{headers:{"Cache-Control":"private, no-store"}});
     if(user.changed)setSessionCookie(res,user.session);

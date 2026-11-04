@@ -1,7 +1,7 @@
 "use client";
 
 import MySorareCollection from "@/app/components/my-sorare-collection";
-import {ownedSlugs,mergeVerifiedOwned,ownedViewKey,isInSelectedCollection,type OwnedCollection} from "@/lib/my-collection";
+import {ownedSlugs,mergeVerifiedOwned,ownedViewKey,isInSelectedCollection,bestOwnedBonusByPlayer,type OwnedCollection} from "@/lib/my-collection";
 
 import Link from "next/link";
 import BuilderWorkspace from "@/app/components/builder-workspace";
@@ -36,7 +36,7 @@ import {automaticSnapshotCandidates} from "@/lib/snapshot-policy";
 import type {TrackingModelSnapshot} from "@/lib/tracking";
 
 type CardSettings = {
-  owned?: boolean; stars?: number | null; bonusPercent?: number; starSource?: "sorare";
+  owned?: boolean; stars?: number | null; bonusPercent?: number; starSource?: "sorare";bonusSource?:"sorare";
   locked?: boolean; excluded?: boolean;
   expectedMinutes?: number | null; typicalMinutes?: number | null;
   xg?: number | null; xa?: number | null;
@@ -158,8 +158,11 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const effectiveCardStore:CardStore=useMemo(()=>{
     const verified=verifiedCollection?.complete?ownedSlugs(verifiedCollection,sport):[];
     const base=mergeVerifiedOwned(cardStore,verified,verifiedCollection?.complete===true);
-    if(sport!=="nba"||!Object.keys(officialStars).length)return base;
     const merged:CardStore={...base};
+    for(const [id,bonus] of Object.entries(bestOwnedBonusByPlayer(verifiedCollection,sport))){
+      merged[id]={...merged[id],bonusPercent:bonus,bonusSource:"sorare"};
+    }
+    if(sport!=="nba"||!Object.keys(officialStars).length)return merged;
     for(const [id,stars] of Object.entries(officialStars)){
       if(officialStarValue(stars)!==null)merged[id]={...merged[id],stars,starSource:"sorare"};
     }
@@ -425,8 +428,8 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
     // No manual fallback while the synced-collection-only filter is active.
     owned: effectiveCardStore[p.id]?.owned === true && (!ownedOnly || verifiedOwnedReady),
     stars: effectiveCardStore[p.id]?.stars ?? null,
-    bonusPercent: cardStore[p.id]?.bonusPercent ?? 0,
-  })), [players, cardStore, effectiveCardStore, ownedOnly, verifiedOwnedReady]);
+    bonusPercent: effectiveCardStore[p.id]?.bonusPercent ?? 0,
+  })), [players, effectiveCardStore, ownedOnly, verifiedOwnedReady]);
 
   const favoriteSet=useMemo(()=>new Set(watchlist),[watchlist]);
   const ownedCount = players.filter(p => effectiveCardStore[p.id]?.owned).length;
@@ -695,7 +698,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
                     {item ? <button className="player-open" type="button" onClick={() => setSelectedPlayerId(item.player.id)}>{item.player.name} ↗</button> : <strong>Noch kein passender Pick</strong>}
                     <small>{item ? `${item.player.team} · ${item.player.confidence ?? "mittel"} Datenlage` : sport === "nba" ? "Sterne für Spieler erfassen" : "Spieler aus dem Pool auswählen"}</small>
                   </div>
-                  <div className="slot-score">{item ? <><strong>{fmt(item.projectedScore)}</strong><small>{sport === "nba" ? `${fmt(item.stars ?? 0)} ★` : `${chosenAuto.captainId===item.player.id?"👑 ":""}+${item.bonusPercent}% inkl. aller Boni`}</small></> : "—"}</div>
+                  <div className="slot-score">{item ? <><strong>{fmt(item.projectedScore)}</strong><small>{sport === "nba" ? `${fmt(item.stars ?? 0)} ★ · +${fmt(item.bonusPercent)} % Kartenbonus` : `${chosenAuto.captainId===item.player.id?"👑 ":""}+${item.bonusPercent}% inkl. aller Boni`}</small></> : "—"}</div>
                 </div>;
               })}
             </div>
@@ -746,6 +749,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
           <div className="table-scroll"><table className="players-table"><thead><tr><th title="Favoriten in deiner Watchlist">★</th><th>Spieler / Team</th><th>Pos.</th><th>Ø Score</th><th>L5</th><th>Gegner</th><th>Floor – Ceiling</th><th>Daten</th><th>Einsatz</th><th>Prognose</th><th>Scouting (manuell)</th><th>Builder</th><th>Mein Bestand</th>{sport === "nba" && <th>Sterne ★</th>}<th>Kartenbonus</th></tr></thead>
             <tbody>{filtered.slice(0,showCount).map(p => {
               const card = cardStore[p.id] ?? {};
+              const syncedCard = effectiveCardStore[p.id] ?? card;
               return <tr key={p.id}>
                 <td><button type="button" className={`favorite-toggle ${watchlist.includes(p.id)?"is-favorite":""}`} aria-pressed={watchlist.includes(p.id)} aria-label={`${p.name} ${watchlist.includes(p.id)?"aus Favoriten entfernen":"zu Favoriten hinzufügen"}`} onClick={()=>toggleFavorite(p.id)}>{watchlist.includes(p.id)?"★":"☆"}</button></td>
                 <td><div className="player-identity"><PlayerAvatar player={p}/><span><button type="button" className="player-open" onClick={() => setSelectedPlayerId(p.id)} title={`Profil von ${p.name} öffnen`}>{p.name} ↗</button><small>{p.team}{p.injuries > 0 ? " · ⚠ Verletzung" : ""}{p.hasGame === false ? " · kein Spiel" : ""}</small>{p.nextGame && <small className="game-caption">{p.nextGame}</small>}</span></div></td>
@@ -771,13 +775,14 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
                 </div></td>
                 <td><label className="owned-checkbox" title="Diese Spielerkarte ist in meinem Bestand"><input type="checkbox" checked={effectiveCardStore[p.id]?.owned === true} disabled={verifiedCollection?.complete===true} title={verifiedCollection?.complete?"Bestand aus Sorare synchronisiert, daher nicht manuell änderbar":"Lokale Markierung"} onChange={e=>updateCard(p.id,{owned:e.target.checked})}/><span>{effectiveCardStore[p.id]?.owned ? verifiedCollection?.complete?"✓ Sorare":"Meine Karte" : "Merken"}</span></label></td>
                 {sport === "nba" && <td><div className="star-cell"><select className="small-select star-select" value={isValidNbaStars(effectiveCardStore[p.id]?.stars) ? String(effectiveCardStore[p.id]?.stars) : ""} disabled={officialStarValue(officialStars[p.id])!==null} aria-label={`Sterne für ${p.name}`} title={officialStarValue(officialStars[p.id])!==null?"Offizielle aktuelle Sorare-Spielerbewertung · nicht manuell überschreibbar":"Manueller Ersatzwert, solange keine offizielle Bewertung vorliegt"} onChange={e=>updateCard(p.id,{stars:e.target.value===""?null:Number(e.target.value)})}><option value="">—</option>{starOptions.map(s=><option value={String(s)} key={s}>{fmt(s)} ★</option>)}</select><small className={officialStarValue(officialStars[p.id])!==null?"star-source-official":"star-source-fallback"}>{nbaStarValue(officialStars[p.id],card.stars).source==="sorare"?"✓ Sorare":isValidNbaStars(card.stars)?"Manuell":"Fehlt"}</small></div></td>}
-                <td><select className="small-select" value={card.bonusPercent ?? 0} aria-label={`Kartenbonus für ${p.name}`} onChange={e=>updateCard(p.id,{bonusPercent:Number(e.target.value)})}>{bonuses.map(b=><option value={b} key={b}>+{b} %</option>)}</select></td>
+                <td>{syncedCard.bonusSource==="sorare"?<span className="v293-sorare-bonus" title="Automatischer Bonus der stärksten synchronisierten Karte dieses Spielers. Konkrete Karte im Builder wählen.">+{fmt(syncedCard.bonusPercent??0)} % · Sorare</span>
+                  :<select className="small-select" value={card.bonusPercent ?? 0} aria-label={`Kartenbonus für ${p.name}`} onChange={e=>updateCard(p.id,{bonusPercent:Number(e.target.value)})}>{bonuses.map(b=><option value={b} key={b}>+{b} %</option>)}</select>}</td>
               </tr>;
             })}</tbody></table></div>
           {!filtered.length && <div className="empty-state">Keine passenden Spieler im geladenen Datenbereich.</div>}
           {showCount < filtered.length && <button className="load-more" onClick={()=>setShowCount(n=>n+70)}>Weitere Spieler anzeigen ({Math.min(70,filtered.length-showCount)}) ↓</button>}
           {quickNotice && <p className="quick-add-notice" role="status">{quickNotice}</p>}
-          <div className="footnote">Klicke auf einen Spielernamen, um sein Detailprofil zu öffnen. Tipp: Mit „Meine Karte“ markierst du deinen Bestand. NBA-Sterne werden nach Möglichkeit aktuell von Sorare abgerufen; gespeicherte manuelle Sterne dienen nur als Fallback. Kartenbonus und Besitz bleiben lokale Eingaben. Spielerbilder stammen soweit vorhanden aus der Sorare-API; fehlt ein Foto oder lässt es sich nicht laden, werden Initialen gezeigt. Die Spannen und Zielchancen sind heuristisch und noch nicht gegen echte Spieltagsergebnisse kalibriert. xG/xA sind vorerst nur Informationsfelder (ohne rechnerischen Einfluss); für die Minutenkorrektur musst du übliche UND erwartete Minuten eingeben. Gegnerbewertungen basieren bei aktiviertem Feed auf realen Team-Gegentoren/-punkten oder ansonsten auf deinen manuellen Eingaben; die 1–5-Skala bleibt nur eine grobe Einordnung.</div>
+          <div className="footnote">Klicke auf einen Spielernamen, um sein Detailprofil zu öffnen. Tipp: Mit „Meine Karte“ markierst du deinen Bestand. NBA-Sterne werden nach Möglichkeit aktuell von Sorare abgerufen; gespeicherte manuelle Sterne dienen nur als Fallback. Kartenboni werden bei verifizierten Karten automatisch aus Sorare übernommen; ohne verfügbare Bonusdaten bleiben lokale Eingaben erhalten. Spielerbilder stammen soweit vorhanden aus der Sorare-API; fehlt ein Foto oder lässt es sich nicht laden, werden Initialen gezeigt. Die Spannen und Zielchancen sind heuristisch und noch nicht gegen echte Spieltagsergebnisse kalibriert. xG/xA sind vorerst nur Informationsfelder (ohne rechnerischen Einfluss); für die Minutenkorrektur musst du übliche UND erwartete Minuten eingeben. Gegnerbewertungen basieren bei aktiviertem Feed auf realen Team-Gegentoren/-punkten oder ansonsten auf deinen manuellen Eingaben; die 1–5-Skala bleibt nur eine grobe Einordnung.</div>
         </section>
         <section className="panel tracking-panel" id="tracking">
           <div className="section-top"><div><span className="section-kicker">07 / PROGNOSE-DATENBANK & BACKTESTING</span><h2>Prognose gegen Ergebnis</h2></div><span className="record-count">{metrics.count} ausgewertete Vorhersagen</span></div>
