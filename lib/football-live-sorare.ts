@@ -1,6 +1,8 @@
 /** Conservative matching of an ESPN game to a Sorare game and its players.
  * The Sorare API schema is published at https://api.sorare.com/graphql/schema */
-export type CandidateSorareGame={id:string;date:string;homeTeam:{name:string}|null;awayTeam:{name:string}|null};
+export type SorareTeamRef={name:string;slug?:string};
+export type CandidateSorareGame={id:string;date:string;homeTeam:SorareTeamRef|null;awayTeam:SorareTeamRef|null};
+export type SorareClubRef={name:string;slug:string};
 export type OfficialFootballPlayerScore={slug:string;name:string;score:number;scoreStatus:string};
 export type OfficialFootballPlayerPhoto={slug:string;name:string;url:string};
 const TEAM_ALIASES:Record<string,string>={
@@ -11,18 +13,71 @@ const TEAM_ALIASES:Record<string,string>={
   atletico:'atleticomadrid',atleticodemadrid:'atleticomadrid',
   barca:'barcelona',fcbarcelona:'barcelona',realmadricf:'realmadrid',
   internazionale:'intermilan',inter:'intermilan',
-  leverkusen:'bayerleverkusen',tottenham:'tottenhamhotspur'
+  leverkusen:'bayerleverkusen',tottenham:'tottenhamhotspur',spurs:'tottenhamhotspur',
+  mancity:'manchestercity',newcastle:'newcastleunited',westham:'westhamunited',
+  brighton:'brightonandhovealbion',brightonhovealbion:'brightonandhovealbion',
+  nottinghamforest:'nottinghamforest',wolves:'wolverhamptonwanderers',
+  bayer04leverkusen:'bayerleverkusen',fcbayernmunchen:'bayernmunich',
+  rbleipzig:'rasenballsportleipzig',
+  parisgermain:'parissaintgermain',parissaintgermainfc:'parissaintgermain',
+  om:'olympiquemarseille',marseille:'olympiquemarseille',
+  lyon:'olympiquelyonnais',olympiquelyon:'olympiquelyonnais',
+  monaco:'asmonaco',bolognafc:'bologna',
+  athleticbilbao:'athleticclub',athleticclubbilbao:'athleticclub',
+  realbetisbalompie:'realbetis',betis:'realbetis',
+  sportingcp:'sportinglisbon',sportingportugal:'sportinglisbon',
+  napoli:'sscalcionapoli',ssnapoli:'sscalcionapoli',
+  acmilan:'milan',internazionalemilano:'intermilan',
+  celta:'rcceltadevigo',celtavigo:'rcceltadevigo',
+  roma:'asroma',sscnapoli:'sscalcionapoli',
+  frankfurt:'eintrachtfrankfurt',stuttgart:'vfbstuttgart',
+  mainz:'fsvmainz05',mainz05:'fsvmainz05',
+  unionberlin:'unionberlin',
+  stadedereims:'reims',stadereims:'reims',reims:'reims',
+  ogcnice:'nice',nice:'nice',
+  borussiamgladbach:'borussiamonchengladbach',monchengladbach:'borussiamonchengladbach',
+  realsociedaddefutbol:'realsociedad',realsociedadfutbol:'realsociedad'
 };
 export const sorareNameKey=(name:string)=>{
   const key=name.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()
-    .replace(/\b(fc|cf|afc|sc|sv|club|football|the)\b/g,'').replace(/[^a-z0-9]/g,'');
+    .replace(/\b(fc|cf|afc|sc|sv|club|football|the|de|du|del)\b/g,'').replace(/[^a-z0-9]/g,'');
   return TEAM_ALIASES[key]??key;
 };
 export const sorarePlayerKey=(name:string)=>name.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
-export function matchSorareGame(games:CandidateSorareGame[],target:{date:string;home:string;away:string}):CandidateSorareGame|null{
+/** Resolve a real Sorare club from the public club catalog; never guess or build
+ * Sorare slugs from ESPN names. If several clubs normalize to the same name,
+ * decline to resolve instead of attributing a rival's photos or scores. */
+export function resolveSorareClubSlug(name:string,clubs:readonly SorareClubRef[]):string|null{
+  const key=sorareNameKey(name);
+  if(!key||key.length<4)return null;
+  const direct=clubs.filter(c=>typeof c.slug==='string'&&/^[a-z0-9-]+$/.test(c.slug)&&
+    (sorareNameKey(c.name)===key||sorareNameKey(c.slug)===key));
+  const slugs=[...new Set(direct.map(c=>c.slug))];
+  if(slugs.length===1)return slugs[0];
+  if(slugs.length>1)return null;
+  // Distinctive longer variants, e.g. "Real Sociedad" / "Real Sociedad de Fútbol".
+  // Do not match short names like "United", "Real", or national teams by substring.
+  if(key.length<8)return null;
+  const close=clubs.filter(c=>{
+    const other=sorareNameKey(c.name);
+    return other.length>=8&&Math.min(other.length,key.length)/Math.max(other.length,key.length)>=0.68&&
+      (other.startsWith(key)||key.startsWith(other));
+  });
+  return close.length===1&&/^[a-z0-9-]+$/.test(close[0].slug)?close[0].slug:null;
+}
+/** Match only the selected home/away identity AND kickoff date. Known Sorare
+ * team slugs are stronger evidence than display names, but are never inferred. */
+export function matchSorareGame(
+  games:CandidateSorareGame[],target:{date:string;home:string;away:string},
+  verifiedSlugs?:{home?:string|null;away?:string|null}
+):CandidateSorareGame|null{
   const matched=games.filter(g=>{
-    const a=sorareNameKey(g.awayTeam?.name??''),h=sorareNameKey(g.homeTeam?.name??'');
-    if(!a||!h||a!==sorareNameKey(target.away)||h!==sorareNameKey(target.home))return false;
+    const same=(candidate:SorareTeamRef|null,targetName:string,slug?:string|null)=>{
+      if(!candidate)return false;
+      if(slug&&candidate.slug)return candidate.slug===slug;
+      return sorareNameKey(candidate.name)===sorareNameKey(targetName);
+    };
+    if(!same(g.homeTeam,target.home,verifiedSlugs?.home)||!same(g.awayTeam,target.away,verifiedSlugs?.away))return false;
     const delta=Math.abs(Date.parse(g.date)-Date.parse(target.date));
     return Number.isFinite(delta)&&delta<=6*60*60*1000;
   });

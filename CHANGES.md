@@ -1,3 +1,14 @@
+## V4.5.10 – Dynamische Sorare-Vereine für alle Spiele (05.11.2026)
+
+- Die bisherigen fest hinterlegten Club-Slugs für Hoffenheim und Crystal Palace wurden entfernt.
+- Sorare-Vereins-Slugs werden aus `competitionGames` und dem öffentlichen `football.clubsReady`-Katalog für das jeweils gewählte ESPN-Spiel aufgelöst.
+- Beide Club-Kader werden einzeln über `football.club(slug:)` geladen; das umgeht Einschränkungen für verschachtelte High-Cardinality-GraphQL-Listen.
+- Spielerporträts werden auch unabhängig vom offiziellen Spielabgleich geladen; Sorare-Spieler-Scores bleiben streng an die eindeutig passende Partie gebunden.
+- Öffentliche Vereinsnamen und Team-Slugs werden mit konservativen Synonymen abgeglichen. Doppelte/uneindeutige Vereinsnamen werden nicht willkürlich zugeordnet.
+- Neues optionales Detailfeld `Quellenprüfung · Sorare` im vorhandenen Football-Live-Center: aufgelöste Vereine, gefundene Spiele, Clubfotos und API-Quellenhinweise.
+- Katalogcache (öffentliche Vereinsdaten) max. 6 Stunden pro Serverinstanz; keine personenbezogenen Daten oder Tokens im Cache. Keine SQL-Migration, kein neuer Cron.
+- Grenzen: Echte Sorare-Scores gibt es nur für tatsächlich von Sorare erfasste Spiele und Spieler. Fehlende Quellporträts können nicht künstlich erzeugt werden. Erst der Live-Test bestätigt die konkrete Abdeckung.
+
 ## V4.5.9 – Football Live: globale Sorare-Spiele + eigenständige Spielerporträts
 - Regression repariert: V4.5.8/8.1 nutzte nur `myLiveGames` / `myOngoingAndRecentGames`; diese managerbezogene Liste ersetzt nicht den öffentlichen Fußball-Spielplan. Wiederhergestellt: `competitionGames` mit 16-Stunden-Fenster (innerhalb des Sorare-Maximums von 2 Tagen).
 - `Game:<uuid>` aus dem öffentlichen Feed wird über `node(id:)` abgefragt, nicht als `football.game(id:)`. Spielidentität wird mit Teams und Anstoßdatum verifiziert, niemals freie ESPN-Scores als Sorare-Scores ausgegeben.

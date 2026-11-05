@@ -6,9 +6,9 @@ const ui=fs.readFileSync(path.join(__dirname,'../features/matches/football-live-
 const {matchSorareGame,matchSorarePlayer,parseSorareFootballPhotos,parseSorareFootballScores}=require('../.test-build/lib/football-live-sorare');
 assert.match(route,/competitionGames\(fromDate: \$from, toDate: \$to, sport: FOOTBALL\)/,'public all-competition lookup restored');
 assert.match(route,/competition\(slug: \$slug\)/,'fallback public competition lookup');
-assert.match(route,/teams\(first: 80\)/,'discover Sorare team slugs');
+assert.match(route,/clubsReady \{ name slug \}/,'discover dynamic Sorare club slugs');
 assert.match(route,/homeTeam \{ name slug \} awayTeam \{ name slug \}/,'verified team slugs in public game search');
-assert.match(route,/clubs\(slugs: \$slugs\)/,'club lookup');
+assert.match(route,/club\(slug: \$slug\)/,'individual club lookup');
 assert.match(route,/games\(first: 30, startDate: \$start, endDate: \$end\)/,'bounded date-specific team lookup');
 assert.match(route,/activePlayers\(first: 70\)/,'independent portrait lookup');
 assert.match(route,/const photosFromClubs=photoRows\(rawPortraits\)/,'photos before official score match');
