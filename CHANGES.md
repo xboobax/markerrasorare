@@ -1,3 +1,13 @@
+## V4.3.0 – Europapokal & internationale Football Match Center
+
+- Fußball Gamecast unterstützt jetzt UEFA Champions League, Europa League und Conference League sowie die bisherigen vier nationalen Ligen.
+- Nationalteam-Filter mit Freundschaftsspielen, Nations League, WM-/EM-Qualifikationen und wichtigen Kontinentalturnieren.
+- Neue Wettbewerbsauswahl mit expliziten ESPN-IDs, begrenzten Abrufen, serverseitigem Cache, europäischen Datumskonventionen und deutscher Zeitzonen-Korrektur bei spät beginnenden Länderspielen.
+- Robuster internationaler Aufstellungs-Fallback bei vorhandenem ESPN-Kader ohne Live-Boxscore: niemals erfundene Sorare-Wertung.
+- Verifizierte eigene Fußballkarten aus dem aktiven Set in allen abgerufenen Spielerkadern hervorgehoben; keine fiktive Nationenzuordnung.
+- Keine Club-PP/Q80-Prognosen für Nationalteams; Button mit Begründung deaktiviert.
+- Sicherheitsprüfungen aller neuen Wettbewerbsfilter und Regressionen. Die NBA-V4.2.2-Datenvollständigkeitsprüfungen aus der vorherigen Entwicklungsbasis bleiben erhalten.
+
 ## V4.2.1 — Football Standard-Scoringmatrix und Datenvollständigkeit
 
 - Vereinfachte Fußball-Live-Score-Heuristik durch positionsabhängige veröffentlichte Sorare-Standardmatrix ersetzt.

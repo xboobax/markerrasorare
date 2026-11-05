@@ -19,6 +19,15 @@ const numeric=(x:unknown):number|null=>{
   }return null;
 };
 const count=(x:unknown)=>Math.max(0,numeric(x)??0);
+/** ESPN occasionally sends `--`, null or a formatted ratio in a numeric column.
+ * Reject these values instead of fabricating a zero Sorare score. */
+const strictStat=(x:unknown):number|null=>{
+  if(typeof x==='number')return Number.isSafeInteger(x)&&x>=0?x:null;
+  if(typeof x==='string'&&/^\d+$/.test(x.trim())){
+    const value=Number(x.trim());return Number.isSafeInteger(value)?value:null;
+  }
+  return null;
+};
 const validPhoto=(url:unknown):string|null=>typeof url==='string'&&/^https:\/\//.test(url)&&url.length<700?url:null;
 const extractTeam=(competitor:unknown)=>{
   const c=obj(competitor),team=obj(c.team);
@@ -74,18 +83,37 @@ export function espnStatLine(labels:unknown,values:unknown):LiveStats|null{
   const columns=arr(labels).map(v=>str(v).toUpperCase().trim());
   const fields=arr(values);
   if(!columns.length||!fields.length)return null;
-  const take=(labels:string[])=>{const i=columns.findIndex(key=>labels.includes(key));return i<0?0:count(fields[i]);};
-  const madeThrees=()=>{const direct=columns.findIndex(key=>statAliases.threes.includes(key));if(direct>=0)return count(fields[direct]);
+  const take=(aliases:string[]):number|null=>{
+    const i=columns.findIndex(key=>aliases.includes(key));
+    return i<0?null:strictStat(fields[i]);
+  };
+  const madeThrees=():number|null=>{
+    const direct=columns.findIndex(key=>statAliases.threes.includes(key));
+    if(direct>=0)return strictStat(fields[direct]);
     const split=columns.findIndex(key=>key==='3PT'||key==='3FG');
-    if(split<0)return 0;const value=str(fields[split]);const match=value.match(/^(\d+)\s*-/);return match?Number(match[1]):count(fields[split]);};
-  const complete=(Object.keys(statAliases) as Array<keyof typeof statAliases>)
-    .filter(key=>key!=='threes').every(key=>columns.some(label=>statAliases[key].includes(label)))
-    &&columns.some(label=>statAliases.threes.includes(label)||label==='3PT'||label==='3FG');
-  if(!complete)return null; // never treat missing scoring fields as zero
+    if(split<0)return null;
+    const value=str(fields[split]);
+    const match=value.match(/^(\d+)\s*-\s*(\d+)$/);
+    if(match){const made=strictStat(match[1]),attempts=strictStat(match[2]);
+      return made!==null&&attempts!==null&&made<=attempts?made:null;}
+    return strictStat(fields[split]);
+  };
+  const points=take(statAliases.points),rebounds=take(statAliases.rebounds),assists=take(statAliases.assists),
+    steals=take(statAliases.steals),blocks=take(statAliases.blocks),threes=madeThrees(),turnovers=take(statAliases.turnovers);
+  if([points,rebounds,assists,steals,blocks,threes,turnovers].some(x=>x===null))return null;
   const mi=columns.findIndex(l=>l==='MIN'||l==='MINUTES');
-  return {minutes:mi>=0?parseStatMinutes(fields[mi]):null,points:take(statAliases.points),rebounds:take(statAliases.rebounds),
-    assists:take(statAliases.assists),steals:take(statAliases.steals),blocks:take(statAliases.blocks),
-    threes:madeThrees(),turnovers:take(statAliases.turnovers)};
+  const minutes=mi>=0?parseStatMinutes(fields[mi]):null;
+  // The MIN column, when supplied, must also be valid. An absent MIN may be
+  // tolerated if action stats prove the player actually appeared.
+  if(mi>=0&&minutes===null)return null;
+  return {minutes,points:points!,rebounds:rebounds!,assists:assists!,steals:steals!,blocks:blocks!,threes:threes!,turnovers:turnovers!};
+}
+/** Highest actual individual game score counts per player in a Sorare NBA Game Week.
+ * This helper intentionally operates on *base scores* and does not mix card bonuses.
+ * Null means no reliable scored game, not zero. */
+export function sorareNbaGameweekBest(scores:ReadonlyArray<number|null>):number|null{
+  const actual=scores.filter((n):n is number=>typeof n==='number'&&Number.isFinite(n));
+  return actual.length?Math.max(...actual):null;
 }
 /** Build unique box score rows; never treat a DNP as a played, zero-score player. */
 export function parseEspnPlayers(raw:unknown,game:LiveGame):LivePlayer[]{
@@ -103,7 +131,7 @@ export function parseEspnPlayers(raw:unknown,game:LiveGame):LivePlayer[]{
         const stats=espnStatLine(labels,a.stats);
         const note=str(a.didNotPlayReason)||str(a.reason)||str(a.status);
         const didNotPlay=Boolean(a.didNotPlay)||/DNP|OUT|INACTIVE|DID NOT/i.test(note);
-        const played=!didNotPlay&&Boolean(stats)&&(stats!.minutes!==null?stats!.minutes>0:stats!.points+stats!.rebounds+stats!.assists+stats!.steals+stats!.blocks>0);
+        const played=!didNotPlay&&Boolean(stats)&&((stats!.minutes??0)>0||stats!.points+stats!.rebounds+stats!.assists+stats!.steals+stats!.blocks+stats!.threes+stats!.turnovers>0);
         ids.add(id);
         players.push({id,name,shortName:str(athlete.shortName)||name.split(' ').slice(-1)[0],headshot:validPhoto(obj(athlete.headshot).href),teamId,
           starter:a.starter===true||athlete.starter===true,played,stats:didNotPlay?null:stats,

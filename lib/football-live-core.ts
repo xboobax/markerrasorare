@@ -1,4 +1,6 @@
 import {calculateSorareFootballMatrix,type SorareScoringInputs,type SorareFootballPosition,type SorareOfficialMatrixOutput} from './sorare-football-scoring';
+import {footballCompetition,type FootballLeagueKey} from './football-competitions';
+export type {FootballLeagueKey} from './football-competitions';
 
 /**
  * MarkErras Football Live Center - best-effort ESPN normalization.
@@ -7,7 +9,6 @@ import {calculateSorareFootballMatrix,type SorareScoringInputs,type SorareFootba
  * partial Sorare estimate based on the available event/stat subset.
  */
 export type FootballLiveGameStatus='scheduled'|'live'|'final'|'delayed';
-export type FootballLeagueKey='eng.1'|'esp.1'|'ger.1'|'fra.1';
 export type FootballLiveGame={id:string;leagueKey:FootballLeagueKey;leagueName:string;date:string;home:{id:string;name:string;abbreviation:string;logo:string|null;score:number|null};away:{id:string;name:string;abbreviation:string;logo:string|null;score:number|null};status:FootballLiveGameStatus;statusText:string;period:number;clock:string;lastUpdated:string|null;venue:string|null};
 export type FootballLiveStats={minutes:number|null;goals:number;assists:number;shotsOnTarget:number;saves:number;clearances:number;tacklesWon:number;interceptions:number;chancesCreated:number;crossesCompleted:number;duelsWon:number;foulsWon:number;yellowCards:number;redCards:number;ownGoals:number;goalsConceded:number;penaltiesSaved:number;penaltiesMissed:number;sorareEvents?:SorareScoringInputs;reportedFields?:string[]};
 export type FootballScoreEstimate=SorareOfficialMatrixOutput & {cleanSheet:boolean|null;source:'INCOMPLETE_ESPN'|'UNVERIFIED_COMPLETE';};
@@ -24,9 +25,6 @@ const numeric=(x:unknown):number|null=>{
 };
 const count=(x:unknown)=>Math.max(0,numeric(x)??0);
 const validPhoto=(url:unknown):string|null=>typeof url==='string'&&/^https:\/\//.test(url)&&url.length<700?url:null;
-const leagueNameByKey:Record<FootballLeagueKey,string>={
-  'eng.1':'Premier League','esp.1':'LaLiga','ger.1':'Bundesliga','fra.1':'Ligue 1'
-};
 const extractTeam=(competitor:unknown)=>{
   const c=obj(competitor),team=obj(c.team);
   return {id:str(team.id),name:str(team.displayName)||str(team.name)||'Team unbekannt',abbreviation:str(team.abbreviation)||str(team.shortDisplayName)||str(team.name).slice(0,3).toUpperCase(),logo:validPhoto(team.logo)||validPhoto(arr(team.logos)[0]?.href),score:numeric(c.score)};
@@ -48,7 +46,7 @@ export function parseEspnFootballGame(event:unknown,updatedAt:string,leagueKey:F
   const date=str(e.date)||str(comp.date);
   if(!/^\d{4}-\d{2}-\d{2}T/.test(date)||!Number.isFinite(Date.parse(date)))return null;
   const status=comp.status??e.status;const ty=obj(obj(status).type);const venue=obj(arr(comp.venue?.fullName?[comp.venue]:arr(comp.venues))[0]);
-  return {id,leagueKey,leagueName:leagueNameByKey[leagueKey],date,home:extractTeam(home),away:extractTeam(away),status:footballStatusFromEspn({status}),
+  return {id,leagueKey,leagueName:footballCompetition(leagueKey).name,date,home:extractTeam(home),away:extractTeam(away),status:footballStatusFromEspn({status}),
     statusText:str(ty.shortDetail)||str(ty.detail)||str(ty.description)||'Termin',period:count(obj(status).period),clock:str(obj(status).displayClock),lastUpdated:updatedAt,venue:str(venue.fullName)||str(obj(comp.venue).fullName)||null};
 }
 export function parseEspnFootballScoreboard(payload:unknown,updatedAt:string,leagueKey:FootballLeagueKey):FootballLiveGame[]{
@@ -154,6 +152,32 @@ export function parseEspnFootballPlayers(raw:unknown,game:FootballLiveGame):Foot
       }
     }
   }
+  // ESPN international / cup summaries sometimes expose confirmed lineups in
+  // `rosters` while the detailed boxscore is empty until the match starts.
+  // Enrich with actual roster identities but NEVER fabricate minutes or scores.
+  for(const section of arr(obj(raw).rosters)){
+    const group=obj(section),teamId=str(obj(group.team).id);
+    if(teamId!==game.home.id&&teamId!==game.away.id)continue;
+    const rows=arr(group.roster??group.athletes??group.players);
+    for(const row of rows){
+      const entry=obj(row),athlete=obj(entry.athlete??entry),id=str(athlete.id);
+      const name=str(athlete.displayName)||str(athlete.fullName);
+      if(!id||!name)continue;
+      const starter=entry.starter===true||athlete.starter===true;
+      const note=str(entry.didNotPlayReason)||str(entry.status);
+      const existing=players.get(id);
+      if(existing){
+        players.set(id,{...existing,starter:existing.starter||starter,
+          headshot:existing.headshot||validPhoto(obj(athlete.headshot).href)||null,
+          position:existing.position||str(obj(athlete.position).abbreviation)||str(obj(entry.position).abbreviation)||null});
+      }else{
+        players.set(id,{id,name,shortName:str(athlete.shortName)||name.split(' ').slice(-1)[0],
+          headshot:validPhoto(obj(athlete.headshot).href)||null,teamId,starter,played:false,
+          position:str(obj(athlete.position).abbreviation)||str(obj(entry.position).abbreviation)||null,
+          stats:null,score:null,status:note||null});
+      }
+    }
+  }
   return Array.from(players.values()).sort((a,b)=>a.teamId.localeCompare(b.teamId)||Number(b.starter)-Number(a.starter)||posOrder(a.position)-posOrder(b.position)||a.name.localeCompare(b.name));
 }
 export function parseEspnFootballPlays(raw:unknown):FootballLivePlay[]{
@@ -174,7 +198,7 @@ export function parseEspnFootballSummary(raw:unknown,eventId:string,updatedAt:st
   if(!game||game.id!==eventId)throw new Error('ESPN-Spieldetails sind unvollständig oder gehören zu einem anderen Spiel.');
   const players=parseEspnFootballPlayers(raw,game);
   return {game,players,plays:parseEspnFootballPlays(raw),source:'ESPN Gamecast',updatedAt,
-    warning:players.length===0?'Noch keine auswertbaren Live-Fußballstatistiken verfügbar.':null};
+    warning:players.length===0?'Noch keine bestätigten Spielerkader oder Live-Statistiken verfügbar.':players.every(p=>p.stats===null)?'Kaderdaten vorhanden, aber noch kein auswertbarer Live-Boxscore.':null};
 }
-export const footballLeagueName=(key:FootballLeagueKey)=>leagueNameByKey[key];
-export const footballLeagueKeys=Object.keys(leagueNameByKey) as FootballLeagueKey[];
+export const footballLeagueName=(key:FootballLeagueKey)=>footballCompetition(key).name;
+export {footballLeagueKeys} from './football-competitions';

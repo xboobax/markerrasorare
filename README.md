@@ -1,3 +1,5 @@
+> **Neu V4.3.0:** Football Live Center unterstützt zusätzlich Champions League, Europa League, Conference League und Länderspiele weltweit (Freundschaftsspiele, Nations League, WM-/EM-Turniere und Qualifikationen). Effiziente Gruppen-/Liga-Filter, internationale Zeitzonen und verifizierte Set-Spieler. Siehe `UPDATE_V4_3_0_EUROPA_LAENDERSPIELE_DE.md`.
+
 > **Neu V4.1.0:** NBA Live Match Center mit ESPN-Gamecast-Adapter, Play-by-Play, Boxscore, vorläufigem Sorare-Basisscore, optionalen PP/Q80-Modellwerten auf Abruf und Berlin-Zeitzonenfilter. Siehe `UPDATE_V4_1_0_NBA_LIVE_CENTER_DE.md`.
 
 > **V4.0.4 Preview:** Lineup zeigt jetzt PP bei Einsatz und Q80 + Kartenbonus getrennt vom Risiko-PP; die Summe der einzelnen Spieler-Q80 ist als Σ Q80 gekennzeichnet. Originale Sorare-Kartenbilder für verifiziert eigene Karten, sofern von der Sorare-API geliefert; Gegnerlogos nur falls verfügbar. Die Prognosen bleiben unkalibriert, nicht automatisch SoProb-genau. Siehe `UPDATE_V4_0_4_PP_Q80_KARTENBILDER_DE.md`.
