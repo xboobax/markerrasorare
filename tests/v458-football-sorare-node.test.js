@@ -4,9 +4,9 @@ const {parseSorareFootballPhotos,parseSorareFootballScores,matchSorareGame,match
 const route=fs.readFileSync(path.join(__dirname,'../app/api/football-live/sorare-scores/route.ts'),'utf8');
 assert.match(route,/node\(id: \$id\)/,'global Node lookup');
 assert.match(route,/\.\.\. on Game/);
-assert.ok(!route.includes('competitionGames(fromDate: $from, toDate: $to, sport: FOOTBALL)'));
+assert.ok(route.includes('competitionGames(fromDate: $from, toDate: $to, sport: FOOTBALL)'), 'global public game discovery restored');
 assert.ok(!route.includes('graphQl(user.session.accessToken,scoreQuery'));
-assert.ok(route.includes("!match.id.includes(':')"),'never pass Game:uuid into legacy resolver');
+assert.ok(route.includes("!matched.id.includes(':')"),'never pass Game:uuid into legacy resolver');
 assert.match(route,/avatarPictureUrl fullPictureUrl pictureUrl/);
 const photo='https://assets.sorare.com/player.png';
 assert.equal(bestSorarePhoto({avatarPictureUrl:photo,pictureUrl:'https://fallback.example/x.png'}),photo);

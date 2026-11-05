@@ -1,3 +1,11 @@
+## V4.5.9 – Football Live: globale Sorare-Spiele + eigenständige Spielerporträts
+- Regression repariert: V4.5.8/8.1 nutzte nur `myLiveGames` / `myOngoingAndRecentGames`; diese managerbezogene Liste ersetzt nicht den öffentlichen Fußball-Spielplan. Wiederhergestellt: `competitionGames` mit 16-Stunden-Fenster (innerhalb des Sorare-Maximums von 2 Tagen).
+- `Game:<uuid>` aus dem öffentlichen Feed wird über `node(id:)` abgefragt, nicht als `football.game(id:)`. Spielidentität wird mit Teams und Anstoßdatum verifiziert, niemals freie ESPN-Scores als Sorare-Scores ausgegeben.
+- Sorare-Klub-`activePlayers` liefert Spielerporträts unabhängig vom Live-Score-Abgleich; nicht gefundene Bilder fallen auf ESPN bzw. Initialen zurück.
+- Die Sorare-Statuszeile zeigt unabhängig von der Score-Verfügbarkeit die Anzahl zugeordneter Spielerbilder. API-Diagnose `discovery`, `sourceWarnings`, `portraitCandidates` und `lookup` bei korrekten Ergebnissen.
+- Lokale Tests: `npm run test:football-live-v459`. Echte OAuth-/Sorare-Live-Daten müssen auf Vercel getestet werden; ein vollständiger Vercel-Build ist hier nicht bestätigt.
+- Keine SQL-Migration, keine Cron-Änderungen und keine Umstellung der Prognosemodelle.
+
 ## V4.5.4 – Football Source Audit
 - Fallback für benannte ESPN-Roster-Statistiken und explizite Missing-Werte.
 - Neuer anonymer, begrenzter Diagnostik-Endpunkt `/api/football-stats-diagnostics`.
