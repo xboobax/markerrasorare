@@ -14,6 +14,7 @@ import {v44SaveSnapshots,v44Pending,v44SaveOfficial,v44Rows,v44ReadModel,v44Prom
 import {v44Candidate} from './learning-v44-calibration';
 import {nbaLiveScoreboard,nbaLiveGame} from './nba-live-server';
 import {canonicalNbaTeam} from './nba-fixture-mapping';
+import {v453ChoosePage} from './learning-v453-reconcile';
 export const V44_SCOPES=['nba-0','nba-1','nba-2',...FOOTBALL_LEAGUES.flatMap(l=>[`football-${l}-0`,`football-${l}-1`])];
 export const validV44Scope=(s:string)=>V44_SCOPES.includes(s);
 export const v44Shard=(s:string)=>{let h=2166136261;for(const ch of s){h=Math.imul(h^ch.charCodeAt(0),16777619)>>>0;}return h%3;};
@@ -42,10 +43,11 @@ export async function v44Capture(scope:string,now=new Date()){
 }
 export async function v44Reconcile(sport:Sport,shard:number,now=new Date()){
   if(![0,1,2].includes(shard))throw Error('Ungültiger Ergebnis-Shard');
-  const pending=(await v44Pending(sport,60)).filter(p=>v44Shard(p.playerId)===shard);
+  const pending=(await v44Pending(sport,1000)).filter(p=>v44Shard(p.playerId)===shard);
   const byPlayer=new Map<string,typeof pending>();
   for(const row of pending)byPlayer.set(row.playerId,[...(byPlayer.get(row.playerId)??[]),row]);
-  const selected=[...byPlayer.entries()].slice(0,24);const official:AutomaticResult[]=[];
+  const selection=v453ChoosePage([...byPlayer.entries()],now,24);
+  const selected=selection.selected;const official:AutomaticResult[]=[];
   let errors=0,checked=0;
   for(let i=0;i<selected.length;i+=4){const group=selected.slice(i,i+4);
     const fields=group.map(([slug],j)=>`p${j}:anyPlayer(slug:${JSON.stringify(slug)}){allPlayerGameScores(first:30){nodes{score scoreStatus anyGame{date}}}}`);
@@ -55,9 +57,9 @@ export async function v44Reconcile(sport:Sport,shard:number,now=new Date()){
     }catch{errors+=group.length;}
   }
   const matched=await v44SaveOfficial(sport,official);
-  const message=`${sport} / Shard ${shard}: ${checked} Spieler geprüft, ${matched} offizielle FINAL-Scores, ${errors} Fehler.`;
+  const message=`${sport} / Shard ${shard}: ${checked} Spieler geprüft, ${matched} offizielle FINAL-Scores, ${errors} Fehler. ${selection.total} vorgemerkte Spieler im Shard, Seite ${selection.page+1}/${selection.pages}.`;
   await v44SaveJob({scope:`v44:results:${sport}-${shard}`,at:now.toISOString(),ok:errors===0,message,count:matched});
-  return {sport,shard,pending:pending.length,matched,checked,errors,message};
+  return {sport,shard,pending:pending.length,playersWaiting:selection.total,page:selection.page+1,pages:selection.pages,matched,checked,errors,message};
 }
 export async function v44Train(sport:Sport,now=new Date()){
   const rows=await v44Rows(sport,10000),active=await v44ReadModel(sport);

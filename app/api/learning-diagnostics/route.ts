@@ -45,6 +45,35 @@ export async function GET(){
       parameterReadCheck={nbaSnapshots:snapshots,nbaPerformances:performances,
         consistent:snapshots===Number(r.snapshots_nba)&&performances===Number(r.performances_nba)};
     }catch{parameterReadCheck={nbaSnapshots:null,nbaPerformances:null,consistent:null,error:'Parameter-Lesetest fehlgeschlagen'};}
+    // Read-only fixture-day diagnostics: official labels stay strictly Sorare FINAL.
+    // CURRENT_DATE here is Postgres' current date, matching v44Pending exactly.
+    let learningReadiness:object={available:false};
+    try{
+      const state=await sql.query(`SELECT sport,
+        COUNT(*)::integer AS total,
+        COUNT(*) FILTER (WHERE official_source='sorare' AND official_score IS NOT NULL)::integer AS confirmed,
+        COUNT(*) FILTER (WHERE official_score IS NULL AND fixture_day < CURRENT_DATE
+          AND fixture_day > CURRENT_DATE - INTERVAL '90 days')::integer AS ready_for_reconciliation,
+        COUNT(*) FILTER (WHERE official_score IS NULL AND fixture_day = CURRENT_DATE)::integer AS fixture_today,
+        COUNT(*) FILTER (WHERE official_score IS NULL AND fixture_day > CURRENT_DATE)::integer AS fixture_future,
+        COUNT(*) FILTER (WHERE official_score IS NULL AND fixture_day <= CURRENT_DATE - INTERVAL '90 days')::integer AS outside_90_days,
+        MIN(fixture_day)::text AS first_fixture_day,
+        MAX(fixture_day)::text AS last_fixture_day
+        FROM learning_v44_snapshots GROUP BY sport ORDER BY sport`);
+      const days=await sql.query(`SELECT sport,fixture_day::text AS fixture_day,
+        COUNT(*)::integer AS snapshots,
+        COUNT(*) FILTER (WHERE official_source='sorare' AND official_score IS NOT NULL)::integer AS confirmed
+        FROM learning_v44_snapshots GROUP BY sport,fixture_day ORDER BY fixture_day DESC,sport LIMIT 16`);
+      const today=await sql.query(`SELECT CURRENT_DATE::text AS today`);
+      learningReadiness={available:true,databaseToday:String(today[0]?.today??''),
+        bySport:state.map((x:any)=>({sport:String(x.sport),total:Number(x.total),confirmed:Number(x.confirmed),
+          readyForReconciliation:Number(x.ready_for_reconciliation),fixtureToday:Number(x.fixture_today),
+          fixtureFuture:Number(x.fixture_future),outside90Days:Number(x.outside_90_days),
+          firstFixtureDay:x.first_fixture_day?String(x.first_fixture_day):null,
+          lastFixtureDay:x.last_fixture_day?String(x.last_fixture_day):null})),
+        fixtureDays:days.map((x:any)=>({sport:String(x.sport),day:String(x.fixture_day),
+          snapshots:Number(x.snapshots),confirmed:Number(x.confirmed)}))};
+    }catch{learningReadiness={available:false,reason:'Read-only Datumsprüfung fehlgeschlagen'};}
     return Response.json({
       configured:true,
       generatedAt:new Date().toISOString(),
@@ -57,6 +86,7 @@ export async function GET(){
         loggedJobs:Number(r.jobs_total)},
       latestJobAt:r.latest_job_at?new Date(r.latest_job_at).toISOString():null,
       parameterReadCheck,
+      learningReadiness,
       note:'Nur aggregierte Bestände. Keine Passwörter, Prognosewerte oder Spielerdaten.'
     },{headers});
   }catch(e){

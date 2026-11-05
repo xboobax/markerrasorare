@@ -50,10 +50,10 @@ export async function v44Rows(sport:Sport,limit=3000):Promise<V44Row[]>{
 }
 export type V44Pending={key:string;sport:Sport;playerId:string;playerName:string;team:string;
   fixture:string;fixtureTipoff?:string;savedAt:string};
-export async function v44Pending(sport:Sport,limit=45):Promise<V44Pending[]>{
+export async function v44Pending(sport:Sport,limit=1000):Promise<V44Pending[]>{
   const rows=await readQuery(`SELECT key,sport,player_id,player_name,team,fixture_day,fixture_start,captured_at
     FROM learning_v44_snapshots WHERE sport=${v452SportSql(sport)} AND official_score IS NULL AND fixture_day<CURRENT_DATE
-    AND fixture_day>CURRENT_DATE-INTERVAL '90 days' ORDER BY fixture_day DESC LIMIT ${Math.max(1,Math.min(100,Math.floor(limit)))}`);
+    AND fixture_day>CURRENT_DATE-INTERVAL '90 days' ORDER BY fixture_day ASC,key ASC LIMIT ${Math.max(1,Math.min(1000,Math.floor(limit)))}`);
   return rows.map((r:any)=>({key:String(r.key),sport,playerId:String(r.player_id),playerName:String(r.player_name),team:String(r.team),
     fixture:`${dateDay(r.fixture_day)} fixture`,fixtureTipoff:r.fixture_start?new Date(r.fixture_start).toISOString():undefined,
     savedAt:new Date(r.captured_at).toISOString()}));
