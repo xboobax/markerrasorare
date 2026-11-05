@@ -291,3 +291,8 @@
 .live-roster-team .foot-official-score{margin-left:auto}
 @media(max-width:850px){.foot-tactical-panel{margin:8px}.foot-pitch{min-width:760px;height:440px}}
 @media(max-width:510px){.foot-marker{width:63px}.foot-marker .live-avatar{width:37px;height:37px}.foot-marker small{max-width:63px}.foot-pitch{height:430px}}
+
+/* V4.5.7: layer portraits ABOVE initials; never put both in separate grid cells. */
+.live-wrap .live-avatar{position:relative;display:block;isolation:isolate;overflow:hidden}
+.live-wrap .live-avatar-fallback{position:absolute;inset:0;display:grid;place-items:center;z-index:0;font-weight:750;font-size:15px;line-height:1}
+.live-wrap .live-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:1;display:block;background:transparent}

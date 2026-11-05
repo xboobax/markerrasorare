@@ -1,11 +1,12 @@
-/** Conservative, read-only matching of a Sorare game to a selected ESPN match.
- * No ESPN ID is ever passed as a Sorare game ID. */
+/** Conservative matching of an ESPN game to a Sorare game and its players.
+ * The Sorare API schema is published at https://api.sorare.com/graphql/schema */
 export type CandidateSorareGame={id:string;date:string;homeTeam:{name:string}|null;awayTeam:{name:string}|null};
 export type OfficialFootballPlayerScore={slug:string;name:string;score:number;scoreStatus:string};
+export type OfficialFootballPlayerPhoto={slug:string;name:string;url:string};
 const TEAM_ALIASES:Record<string,string>={
   manunited:'manchesterunited',manutd:'manchesterunited',manchesterutd:'manchesterunited',parissg:'parissaintgermain',psg:'parissaintgermain',
   bayernmunchen:'bayernmunich',bayernmunchen1899:'bayernmunich',bayern:'bayernmunich',
-  tsghoffenheim:'hoffenheim','1899hoffenheim':'hoffenheim',
+  tsghoffenheim:'hoffenheim','1899hoffenheim':'hoffenheim',tsg1899hoffenheim:'hoffenheim',
   bvb:'borussiadortmund',dortmund:'borussiadortmund',
   atletico:'atleticomadrid',atleticodemadrid:'atleticomadrid',
   barca:'barcelona',fcbarcelona:'barcelona',realmadricf:'realmadrid',
@@ -17,6 +18,7 @@ export const sorareNameKey=(name:string)=>{
     .replace(/\b(fc|cf|afc|sc|sv|club|football|the)\b/g,'').replace(/[^a-z0-9]/g,'');
   return TEAM_ALIASES[key]??key;
 };
+export const sorarePlayerKey=(name:string)=>name.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
 export function matchSorareGame(games:CandidateSorareGame[],target:{date:string;home:string;away:string}):CandidateSorareGame|null{
   const matched=games.filter(g=>{
     const a=sorareNameKey(g.awayTeam?.name??''),h=sorareNameKey(g.homeTeam?.name??'');
@@ -25,6 +27,24 @@ export function matchSorareGame(games:CandidateSorareGame[],target:{date:string;
     return Number.isFinite(delta)&&delta<=6*60*60*1000;
   });
   return matched.length===1?matched[0]:null;
+}
+const safePhoto=(url:unknown):url is string=>typeof url==='string'&&/^https:\/\//.test(url)&&url.length<1000;
+/** For player portraits, prefer Sorare's per-game player roster over ESPN's
+ * missing / 404 CDN image. Both must still be matched to the verified game. */
+export function parseSorareFootballPhotos(players:unknown,scores:unknown):OfficialFootballPlayerPhoto[]{
+  const entries=[...(Array.isArray(players)?players:[]),...(Array.isArray(scores)?scores.map(s=>s?.footballPlayer):[])];
+  const rows:OfficialFootballPlayerPhoto[]=[];const seen=new Set<string>();
+  for(const entry of entries){
+    if(!entry||typeof entry!=='object')continue;
+    const p=entry as Record<string,unknown>;
+    if(typeof p.slug!=='string'||typeof p.displayName!=='string'||!safePhoto(p.pictureUrl)||seen.has(p.slug))continue;
+    seen.add(p.slug);rows.push({slug:p.slug,name:p.displayName,url:p.pictureUrl});
+  }
+  // Fail closed for duplicate full names rather than associating a portrait
+  // with an athlete from the opposite team.
+  const counts=new Map<string,number>();
+  for(const row of rows){const k=sorarePlayerKey(row.name);counts.set(k,(counts.get(k)??0)+1);}
+  return rows.filter(row=>counts.get(sorarePlayerKey(row.name))===1);
 }
 export function parseSorareFootballScores(raw:unknown):OfficialFootballPlayerScore[]{
   if(!Array.isArray(raw))return [];
@@ -40,6 +60,27 @@ export function parseSorareFootballScores(raw:unknown):OfficialFootballPlayerSco
     rows.push({slug,name,score,scoreStatus});
   }
   const counts=new Map<string,number>();
-  for(const row of rows){const key=row.name.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');counts.set(key,(counts.get(key)||0)+1);}
-  return rows.filter(row=>{const key=row.name.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');return counts.get(key)===1;});
+  for(const row of rows){const key=sorarePlayerKey(row.name);counts.set(key,(counts.get(key)||0)+1);}
+  return rows.filter(row=>counts.get(sorarePlayerKey(row.name))===1);
+}
+
+/** Resolve a full name or a uniquely matching initial + surname, but never
+ * attach data if two ESPN athletes or two Sorare entries could match. */
+export function matchSorarePlayer<T extends {name:string}>(name:string,rows:readonly T[],rosterNames:readonly string[]):T|null{
+  const key=sorarePlayerKey(name);
+  if(!key||rosterNames.filter(n=>sorarePlayerKey(n)===key).length!==1)return null;
+  const exact=rows.filter(r=>sorarePlayerKey(r.name)===key);
+  if(exact.length===1)return exact[0];
+  if(exact.length>1)return null;
+  const parts=(raw:string)=>raw.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  const query=parts(name);
+  if(query.length<2)return null;
+  const matches=(raw:string)=>{
+    const other=parts(raw);
+    return other.length>=2&&query[0][0]===other[0][0]&&query[query.length-1]===other[other.length-1];
+  };
+  // Require a single matching roster identity AND a single Sorare identity.
+  if(rosterNames.filter(matches).length!==1)return null;
+  const possible=rows.filter(r=>matches(r.name));
+  return possible.length===1?possible[0]:null;
 }

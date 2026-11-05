@@ -1,43 +1,80 @@
 import {NextRequest,NextResponse} from 'next/server';
 import {isFootballLeagueKey} from '@/lib/football-competitions';
 import {footballLiveGame} from '@/lib/football-live-server';
-import {matchSorareGame,parseSorareFootballScores,type CandidateSorareGame} from '@/lib/football-live-sorare';
+import {matchSorareGame,parseSorareFootballScores,parseSorareFootballPhotos,type CandidateSorareGame} from '@/lib/football-live-sorare';
 import {graphQl,sessionForRequest,setSessionCookie} from '@/lib/sorare-oauth-session';
+
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 export const maxDuration=30;
+const noStore={'Cache-Control':'private, no-store'};
+type CompetitionGameGroup={games?:CandidateSorareGame[]};
+const discoveryQuery=`query MarkErrasFootballMatchCandidates($from: ISO8601DateTime!, $to: ISO8601DateTime!) {
+  competitionGames(fromDate: $from, toDate: $to, sport: FOOTBALL) {
+    games { id date homeTeam { name } awayTeam { name } }
+  }
+}`;
+const recentQuery=`query MarkerrasRecentFootballGames {
+  football { myOngoingAndRecentGames { id date homeTeam { name } awayTeam { name } } }
+}`;
+const scoreQuery=`query MarkerrasVerifiedFootballScores($id: ID!) {
+  football {
+    game(id: $id) {
+      id date homeTeam { name } awayTeam { name }
+      players { slug displayName pictureUrl(derivative: "avatar") }
+      playerGameScores {
+        score scoreStatus
+        ... on PlayerGameScore { footballPlayer { slug displayName pictureUrl(derivative: "avatar") } }
+      }
+    }
+  }
+}`;
+const response=(data:Record<string,unknown>)=>NextResponse.json({source:'Sorare',scores:[],photos:[],...data},{headers:noStore});
+
 export async function GET(req:NextRequest){
   const event=req.nextUrl.searchParams.get('event')??'',league=req.nextUrl.searchParams.get('league')??'';
-  if(!/^\d{6,14}$/.test(event)||!isFootballLeagueKey(league))return NextResponse.json({error:'Ungültige Matchdaten.'},{status:400});
+  if(!/^\d{6,14}$/.test(event)||!isFootballLeagueKey(league))return NextResponse.json({error:'Ungültige Matchdaten.'},{status:400,headers:noStore});
   const user=await sessionForRequest(req);
-  if(!user)return NextResponse.json({source:'Sorare',status:'not-connected',scores:[],message:'Sorare-Verbindung erforderlich.'},{headers:{'Cache-Control':'no-store'}});
+  if(!user)return response({status:'not-connected',message:'Sorare-Verbindung erforderlich.'});
+  const done=(data:Record<string,unknown>)=>{const res=response(data);if(user.changed)setSessionCookie(res,user.session);return res;};
   try{
-    // The ESPN game is fetched on the server, so clients cannot impersonate a
-    // match by passing club names and receiving another game\'s Sorare scores.
+    // Never trust client-provided team names or try to reuse ESPN IDs as Sorare IDs.
     const espn=await footballLiveGame(event,league);
-    const from=new Date(Date.parse(espn.game.date)-12*3600_000).toISOString();
-    const to=new Date(Date.parse(espn.game.date)+12*3600_000).toISOString();
-    // A bounded classic fixture returns games across all clubs, not only the
-    // user's cards. myOngoingAndRecentGames covers occasional fixture gaps.
-    const meta=await graphQl(user.session.accessToken,`query MarkerrasOfficialLiveGames($from: ISO8601DateTime!, $to: ISO8601DateTime!) {
-      so5Fixture(sport: FOOTBALL) { games(fromDate: $from, toDate: $to) { id date homeTeam { name } awayTeam { name } } }
-      football { myOngoingAndRecentGames { id date homeTeam { name } awayTeam { name } } }
-    }`,{from,to});
-    const football=meta.football as {myOngoingAndRecentGames?:CandidateSorareGame[]}|undefined;
-    const fixture=meta.so5Fixture as {games?:CandidateSorareGame[]}|null;
-    const candidates=[...(fixture?.games??[]),...(football?.myOngoingAndRecentGames??[])];
-    const unique=Array.from(new Map(candidates.map(g=>[g.id,g])).values());
-    const match=matchSorareGame(unique,{date:espn.game.date,home:espn.game.home.name,away:espn.game.away.name});
+    const when=Date.parse(espn.game.date);
+    if(!Number.isFinite(when))return done({status:'error',message:'Ungültige ESPN-Anstoßzeit.'});
+    const from=new Date(when-8*3600_000).toISOString();
+    const to=new Date(when+8*3600_000).toISOString();
+    // Query.competitionGames is the official current schema field. The old
+    // Query.so5Fixture was removed by Sorare and must not be queried.
+    let candidates:CandidateSorareGame[]=[];
+    let discoveryError:string|null=null;
+    try{
+      const discovery=await graphQl(user.session.accessToken,discoveryQuery,{from,to});
+      candidates=((discovery.competitionGames as CompetitionGameGroup[]|undefined)??[]).flatMap(g=>g?.games??[]);
+    }catch(e){discoveryError=e instanceof Error?e.message:'Sorare-Spielsuche fehlgeschlagen.';}
+    // A missing competition feed should not prevent matching the manager's
+    // games; this fallback uses a *separate* valid query, never one bad field.
+    const target={date:espn.game.date,home:espn.game.home.name,away:espn.game.away.name};
+    let unique=Array.from(new Map(candidates.filter(c=>c&&c.id).map(g=>[g.id,g])).values());
+    let match=matchSorareGame(unique,target);
+    // If the global competition feed omitted this game, check the manager's
+    // own recent games as a second, narrow discovery source.
     if(!match){
-      const res=NextResponse.json({source:'Sorare',status:'unmatched',scores:[],message:'Kein eindeutig passendes Sorare-Spiel im aktuellen Classic-Spieltag gefunden.'},{headers:{'Cache-Control':'no-store'}});
-      if(user.changed)setSessionCookie(res,user.session);return res;
+      try{
+        const recent=await graphQl(user.session.accessToken,recentQuery,{});
+        const more=((recent.football as {myOngoingAndRecentGames?:CandidateSorareGame[]}|undefined)?.myOngoingAndRecentGames??[]);
+        unique=Array.from(new Map([...unique,...more].filter(c=>c&&c.id).map(g=>[g.id,g])).values());
+        match=matchSorareGame(unique,target);
+      }catch(e){if(!discoveryError)discoveryError=e instanceof Error?e.message:'Sorare-Spiele nicht abrufbar.';}
     }
-    // The nested scores field is only permitted on a single Game, not a list.
-    const data=await graphQl(user.session.accessToken,`query MarkerrasOfficialFootballScores($id: ID!) { football { game(id: $id) { id date homeTeam { name } awayTeam { name } playerGameScores { score scoreStatus ... on PlayerGameScore { footballPlayer { slug displayName } } } } } }`,{id:match.id});
-    const scoreGame=(data.football as {game?:{id:string;date:string;homeTeam:{name:string};awayTeam:{name:string};playerGameScores:unknown}}|undefined)?.game;
-    if(!scoreGame||!matchSorareGame([scoreGame],{date:espn.game.date,home:espn.game.home.name,away:espn.game.away.name}))throw new Error('Sorare-Spieldaten konnten nicht eindeutig bestätigt werden.');
+    if(!match)return done({status:discoveryError&&unique.length===0?'error':'unmatched',message:discoveryError&&unique.length===0?`Sorare-Spielsuche: ${discoveryError}`:'Kein eindeutig passendes Sorare-Spiel gefunden. Keine geschätzten Live-Scores.'});
+    // Nested score and picture arrays are read from a SINGLE verified Sorare game.
+    const data=await graphQl(user.session.accessToken,scoreQuery,{id:match.id});
+    const scoreGame=(data.football as {game?:{id:string;date:string;homeTeam:{name:string};awayTeam:{name:string};playerGameScores:unknown;players:unknown}}|undefined)?.game;
+    if(!scoreGame||scoreGame.id!==match.id||!matchSorareGame([scoreGame],target))
+      return done({status:'error',message:'Sorare-Spieldaten konnten nicht eindeutig bestätigt werden.'});
     const scores=parseSorareFootballScores(scoreGame.playerGameScores);
-    const res=NextResponse.json({source:'Sorare',status:'matched',scores,updatedAt:new Date().toISOString(),message:scores.length?'Offizielle Sorare-Spielerwerte; Status kann sich während des Spiels ändern.':'Sorare hat noch keine Spielerwerte bereitgestellt.'},{headers:{'Cache-Control':'no-store'}});
-    if(user.changed)setSessionCookie(res,user.session);return res;
-  }catch(e){return NextResponse.json({source:'Sorare',status:'error',scores:[],message:e instanceof Error?e.message:'Sorare-Live-Scores nicht erreichbar.'},{headers:{'Cache-Control':'no-store'}});}
+    const photos=parseSorareFootballPhotos(scoreGame.players,scoreGame.playerGameScores);
+    return done({status:'matched',scores,photos,updatedAt:new Date().toISOString(),message:scores.length?`Offizielle Sorare-Werte für ${scores.length} Spieler geladen.`:`Spiel zugeordnet; Sorare meldet noch keine Spielerwerte. ${photos.length} Spielerfotos verfügbar.`});
+  }catch(e){return done({status:'error',message:e instanceof Error?e.message:'Sorare-Live-Scores nicht erreichbar.'});}
 }
