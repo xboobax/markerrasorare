@@ -29,6 +29,12 @@ export function matchSorareGame(games:CandidateSorareGame[],target:{date:string;
   return matched.length===1?matched[0]:null;
 }
 const safePhoto=(url:unknown):url is string=>typeof url==='string'&&/^https:\/\//.test(url)&&url.length<1000;
+export const bestSorarePhoto=(data:Record<string,unknown>):string|null=>{
+  for(const source of [data.avatarPictureUrl,data.fullPictureUrl,data.pictureUrl]){
+    if(safePhoto(source))return source;
+  }
+  return null;
+};
 /** For player portraits, prefer Sorare's per-game player roster over ESPN's
  * missing / 404 CDN image. Both must still be matched to the verified game. */
 export function parseSorareFootballPhotos(players:unknown,scores:unknown):OfficialFootballPlayerPhoto[]{
@@ -37,8 +43,9 @@ export function parseSorareFootballPhotos(players:unknown,scores:unknown):Offici
   for(const entry of entries){
     if(!entry||typeof entry!=='object')continue;
     const p=entry as Record<string,unknown>;
-    if(typeof p.slug!=='string'||typeof p.displayName!=='string'||!safePhoto(p.pictureUrl)||seen.has(p.slug))continue;
-    seen.add(p.slug);rows.push({slug:p.slug,name:p.displayName,url:p.pictureUrl});
+    const url=bestSorarePhoto(p);
+    if(typeof p.slug!=='string'||typeof p.displayName!=='string'||!url||seen.has(p.slug))continue;
+    seen.add(p.slug);rows.push({slug:p.slug,name:p.displayName,url});
   }
   // Fail closed for duplicate full names rather than associating a portrait
   // with an athlete from the opposite team.

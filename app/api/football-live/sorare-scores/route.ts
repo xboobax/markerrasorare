@@ -8,27 +8,33 @@ export const runtime='nodejs';
 export const dynamic='force-dynamic';
 export const maxDuration=30;
 const noStore={'Cache-Control':'private, no-store'};
-type CompetitionGameGroup={games?:CandidateSorareGame[]};
-const discoveryQuery=`query MarkErrasFootballMatchCandidates($from: ISO8601DateTime!, $to: ISO8601DateTime!) {
-  competitionGames(fromDate: $from, toDate: $to, sport: FOOTBALL) {
-    games { id date homeTeam { name } awayTeam { name } }
-  }
-}`;
 const recentQuery=`query MarkerrasRecentFootballGames {
-  football { myOngoingAndRecentGames { id date homeTeam { name } awayTeam { name } } }
-}`;
-const scoreQuery=`query MarkerrasVerifiedFootballScores($id: ID!) {
   football {
-    game(id: $id) {
-      id date homeTeam { name } awayTeam { name }
-      players { slug displayName pictureUrl(derivative: "avatar") }
-      playerGameScores {
-        score scoreStatus
-        ... on PlayerGameScore { footballPlayer { slug displayName pictureUrl(derivative: "avatar") } }
-      }
-    }
+    myOngoingAndRecentGames { id date homeTeam { name } awayTeam { name } }
+    myLiveGames { id date homeTeam { name } awayTeam { name } }
   }
 }`;
+// Game.id is a GLOBAL Node ID, e.g. "Game:...". Never pass it to
+// football.game(id:) which expects an internal legacy identifier and fails.
+const playerFields='slug displayName avatarPictureUrl fullPictureUrl pictureUrl';
+const scoreFields=`id date homeTeam { name } awayTeam { name }
+    players { ${playerFields} }
+    playerGameScores {
+      score scoreStatus
+      ... on PlayerGameScore { footballPlayer { ${playerFields} } }
+    }`;
+const nodeScoreQuery=`query MarkErrasFootballNodeScores($id: ID!) {
+  node(id: $id) {
+    ... on Game { ${scoreFields} }
+  }
+}`;
+// A second form is used ONLY when Sorare returned a raw UUID, never a
+// namespaced "Game:" ID. The match is re-verified before data is released.
+const legacyScoreQuery=`query MarkErrasFootballLegacyScores($id: ID!) {
+  football { game(id: $id) { ${scoreFields} } }
+}`;
+type SorareScoreGame=CandidateSorareGame & {players:unknown;playerGameScores:unknown};
+export const sorareLiveQueries={recentQuery,nodeScoreQuery,legacyScoreQuery};
 const response=(data:Record<string,unknown>)=>NextResponse.json({source:'Sorare',scores:[],photos:[],...data},{headers:noStore});
 
 export async function GET(req:NextRequest){
@@ -42,39 +48,42 @@ export async function GET(req:NextRequest){
     const espn=await footballLiveGame(event,league);
     const when=Date.parse(espn.game.date);
     if(!Number.isFinite(when))return done({status:'error',message:'Ungültige ESPN-Anstoßzeit.'});
-    const from=new Date(when-8*3600_000).toISOString();
-    const to=new Date(when+8*3600_000).toISOString();
-    // Query.competitionGames is the official current schema field. The old
-    // Query.so5Fixture was removed by Sorare and must not be queried.
-    let candidates:CandidateSorareGame[]=[];
-    let discoveryError:string|null=null;
-    try{
-      const discovery=await graphQl(user.session.accessToken,discoveryQuery,{from,to});
-      candidates=((discovery.competitionGames as CompetitionGameGroup[]|undefined)??[]).flatMap(g=>g?.games??[]);
-    }catch(e){discoveryError=e instanceof Error?e.message:'Sorare-Spielsuche fehlgeschlagen.';}
-    // A missing competition feed should not prevent matching the manager's
-    // games; this fallback uses a *separate* valid query, never one bad field.
     const target={date:espn.game.date,home:espn.game.home.name,away:espn.game.away.name};
-    let unique=Array.from(new Map(candidates.filter(c=>c&&c.id).map(g=>[g.id,g])).values());
-    let match=matchSorareGame(unique,target);
-    // If the global competition feed omitted this game, check the manager's
-    // own recent games as a second, narrow discovery source.
-    if(!match){
-      try{
-        const recent=await graphQl(user.session.accessToken,recentQuery,{});
-        const more=((recent.football as {myOngoingAndRecentGames?:CandidateSorareGame[]}|undefined)?.myOngoingAndRecentGames??[]);
-        unique=Array.from(new Map([...unique,...more].filter(c=>c&&c.id).map(g=>[g.id,g])).values());
-        match=matchSorareGame(unique,target);
-      }catch(e){if(!discoveryError)discoveryError=e instanceof Error?e.message:'Sorare-Spiele nicht abrufbar.';}
+    // Discover only through schema-confirmed football root fields.
+    // Query.competitionGames(sport:...) never existed in this schema.
+    let candidates:CandidateSorareGame[]=[];
+    try{
+      const discovery=await graphQl(user.session.accessToken,recentQuery,{});
+      const f=discovery.football as {myOngoingAndRecentGames?:CandidateSorareGame[];myLiveGames?:CandidateSorareGame[]}|undefined;
+      candidates=[...(f?.myOngoingAndRecentGames??[]),...(f?.myLiveGames??[])];
+    }catch(e){return done({status:'error',step:'game-discovery',message:`Sorare-Spielsuche: ${e instanceof Error?e.message:'Quelle nicht erreichbar.'}`});}
+    const unique=Array.from(new Map(candidates.filter(c=>c&&typeof c.id==='string').map(g=>[g.id,g])).values());
+    const match=matchSorareGame(unique,target);
+    if(!match)return done({status:'unmatched',step:'game-discovery',candidates:unique.length,message:`Kein eindeutig passendes Sorare-Spiel (${unique.length} Kandidaten). Keine geschätzten Scores.`});
+    // Global Node lookup is the official schema-consistent resolver for
+    // "Game:UUID" IDs. The former football.game(id: "Game:UUID") fails.
+    let scoreGame:SorareScoreGame|null=null;
+    let resolvedBy='node';
+    try{
+      const data=await graphQl(user.session.accessToken,nodeScoreQuery,{id:match.id});
+      const node=data.node as SorareScoreGame|null|undefined;
+      if(node?.id===match.id)scoreGame=node;
+    }catch(e){
+      return done({status:'error',step:'global-node',message:`Sorare-Node-Abfrage: ${e instanceof Error?e.message:'nicht erreichbar'}`});
     }
-    if(!match)return done({status:discoveryError&&unique.length===0?'error':'unmatched',message:discoveryError&&unique.length===0?`Sorare-Spielsuche: ${discoveryError}`:'Kein eindeutig passendes Sorare-Spiel gefunden. Keine geschätzten Live-Scores.'});
-    // Nested score and picture arrays are read from a SINGLE verified Sorare game.
-    const data=await graphQl(user.session.accessToken,scoreQuery,{id:match.id});
-    const scoreGame=(data.football as {game?:{id:string;date:string;homeTeam:{name:string};awayTeam:{name:string};playerGameScores:unknown;players:unknown}}|undefined)?.game;
-    if(!scoreGame||scoreGame.id!==match.id||!matchSorareGame([scoreGame],target))
-      return done({status:'error',message:'Sorare-Spieldaten konnten nicht eindeutig bestätigt werden.'});
+    // Only plain IDs can be passed to the non-null legacy resolver. Never
+    // retry globally namespaced IDs with football.game(), as before.
+    if(!scoreGame&&!match.id.includes(':')){
+      try{
+        const fallback=await graphQl(user.session.accessToken,legacyScoreQuery,{id:match.id});
+        const legacy=(fallback.football as {game?:SorareScoreGame}|undefined)?.game;
+        if(legacy?.id===match.id){scoreGame=legacy;resolvedBy='legacy';}
+      }catch(e){return done({status:'error',step:'legacy-game',message:e instanceof Error?e.message:'Spiel nicht abrufbar'});}
+    }
+    if(!scoreGame||!matchSorareGame([scoreGame],target))
+      return done({status:'error',step:'game-identity',message:'Sorare-Node konnte nicht verifiziert werden. Keine fremden Scores zugeordnet.'});
     const scores=parseSorareFootballScores(scoreGame.playerGameScores);
     const photos=parseSorareFootballPhotos(scoreGame.players,scoreGame.playerGameScores);
-    return done({status:'matched',scores,photos,updatedAt:new Date().toISOString(),message:scores.length?`Offizielle Sorare-Werte für ${scores.length} Spieler geladen.`:`Spiel zugeordnet; Sorare meldet noch keine Spielerwerte. ${photos.length} Spielerfotos verfügbar.`});
+    return done({status:'matched',scores,photos,lookup:resolvedBy,playerCount:Array.isArray(scoreGame.players)?scoreGame.players.length:0,updatedAt:new Date().toISOString(),message:`Sorare-Spiel bestätigt · ${scores.length} Spieler-Scores · ${photos.length} Spielerporträts über Sorare.`});
   }catch(e){return done({status:'error',message:e instanceof Error?e.message:'Sorare-Live-Scores nicht erreichbar.'});}
 }
