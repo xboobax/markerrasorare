@@ -31,6 +31,20 @@ export async function GET(){
       (SELECT count(*)::integer FROM learning_v44_jobs) AS jobs_total,
       (SELECT max(at) FROM learning_v44_jobs) AS latest_job_at`);
     const r:any=rows[0];
+    // Compare both SQL read paths in one request, without exposing credentials or player records.
+    // An exception here must NOT prevent returning the baseline database counts.
+    let parameterReadCheck:{nbaSnapshots:number|null;nbaPerformances:number|null;consistent:boolean|null;error?:string}={
+      nbaSnapshots:null,nbaPerformances:null,consistent:null};
+    try{
+      const [withParameter,perfParameter]=await Promise.all([
+        sql.query('SELECT count(*)::integer AS n FROM learning_v44_snapshots WHERE sport=$1',['nba'],{fetchOptions:{cache:'no-store'}}),
+        sql.query('SELECT count(*)::integer AS n FROM learning_v45_player_performances WHERE sport=$1',['nba'],{fetchOptions:{cache:'no-store'}})
+      ]);
+      const snapshots=Number(withParameter[0]?.n);
+      const performances=Number(perfParameter[0]?.n);
+      parameterReadCheck={nbaSnapshots:snapshots,nbaPerformances:performances,
+        consistent:snapshots===Number(r.snapshots_nba)&&performances===Number(r.performances_nba)};
+    }catch{parameterReadCheck={nbaSnapshots:null,nbaPerformances:null,consistent:null,error:'Parameter-Lesetest fehlgeschlagen'};}
     return Response.json({
       configured:true,
       generatedAt:new Date().toISOString(),
@@ -42,6 +56,7 @@ export async function GET(){
         nbaPerformances:Number(r.performances_nba),footballPerformances:Number(r.performances_football),
         loggedJobs:Number(r.jobs_total)},
       latestJobAt:r.latest_job_at?new Date(r.latest_job_at).toISOString():null,
+      parameterReadCheck,
       note:'Nur aggregierte Bestände. Keine Passwörter, Prognosewerte oder Spielerdaten.'
     },{headers});
   }catch(e){

@@ -1,11 +1,13 @@
 /** Server-only, additive V4.5 individual player-performance archive. */
 import {neon} from '@neondatabase/serverless';
+import {v452SportSql} from './learning-sport-sql';
 import type {Sport} from './model';
 import type {V45Performance,V45PerformanceSummary} from './learning-v45-performance';
 import {v45Validated} from './learning-v45-performance';
 import {v44DbConfigured} from './learning-v44-db';
 const sql=()=>{if(!v44DbConfigured())throw new Error('DATABASE_URL ist nicht eingerichtet.');return neon(process.env.DATABASE_URL!);};
 const query=async(text:string,params:unknown[]=[])=>sql().query(text,params as any[]);
+const readQuery=async(text:string)=>sql().query(text,[],{fetchOptions:{cache:'no-store'}});
 
 /** Single bounded bulk UPSERT. No one-query-per-player load or per-card data. */
 export async function v45SavePerformances(sport:Sport,raw:V45Performance[]):Promise<number>{
@@ -37,7 +39,7 @@ export type V45RecentPerformance={player:string;team:string;competition:string;f
   started:boolean|null;stats:Record<string,number>;reportedFields:string[]};
 export async function v45PerformanceReport(sport:Sport):Promise<{summary:V45PerformanceSummary;recent:V45RecentPerformance[]}>{
   const [totals,recents]=await Promise.all([
-    query(`SELECT count(*) AS total,count(DISTINCT competition||':'||game_id) AS games,
+    readQuery(`SELECT count(*) AS total,count(DISTINCT competition||':'||game_id) AS games,
       count(DISTINCT player_id) AS players,max(fixture_start) AS last_game,
       count(*) FILTER (WHERE minutes IS NOT NULL) AS with_minutes,
       count(*) FILTER (WHERE started IS NOT NULL) AS with_lineup,
@@ -45,9 +47,9 @@ export async function v45PerformanceReport(sport:Sport):Promise<{summary:V45Perf
       count(*) FILTER (WHERE stats ? 'duelsWon' OR stats ? 'duelsLost') AS duel_samples,
       count(*) FILTER (WHERE stats ? 'threes' AND stats ? 'threeAttempts') AS three_samples,
       avg((stats->>'threes')::numeric) FILTER (WHERE stats ? 'threes') AS avg_three_made
-      FROM learning_v45_player_performances WHERE sport=$1`,[sport]),
-    query(`SELECT player_name,team,competition,fixture_start,minutes,started,stats,reported_fields
-      FROM learning_v45_player_performances WHERE sport=$1 ORDER BY fixture_start DESC,player_name LIMIT 12`,[sport])
+      FROM learning_v45_player_performances WHERE sport=${v452SportSql(sport)}`),
+    readQuery(`SELECT player_name,team,competition,fixture_start,minutes,started,stats,reported_fields
+      FROM learning_v45_player_performances WHERE sport=${v452SportSql(sport)} ORDER BY fixture_start DESC,player_name LIMIT 12`)
   ]);
   const r:any=totals[0];
   const summary:V45PerformanceSummary={sport,total:Number(r.total),games:Number(r.games),players:Number(r.players),

@@ -1,5 +1,6 @@
 /** Neon PostgreSQL persistence, server-only. No OAuth cookies or personal cards. */
 import {neon} from '@neondatabase/serverless';
+import {v452SportSql,v452JobLikeSql} from './learning-sport-sql';
 import type {Sport} from './model';
 import type {V44Row,V44Calibration,V44Candidate} from './learning-v44-calibration';
 import type {TrackedPrediction} from './tracking';
@@ -7,12 +8,14 @@ import type {AutomaticResult} from './tracking-auto';
 export const v44DbConfigured=()=>Boolean(process.env.DATABASE_URL && /^postgres(ql)?:\/\//.test(process.env.DATABASE_URL));
 const db=()=>{if(!v44DbConfigured())throw new Error('DATABASE_URL für Neon PostgreSQL ist nicht eingerichtet.');return neon(process.env.DATABASE_URL!);};
 const sqlQuery=async (statement:string,params:unknown[]=[])=>await db().query(statement,params as any[]);
+/** Read summaries are never allowed to use an outdated HTTP fetch cache. */
+const readQuery=async(statement:string)=>await db().query(statement,[],{fetchOptions:{cache:'no-store'}});
 const dateDay=(v:unknown)=>v instanceof Date?v.toISOString().slice(0,10):String(v).slice(0,10);
 export type V44Job={scope:string;at:string;ok:boolean;message:string;count?:number};
 export async function v44SaveJob(job:V44Job){await sqlQuery(`INSERT INTO learning_v44_jobs(scope,at,ok,message,count) VALUES($1,$2,$3,$4,$5)
  ON CONFLICT(scope) DO UPDATE SET at=EXCLUDED.at,ok=EXCLUDED.ok,message=EXCLUDED.message,count=EXCLUDED.count`,
  [job.scope,job.at,job.ok,job.message,job.count??null]);}
-export async function v44ReadJobs(sport:Sport){const rows=await sqlQuery('SELECT scope,at,ok,message,count FROM learning_v44_jobs WHERE scope LIKE $1 ORDER BY at DESC LIMIT 20',[`%${sport}%`]);
+export async function v44ReadJobs(sport:Sport){const rows=await readQuery(`SELECT scope,at,ok,message,count FROM learning_v44_jobs WHERE scope LIKE ${v452JobLikeSql(sport)} ORDER BY at DESC LIMIT 20`);
   return rows.map((x:any)=>({scope:String(x.scope),at:new Date(x.at).toISOString(),ok:Boolean(x.ok),message:String(x.message),count:x.count===null?undefined:Number(x.count)})) as V44Job[];}
 /** Freeze immutable PP/Q80 once per unique player+fixture key. No retrospective rewrite. */
 export async function v44SaveSnapshots(sport:Sport,snapshots:TrackedPrediction[]):Promise<number>{
@@ -33,9 +36,9 @@ export async function v44SaveSnapshots(sport:Sport,snapshots:TrackedPrediction[]
 }
 export async function v44Rows(sport:Sport,limit=3000):Promise<V44Row[]>{
   const max=Math.max(1,Math.min(10000,Math.floor(limit)));
-  const rows=await sqlQuery(`SELECT key,sport,player_id,fixture_day,captured_at,fixture_start,pp,q80,official_score,
+  const rows=await readQuery(`SELECT key,sport,player_id,fixture_day,captured_at,fixture_start,pp,q80,official_score,
     official_source,appeared,nba_three_made,nba_three_attempts,pregame_three_made,pregame_three_attempts
-    FROM learning_v44_snapshots WHERE sport=$1 ORDER BY fixture_day DESC,captured_at DESC LIMIT $2`,[sport,max]);
+    FROM learning_v44_snapshots WHERE sport=${v452SportSql(sport)} ORDER BY fixture_day DESC,captured_at DESC LIMIT ${max}`);
   return rows.map((r:any)=>({key:String(r.key),sport:r.sport as Sport,playerId:String(r.player_id),
     fixtureDay:dateDay(r.fixture_day),capturedAt:new Date(r.captured_at).toISOString(),
     fixtureStart:r.fixture_start?new Date(r.fixture_start).toISOString():null,
@@ -48,9 +51,9 @@ export async function v44Rows(sport:Sport,limit=3000):Promise<V44Row[]>{
 export type V44Pending={key:string;sport:Sport;playerId:string;playerName:string;team:string;
   fixture:string;fixtureTipoff?:string;savedAt:string};
 export async function v44Pending(sport:Sport,limit=45):Promise<V44Pending[]>{
-  const rows=await sqlQuery(`SELECT key,sport,player_id,player_name,team,fixture_day,fixture_start,captured_at
-    FROM learning_v44_snapshots WHERE sport=$1 AND official_score IS NULL AND fixture_day<CURRENT_DATE
-    AND fixture_day>CURRENT_DATE-INTERVAL '90 days' ORDER BY fixture_day DESC LIMIT $2`,[sport,Math.max(1,Math.min(100,limit))]);
+  const rows=await readQuery(`SELECT key,sport,player_id,player_name,team,fixture_day,fixture_start,captured_at
+    FROM learning_v44_snapshots WHERE sport=${v452SportSql(sport)} AND official_score IS NULL AND fixture_day<CURRENT_DATE
+    AND fixture_day>CURRENT_DATE-INTERVAL '90 days' ORDER BY fixture_day DESC LIMIT ${Math.max(1,Math.min(100,Math.floor(limit)))}`);
   return rows.map((r:any)=>({key:String(r.key),sport,playerId:String(r.player_id),playerName:String(r.player_name),team:String(r.team),
     fixture:`${dateDay(r.fixture_day)} fixture`,fixtureTipoff:r.fixture_start?new Date(r.fixture_start).toISOString():undefined,
     savedAt:new Date(r.captured_at).toISOString()}));
@@ -97,7 +100,7 @@ export async function v44PopulatePregameThrees(sport:Sport,keys:string[]):Promis
   }return done;
 }
 export async function v44ReadModel(sport:Sport):Promise<V44Calibration|null>{
-  const rows=await sqlQuery(`SELECT sport,version,pp_offset,q80_offset,sample_count,holdout_mae,holdout_q80_loss,holdout_coverage,updated_at FROM learning_v44_models WHERE sport=$1`,[sport]);
+  const rows=await readQuery(`SELECT sport,version,pp_offset,q80_offset,sample_count,holdout_mae,holdout_q80_loss,holdout_coverage,updated_at FROM learning_v44_models WHERE sport=${v452SportSql(sport)}`);
   const r:any=rows[0];return r?{sport,version:Number(r.version),ppOffset:Number(r.pp_offset),q80Offset:Number(r.q80_offset),
     sampleCount:Number(r.sample_count),holdoutMae:Number(r.holdout_mae),holdoutQ80Loss:Number(r.holdout_q80_loss),
     holdoutCoverage:Number(r.holdout_coverage),updatedAt:new Date(r.updated_at).toISOString()}:null;

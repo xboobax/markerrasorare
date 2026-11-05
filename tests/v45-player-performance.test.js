@@ -33,7 +33,7 @@ assert.equal(jobs.length,12);assert.equal(config.crons.length,32);
 for(const job of jobs)assert.match(job.schedule,/^\d{1,2} \d{1,2} \* \* \*$/);
 const cron=fs.readFileSync(path.join(root,'app/api/cron/v44/route.ts'),'utf8');assert.match(cron,/cronAuthorized/);assert.match(cron,/job==='playerstats'/);
 const schema=fs.readFileSync(path.join(root,'schema/learning-v45-performance.sql'),'utf8');assert.match(schema,/PRIMARY KEY \(sport, competition, game_id, player_id\)/);
-const query=fs.readFileSync(path.join(root,'lib/learning-v45-db.ts'),'utf8');assert.match(query,/jsonb_to_recordset/);assert.match(query,/WHERE sport=\$1/);
+const query=fs.readFileSync(path.join(root,'lib/learning-v45-db.ts'),'utf8');assert.match(query,/jsonb_to_recordset/);assert.match(query,/WHERE sport=\$\{v452SportSql\(sport\)\}/);
 assert.match(fs.readFileSync(path.join(root,'lib/learning-v45-performance.ts'),'utf8'),/game.status!=='final'/);
 assert.match(fs.readFileSync(path.join(root,'app/components/prediction-learning-v44.tsx'),'utf8'),/PredictionPerformanceV45/);
 console.log('V4.5: strict final observations, missing-stat preservation, per-sport isolation, dedupe, migration, dashboard and 12 daily cron jobs passed');

@@ -1,7 +1,7 @@
 import type {Sport} from '@/lib/model';
 import {v44DbConfigured} from '@/lib/learning-v44-db';
 import {v45PerformanceReport} from '@/lib/learning-v45-db';
-export const runtime='nodejs';export const dynamic='force-dynamic';export const maxDuration=15;
+export const runtime='nodejs';export const dynamic='force-dynamic';export const revalidate=0;export const fetchCache='force-no-store';export const maxDuration=15;
 /** Read only a bounded summary, not the entire historical stats archive. */
 export async function GET(req:Request){
   const input=new URL(req.url).searchParams.get('sport');
