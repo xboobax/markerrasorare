@@ -34,7 +34,6 @@ const legacyScoreQuery=`query MarkErrasFootballLegacyScores($id: ID!) {
   football { game(id: $id) { ${scoreFields} } }
 }`;
 type SorareScoreGame=CandidateSorareGame & {players:unknown;playerGameScores:unknown};
-export const sorareLiveQueries={recentQuery,nodeScoreQuery,legacyScoreQuery};
 const response=(data:Record<string,unknown>)=>NextResponse.json({source:'Sorare',scores:[],photos:[],...data},{headers:noStore});
 
 export async function GET(req:NextRequest){
