@@ -1,3 +1,11 @@
+## V4.2.1 — Football Standard-Scoringmatrix und Datenvollständigkeit
+
+- Vereinfachte Fußball-Live-Score-Heuristik durch positionsabhängige veröffentlichte Sorare-Standardmatrix ersetzt.
+- Decisive-Level, All-Around-Statistiken inklusive Passstatistiken, Double/Triple-Boni und 2025/26-Anpassungen.
+- Kein scheinbar exakter PS bei unvollständigen ESPN-Stats: Fehlende Felder werden nicht mit Null gleichgesetzt.
+- Ausklappbare Matrix und Einzelstatistik-Prüfung im Football Live Center.
+- 58 Regressionstests und syntaktische Kontrolle; Next-Produktionsbuild auf Vercel weiterhin erforderlich.
+
 ## V4.1.0 – NBA Live Match Center (Preview)
 - NBA Live Gamecast: ESPN-Scoreboard, Spielaktionen, Starter (nur falls offiziell markiert), Boxscore und Spieler-Detailmodal.
 - Vorläufige Sorare-NBA-Basisscores nach Punkten, Rebounds, Assists, Steals, Blocks, Dreiern, Turnovers, DD/TD. Keine erfundenen Scores bei DNP.

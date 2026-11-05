@@ -1,0 +1,36 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+const scoring=require('../.test-build/lib/sorare-football-scoring');
+const {SORARE_AA_MATRIX,decisiveFields,calculateSorareFootballMatrix,sorareDecisivePoints,sorareDefensiveMultiBonus,sorareCardScore}=scoring;
+const zero=()=>({...Object.fromEntries(Object.keys(SORARE_AA_MATRIX).map(key=>[key,0])),...Object.fromEntries(decisiveFields.map(key=>[key,0])),netDuels:0,minutesPlayed:90});
+// The current official level table (not the obsolete 2020 levels 55/87).
+assert.deepEqual([-4,-3,-2,-1,0,1,2,3,4,5,8].map(sorareDecisivePoints),[0,0,5,15,35,60,70,80,90,100,100]);
+const base=calculateSorareFootballMatrix('MID',zero(),true);assert.equal(base.level,0);assert.equal(base.decisive,35);assert.equal(base.allAround,0);assert.equal(base.total,35);assert.equal(base.completeness,'complete-unverified');
+for(const position of ['GK','DEF','MID','FWD']){let z=calculateSorareFootballMatrix(position,zero(),true);assert.equal(z.total,35,`baseline ${position}`);assert.equal(z.missingAA.length,0);assert.equal(z.missingDecisive.length,0);}
+const oneGoal=calculateSorareFootballMatrix('FWD',{...zero(),goals:1},true);assert.equal(oneGoal.total,60);
+const twoDecisives=calculateSorareFootballMatrix('MID',{...zero(),goals:1,assists:1},true);assert.equal(twoDecisives.total,70);
+const redExample=calculateSorareFootballMatrix('FWD',{...zero(),goals:2,assists:1,redCards:1},true);assert.equal(redExample.level,2);assert.equal(redExample.total,70);
+const doubleNegative=calculateSorareFootballMatrix('FWD',{...zero(),redCards:1,penaltiesConceded:1},true);assert.equal(doubleNegative.level,-2);assert.equal(doubleNegative.total,5);
+const guaranteed=calculateSorareFootballMatrix('MID',{...zero(),goals:1,missedPenalties:1},true);assert.equal(guaranteed.allAround,-5);assert.equal(guaranteed.total,60,'AA must not lower positive DS level');
+const unguaranteed=calculateSorareFootballMatrix('MID',{...zero(),yellowCards:1,missedPenalties:1},true);assert.equal(unguaranteed.total,27);
+const higherBound=calculateSorareFootballMatrix('DEF',{...zero(),goals:5,shotsOnTarget:5},true);assert.equal(higherBound.total,100);
+const defPassing=calculateSorareFootballMatrix('DEF',{...zero(),accuratePasses:100,cleanSheetDefender:1},true);assert.equal(defPassing.total,53,'DEF 100 passes +8 and clean sheet +10');
+const midPassing=calculateSorareFootballMatrix('MID',{...zero(),accuratePasses:50,finalThirdPasses:10},true);assert.equal(midPassing.total,43,'MID pass weights match published matrix');
+const gkConceded=calculateSorareFootballMatrix('GK',{...zero(),goalsConceded:1},true);assert.equal(gkConceded.total,30,'Sorare 26 GK goals conceded = -5 AA, no old three-goal negative DS');
+const gkSave=calculateSorareFootballMatrix('GK',{...zero(),goalkeeperCleanSheet:1,saves:4},true);assert.equal(gkSave.level,1);assert.equal(gkSave.total,68,'GK clean sheet is a decisive level, saves are AA');
+const penaltyWin=calculateSorareFootballMatrix('FWD',{...zero(),penaltiesWonScored:1,penaltiesWonScoredAA:1},true);assert.equal(penaltyWin.total,63,'Sorare 26 penalty won +1 DS and +3 AA when converted');
+assert.equal(sorareDefensiveMultiBonus(1,1,1),0);assert.equal(sorareDefensiveMultiBonus(2,2,0),4);assert.equal(sorareDefensiveMultiBonus(2,2,2),6);assert.equal(sorareDefensiveMultiBonus(3,3,3),12);
+assert.equal(calculateSorareFootballMatrix('DEF',{...zero(),interceptionsWon:2,wonTackles:2,netDuels:0},true).multiBonus,4);
+assert.equal(sorareCardScore(70,5),73.5);assert.equal(sorareCardScore(150,5),105);
+const incomplete=zero();delete incomplete.accuratePasses;const partial=calculateSorareFootballMatrix('MID',incomplete,true);
+assert.equal(partial.total,null,'never present missing accurate passes as 0');assert.ok(partial.missingAA.includes('accuratePasses'));
+const tooFewMinutes=calculateSorareFootballMatrix('GK',{...zero(),minutesPlayed:35,goalkeeperCleanSheet:1},true);
+assert.equal(tooFewMinutes.total,null,'GK clean sheet needs 60 min and cannot be treated as verified otherwise');
+const off=calculateSorareFootballMatrix('MID',zero(),false);assert.equal(off.total,null,'unplayed players must not receive base 35');
+const core=fs.readFileSync(path.join(__dirname,'../lib/football-live-core.ts'),'utf8');
+assert.doesNotMatch(core,/stats\.goals\s*\*\s*15/, 'obsolete simplified goal scoring must be removed');
+assert.match(core,/sorareEvents/,'provider-known fields must be separated from missing fields');
+const file=fs.readFileSync(path.join(__dirname,'../features/matches/football-live-center.tsx'),'utf8');
+assert.match(file,/Sorare-PS nur bei vollständigen/);assert.match(file,/missingAA/);assert.match(file,/SORARE-DATENPRÜFUNG/);
+console.log('V4.2.1 scoring: current decisive levels, role weights, passing, defensive bonuses, GK 26 rules, unknown-data guard passed');

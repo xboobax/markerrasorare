@@ -1,3 +1,5 @@
+import {calculateSorareFootballMatrix,type SorareScoringInputs,type SorareFootballPosition,type SorareOfficialMatrixOutput} from './sorare-football-scoring';
+
 /**
  * MarkErras Football Live Center - best-effort ESPN normalization.
  * Football live scores are explicitly provisional because free live feeds do not
@@ -7,8 +9,8 @@
 export type FootballLiveGameStatus='scheduled'|'live'|'final'|'delayed';
 export type FootballLeagueKey='eng.1'|'esp.1'|'ger.1'|'fra.1';
 export type FootballLiveGame={id:string;leagueKey:FootballLeagueKey;leagueName:string;date:string;home:{id:string;name:string;abbreviation:string;logo:string|null;score:number|null};away:{id:string;name:string;abbreviation:string;logo:string|null;score:number|null};status:FootballLiveGameStatus;statusText:string;period:number;clock:string;lastUpdated:string|null;venue:string|null};
-export type FootballLiveStats={minutes:number|null;goals:number;assists:number;shotsOnTarget:number;saves:number;clearances:number;tacklesWon:number;interceptions:number;chancesCreated:number;crossesCompleted:number;duelsWon:number;foulsWon:number;yellowCards:number;redCards:number;ownGoals:number;goalsConceded:number;penaltiesSaved:number;penaltiesMissed:number};
-export type FootballScoreEstimate={decisive:number;allAround:number;total:number;cleanSheet:boolean|null};
+export type FootballLiveStats={minutes:number|null;goals:number;assists:number;shotsOnTarget:number;saves:number;clearances:number;tacklesWon:number;interceptions:number;chancesCreated:number;crossesCompleted:number;duelsWon:number;foulsWon:number;yellowCards:number;redCards:number;ownGoals:number;goalsConceded:number;penaltiesSaved:number;penaltiesMissed:number;sorareEvents?:SorareScoringInputs;reportedFields?:string[]};
+export type FootballScoreEstimate=SorareOfficialMatrixOutput & {cleanSheet:boolean|null;source:'INCOMPLETE_ESPN'|'UNVERIFIED_COMPLETE';};
 export type FootballLivePlayer={id:string;name:string;shortName:string;headshot:string|null;teamId:string;starter:boolean;played:boolean;position:string|null;stats:FootballLiveStats|null;score:FootballScoreEstimate|null;status:string|null};
 export type FootballLivePlay={id:string;minute:string;text:string;teamId:string|null;type:string|null;scoreHome:number|null;scoreAway:number|null;sort:number};
 export type FootballLiveGameDetail={game:FootballLiveGame;players:FootballLivePlayer[];plays:FootballLivePlay[];source:'ESPN Gamecast';updatedAt:string;warning:string|null};
@@ -61,28 +63,70 @@ export function parseFootballStatMinutes(value:unknown):number|null{
   const quoted=s.match(/^(\d{1,3})(?:\+\d+)?'?$/);if(quoted)return Number(quoted[1]);
   const n=numeric(s);return n!==null&&n>=0?n:null;
 }
-const aliases:Record<keyof FootballLiveStats,string[]>= {
+const aliases:Record<Exclude<keyof FootballLiveStats,'sorareEvents'|'reportedFields'>,string[]>= {
   minutes:['MIN','MINUTES'],goals:['G','GLS','GOALS'],assists:['A','AST','ASSISTS'],shotsOnTarget:['SOG','SOT','SHOTSONTARGET','SHOTS ON TARGET'],saves:['SV','SAVES'],clearances:['CLR','CLEARANCES'],tacklesWon:['TCKL','TKL','TACKLES WON','TACKLES'],interceptions:['INT','INTERCEPTIONS'],chancesCreated:['CC','CHANCES CREATED'],crossesCompleted:['CCR','CROSSES COMPLETED','ACCURATE CROSSES'],duelsWon:['DW','DUELS WON'],foulsWon:['FW','FOULS WON'],yellowCards:['YC','YELLOW CARDS'],redCards:['RC','RED CARDS'],ownGoals:['OG','OWN GOALS'],goalsConceded:['GC','GOALS CONCEDED'],penaltiesSaved:['PS','PENS SAVED','PENALTIES SAVED'],penaltiesMissed:['PM','PENS MISSED','PENALTIES MISSED']
 };
 const defaultFootballStats=():FootballLiveStats=>({minutes:null,goals:0,assists:0,shotsOnTarget:0,saves:0,clearances:0,tacklesWon:0,interceptions:0,chancesCreated:0,crossesCompleted:0,duelsWon:0,foulsWon:0,yellowCards:0,redCards:0,ownGoals:0,goalsConceded:0,penaltiesSaved:0,penaltiesMissed:0});
+/** Map only provider fields whose definitions clearly match the Sorare scoring event.
+ * Generic clearances, total tackles or 'chances created' are NOT silently
+ * accepted as effective clearances, WON tackles or big chances created.
+ */
+const sorareLiveAliases:Readonly<Record<keyof SorareScoringInputs,readonly string[]>>={
+  goals:['G','GLS','GOALS'],assists:['A','AST','ASSISTS'],penaltiesWonScored:['PENALTIES WON SCORED'],
+  clearancesOffLine:['CLEARANCE OFF THE LINE','GOAL LINE CLEARANCES'],goalkeeperCleanSheet:['GK CLEAN SHEET'],
+  penaltiesSaved:['PENALTIES SAVED','PENS SAVED'],lastManTackles:['LAST MAN TACKLES'],
+  redCards:['RC','RED CARDS'],ownGoals:['OG','OWN GOALS'],penaltiesConceded:['PENALTIES CONCEDED'],errorsLeadingToGoals:['ERROR LEADS TO GOAL'],
+  yellowCards:['YC','YELLOW CARDS'],foulsCommitted:['FC','FOULS COMMITTED'],wasFouled:['FW','FOULS WON'],
+  errorLeadsToShot:['ERROR LEADS TO SHOT'],cleanSheetDefender:['DEFENDER CLEAN SHEET'],
+  goalsConceded:['GC','GOALS CONCEDED'],effectiveClearances:['EFFECTIVE CLEARANCES'],
+  wonTackles:['TACKLES WON','WON TACKLES'],blockedCrosses:['CROSSES BLOCKED','BLOCKED CROSSES'],
+  outfieldBlocks:['BLOCKS','OUTFIELDER BLOCKS'],possessionLost:['POSSESSION LOST'],
+  possessionWon:['POSSESSION WON'],duelsLost:['DUELS LOST'],duelsWon:['DUELS WON'],
+  interceptionsWon:['INTERCEPTIONS WON','INT','INTERCEPTIONS'],bigChancesCreated:['BIG CHANCES CREATED'],
+  attemptedAssists:['ATTEMPTED ASSISTS','TOTAL ATTEMPTED ASSISTS'],accuratePasses:['ACCURATE PASSES','PASSES ACCURATE'],
+  finalThirdPasses:['SUCCESSFUL FINAL THIRD PASSES'],accurateLongBalls:['ACCURATE LONG BALLS'],
+  longPassesIntoOpposition:['LONG PASSES INTO OPPOSITION'],missedPasses:['MISSED PASSES'],
+  shotsOnTarget:['SOG','SOT','SHOTS ON TARGET'],wonContests:['WON CONTESTS'],
+  penaltyAreaEntries:['PENALTY AREA ENTRIES'],missedPenalties:['PM','PENALTIES MISSED'],
+  bigChancesMissed:['BIG CHANCES MISSED'],saves:['SV','SAVES'],savesInBox:['SAVES IN BOX'],
+  goodHighClaims:['GOOD HIGH CLAIMS'],punches:['PUNCHES'],diveSaves:['DIVE SAVES'],
+  diveCatches:['DIVE CATCHES'],crossesNotClaimed:['CROSSES NOT CLAIMED'],
+  sixSecondViolations:['SIX SECOND VIOLATIONS'],gkSmothers:['GK SMOTHERS'],
+  accurateKeeperSweepers:['ACCURATE KEEPER SWEEPERS'],penaltiesWonScoredAA:['PENALTY WON AND SCORED AA'],netDuels:['NET DUELS'],minutesPlayed:['MIN','MINUTES']
+};
+
 export function footballStatLine(labels:unknown,values:unknown):FootballLiveStats|null{
   const columns=arr(labels).map(v=>str(v).toUpperCase().replace(/[^A-Z0-9 ]/g,'').trim());
   const fields=arr(values);if(!columns.length||!fields.length)return null;
   const stats=defaultFootballStats();
   const take=(keys:string[])=>{const idx=columns.findIndex(k=>keys.includes(k));return idx<0?null:count(fields[idx]);};
   const miIndex=columns.findIndex(k=>aliases.minutes.includes(k));stats.minutes=miIndex<0?null:parseFootballStatMinutes(fields[miIndex]);
-  (Object.keys(aliases) as Array<keyof FootballLiveStats>).forEach(key=>{if(key==='minutes')return;const v=take(aliases[key]);if(v!==null)stats[key]=v as never;});
-  const hasAny=(Object.keys(stats) as Array<keyof FootballLiveStats>).some(key=>key!=='minutes'&&(stats[key] as number)>0);
-  return stats.minutes!==null||hasAny?stats:null;
+  (Object.keys(aliases) as Array<Exclude<keyof FootballLiveStats,'sorareEvents'|'reportedFields'>>).forEach(key=>{if(key==='minutes')return;const v=take(aliases[key]);if(v!==null)stats[key]=v as never;});
+  const sorareEvents:SorareScoringInputs={};
+  for(const [key,keys] of Object.entries(sorareLiveAliases) as [keyof SorareScoringInputs,readonly string[]][]){
+    const index=columns.findIndex(column=>keys.includes(column));
+    if(index>=0){const value=numeric(fields[index]);if(value!==null&&(value>=0||key==='netDuels'))sorareEvents[key]=value;}
+  }
+  stats.sorareEvents=sorareEvents;
+  stats.reportedFields=Object.keys(sorareEvents);
+  const hasAny=(Object.keys(stats) as Array<keyof FootballLiveStats>).some(key=>typeof stats[key]==='number'&&key!=='minutes'&&(stats[key] as number)>0);
+  return stats.minutes!==null||hasAny||stats.reportedFields.length>0?stats:null;
 }
 const posOrder=(raw:string|null)=>{const p=(raw||'').toUpperCase();if(/^GK|GOAL/.test(p))return 1;if(/^(DEF|D|CB|LB|RB|WB)/.test(p))return 2;if(/^(MID|M|DM|CM|AM)/.test(p))return 3;if(/^(FWD|F|ST|ATT|W)/.test(p))return 4;return 5;};
 export function sorareFootballEstimate(stats:FootballLiveStats,position:string|null):FootballScoreEstimate{
-  const upper=(position||'').toUpperCase();const isKeeper=/^GK|GOAL/.test(upper);const isDef=/^(DEF|D|CB|LB|RB|WB)/.test(upper);
-  const cleanSheet=stats.minutes!==null&&stats.minutes>=60&&stats.goalsConceded===0 ? (isKeeper||isDef?true:null) : null;
-  const decisive = stats.goals*15 + stats.assists*10 + stats.penaltiesSaved*12 + (cleanSheet===true?5:0) - stats.ownGoals*8 - stats.penaltiesMissed*6;
-  const aa = stats.shotsOnTarget*1.5 + stats.saves*0.9 + stats.clearances*0.5 + stats.tacklesWon*1.1 + stats.interceptions*1.0 + stats.chancesCreated*1.2 + stats.crossesCompleted*0.5 + stats.duelsWon*0.35 + stats.foulsWon*0.4 - stats.yellowCards*3 - stats.redCards*10 - Math.max(0,stats.goalsConceded-(isKeeper||isDef?0:999))*0.6;
-  return {decisive:Math.round(decisive*10)/10,allAround:Math.round(aa*10)/10,total:Math.round((decisive+aa)*10)/10,cleanSheet};
+  const upper=(position||'').toUpperCase();
+  const p:SorareFootballPosition=/^GK|GOAL/.test(upper)?'GK':/^(DEF|D|CB|LB|RB|WB)/.test(upper)?'DEF':/^(MID|M|DM|CM|AM)/.test(upper)?'MID':'FWD';
+  // Never pretend absent fields are zero. ESPN's generic stats have not
+  // established full Opta/Sorare event definitions or penalties/duel splits.
+  const events:SorareScoringInputs={...(stats.sorareEvents??{}),...(stats.minutes!==null?{minutesPlayed:stats.minutes}:{})};
+  const played=(stats.minutes??0)>0||Object.values(events).some(x=>typeof x==='number'&&x>0);
+  const result=calculateSorareFootballMatrix(p,events,played);
+  const cleanSheet: boolean|null=typeof events.goalkeeperCleanSheet==='number'
+    ?events.goalkeeperCleanSheet>0
+    :typeof events.cleanSheetDefender==='number'?events.cleanSheetDefender>0:null;
+  return {...result,cleanSheet,source:result.completeness==='partial'?'INCOMPLETE_ESPN':'UNVERIFIED_COMPLETE'};
 }
+
 export function parseEspnFootballPlayers(raw:unknown,game:FootballLiveGame):FootballLivePlayer[]{
   const groups=arr(obj(raw).boxscore?.players);const players=new Map<string,FootballLivePlayer>();
   for(const group of groups){
@@ -98,13 +142,15 @@ export function parseEspnFootballPlayers(raw:unknown,game:FootballLiveGame):Foot
         if(statPart){
           for(const key of Object.keys(merged) as Array<keyof FootballLiveStats>){
             if(key==='minutes'){merged.minutes=statPart.minutes??merged.minutes;continue;}
-            merged[key]=(merged[key] as number)+(statPart[key] as number);
+            if(typeof merged[key]==='number'&&typeof statPart[key]==='number')merged[key]=Math.max(merged[key] as number,statPart[key] as number) as never;
           }
         }
+        merged.sorareEvents={...(merged.sorareEvents??{}),...(statPart?.sorareEvents??{})};
+        merged.reportedFields=Array.from(new Set([...(merged.reportedFields??[]),...(statPart?.reportedFields??[])]));
         const played=!didNotPlay&&Boolean((merged.minutes??0)>0||merged.goals||merged.assists||merged.saves||merged.shotsOnTarget||merged.clearances||merged.tacklesWon||merged.interceptions);
         const finalStats=played||statPart?merged:null;
         const finalPosition=base.position||str(obj(athlete.position).abbreviation)||null;
-        players.set(id,{...base,starter:base.starter||a.starter===true||athlete.starter===true,position:finalPosition,stats:finalStats,played,status:didNotPlay?note||'DNP':base.status,score:finalStats?sorareFootballEstimate(finalStats,finalPosition):null});
+        players.set(id,{...base,starter:base.starter||a.starter===true||athlete.starter===true,position:finalPosition,stats:finalStats,played,status:didNotPlay?note||'DNP':base.status,score:finalStats&&played?sorareFootballEstimate(finalStats,finalPosition):null});
       }
     }
   }
