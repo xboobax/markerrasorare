@@ -1,3 +1,5 @@
+> **Neu V4.1.0:** NBA Live Match Center mit ESPN-Gamecast-Adapter, Play-by-Play, Boxscore, vorläufigem Sorare-Basisscore, optionalen PP/Q80-Modellwerten auf Abruf und Berlin-Zeitzonenfilter. Siehe `UPDATE_V4_1_0_NBA_LIVE_CENTER_DE.md`.
+
 > **V4.0.4 Preview:** Lineup zeigt jetzt PP bei Einsatz und Q80 + Kartenbonus getrennt vom Risiko-PP; die Summe der einzelnen Spieler-Q80 ist als Σ Q80 gekennzeichnet. Originale Sorare-Kartenbilder für verifiziert eigene Karten, sofern von der Sorare-API geliefert; Gegnerlogos nur falls verfügbar. Die Prognosen bleiben unkalibriert, nicht automatisch SoProb-genau. Siehe `UPDATE_V4_0_4_PP_Q80_KARTENBILDER_DE.md`.
 
 > **V4.0.3 Preview:** Prediction Engine 3.0 (Beta), PP Raw / Q80 Raw / Risiko-PP getrennt. Siehe `UPDATE_V4_0_3_PREDICTION_ENGINE_3_0_DE.md`. Werte sind **nicht** identisch mit SoProb und Q80 ist noch nicht kalibriert.

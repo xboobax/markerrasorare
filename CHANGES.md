@@ -1,3 +1,11 @@
+## V4.1.0 – NBA Live Match Center (Preview)
+- NBA Live Gamecast: ESPN-Scoreboard, Spielaktionen, Starter (nur falls offiziell markiert), Boxscore und Spieler-Detailmodal.
+- Vorläufige Sorare-NBA-Basisscores nach Punkten, Rebounds, Assists, Steals, Blocks, Dreiern, Turnovers, DD/TD. Keine erfundenen Scores bei DNP.
+- Nur das ausgewählte Spiel alle 20s während LIVE; öffentliche Daten mit 15–20s Servercache, Stop bei FINAL und Pause in Hintergrundtabs.
+- Berliner Datum wird aus dem aktuellen und vorherigen ESPN-US-Spieltag aufgelöst.
+- Freiwilliger PP/Q80-Abruf für nur zwei Teams; keine heimliche Rekalibrierung oder erfundenen Pregame-Snapshots.
+- Originales V4.0.4 Sync-/Builder-/Prediction-Verhalten unverändert.
+
 ## V4.0.3 — Prediction Engine 3.0 Beta (04.11.2026)
 
 - Neue bedingte PP/Q20/Q80-Punkteverteilung für NBA & Fußball, Risiko-PP separat.

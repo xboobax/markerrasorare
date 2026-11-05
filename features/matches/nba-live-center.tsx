@@ -1,0 +1,104 @@
+"use client";
+import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
+import Link from 'next/link';
+import {collectionKey,safeCollection,activeCollectionCards} from '@/lib/my-collection';
+import type {LiveGame,LiveGameDetail,LivePlayer,LiveStats} from '@/lib/nba-live-core';
+
+const todayBerlin=()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+const shift=(day:string,n:number)=>new Date(Date.parse(day+'T12:00:00Z')+86400000*n).toISOString().slice(0,10);
+const fmt=(n:number|null,decimals=1)=>n===null?'–':n.toLocaleString('de-DE',{maximumFractionDigits:decimals,minimumFractionDigits:decimals});
+const norm=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
+const short=(s:string)=>s.split(' ').slice(-1)[0];
+const time=(s:string)=>new Date(s).toLocaleTimeString('de-DE',{timeZone:'Europe/Berlin',hour:'2-digit',minute:'2-digit'});
+function TeamLogo({url,abbr}:{url:string|null;abbr:string}){return <span className="live-logo">{url?<img src={url} alt="" loading="lazy"/>:abbr.slice(0,3)}</span>}
+function Avatar({url,name}:{url:string|null;name:string}){return <span className="live-avatar">{url?<img src={url} alt="" loading="lazy" decoding="async"/>:name[0]}</span>}
+async function read<T>(path:string,signal:AbortSignal):Promise<T>{const r=await fetch(path,{signal,cache:'no-store'});const data=await r.json();if(!r.ok)throw Error(data.error||`HTTP ${r.status}`);return data as T}
+const gameLabel=(g:LiveGame)=>g.status==='live'?`${g.statusText}${g.clock?' · '+g.clock:''}`:g.status==='final'?'FINAL':g.status==='delayed'?'Unterbrochen / verschoben':time(g.date);
+function StatBreakdown({stats}:{stats:LiveStats|null}){if(!stats)return <p className="live-muted">Noch keine auswertbaren Statistiken verfügbar.</p>;
+  const rows=[['Punkte',stats.points,'1'],['Rebounds',stats.rebounds,'1,2'],['Assists',stats.assists,'1,5'],['Dreier',stats.threes,'1'],['Steals',stats.steals,'3'],['Blocks',stats.blocks,'3'],['Turnovers',stats.turnovers,'−2']];
+  const dd=[stats.points,stats.rebounds,stats.assists,stats.blocks,stats.steals].filter(x=>x>=10).length;
+  return <div className="live-breakdown">{rows.map(([label,value,rate])=><div key={label}><span>{label}</span><b>{value}</b><small>× {rate}</small></div>)}<div><span>Double-/Triple-Double</span><b>{(dd>=2?1:0)+(dd>=3?1:0)}</b><small>Bonus</small></div></div>
+}
+export default function NbaLiveCenter(){
+  const [day,setDay]=useState(todayBerlin),[games,setGames]=useState<LiveGame[]>([]),[eventId,setEventId]=useState('');
+  const [detail,setDetail]=useState<LiveGameDetail|null>(null),[scheduleError,setScheduleError]=useState(''),[detailError,setDetailError]=useState('');
+  const [feedWarning,setFeedWarning]=useState<string|null>(null);
+  const [loading,setLoading]=useState(true),[section,setSection]=useState<'all'|'mine'>('all'),[selectedPlayer,setSelectedPlayer]=useState<LivePlayer|null>(null);
+  const selectedGameRef=useRef<string>('');
+  const [myCards,setMyCards]=useState<Map<string,number|null>|null>(null);
+  const [projections,setProjections]=useState<Map<string,{pp:number|null;q80:number|null;quality:string}>|null>(null);
+  const [projectionError,setProjectionError]=useState(''),[loadingPP,setLoadingPP]=useState(false);
+  const scoreboardPending=useRef<string|null>(null);
+  const selectedGame=games.find(g=>g.id===eventId)??games[0]??null;
+  selectedGameRef.current=selectedGame?.id??'';
+  const refreshGames=useCallback(async(signal:AbortSignal)=>{
+    if(scoreboardPending.current===day)return;
+    scoreboardPending.current=day;
+    try{const data=await read<{games:LiveGame[];warning:string|null}>(`/api/nba-live/scoreboard?date=${day}`,signal);
+      if(!signal.aborted){setGames(data.games);setFeedWarning(data.warning);setScheduleError('');setLoading(false)}}
+    catch(e){if(!signal.aborted){setScheduleError(e instanceof Error?e.message:'Unbekannter Fehler');setLoading(false)}}
+    finally{if(scoreboardPending.current===day)scoreboardPending.current=null;}
+  },[day]);
+  useEffect(()=>{
+    const c=new AbortController();setLoading(true);setGames([]);setEventId('');setDetail(null);void refreshGames(c.signal);
+    const timer=setInterval(()=>{if(!document.hidden)void refreshGames(c.signal)},60000);
+    const resume=()=>{if(!document.hidden)void refreshGames(c.signal)};
+    document.addEventListener('visibilitychange',resume);
+    return ()=>{c.abort();clearInterval(timer);document.removeEventListener('visibilitychange',resume)};
+  },[refreshGames]);
+  useEffect(()=>{
+    if(!selectedGame){setDetail(null);return;}
+    const id=selectedGame.id,controller=new AbortController();let pending=false;
+    setDetail(prev=>prev?.game.id===id?prev:null);setDetailError('');
+    const refresh=async()=>{if(pending)return;pending=true;try{const result=await read<LiveGameDetail>(`/api/nba-live/game?event=${id}`,controller.signal);
+      if(!controller.signal.aborted){setDetail(result);setDetailError('')}}
+      catch(e){if(!controller.signal.aborted)setDetailError(e instanceof Error?e.message:'Spieldetails nicht verfügbar')}finally{pending=false}};
+    void refresh();
+    const timer=selectedGame.status==='final'?null:setInterval(()=>{if(!document.hidden)void refresh()},selectedGame.status==='live'?20000:60000);
+    const resume=()=>{if(!document.hidden)void refresh()};document.addEventListener('visibilitychange',resume);
+    return ()=>{controller.abort();if(timer)clearInterval(timer);document.removeEventListener('visibilitychange',resume)};
+  },[selectedGame?.id,selectedGame?.status]);
+  useEffect(()=>{let mounted=true;
+    void(async()=>{try{const r=await fetch('/api/auth/sorare/status',{cache:'no-store'});if(!r.ok)return;
+      const s=await r.json() as {connected?:boolean;slug?:string};if(!s.connected||!s.slug)return;
+      const cache=safeCollection(JSON.parse(localStorage.getItem(collectionKey(s.slug))||'null'),s.slug);if(!cache?.complete)return;
+      const map=new Map<string,number|null>();for(const card of activeCollectionCards(cache,'nba')){
+        const key=norm(card.playerName);if(!key)continue;const prev=map.get(key);if(!map.has(key)||(card.bonusPercent??-1)>(prev??-1))map.set(key,card.bonusPercent??null);
+      }if(mounted)setMyCards(map);
+    }catch{/* unverified ownership is not shown */}})();return ()=>{mounted=false};
+  },[]);
+  const projectionGameKey=selectedGame?.id??'';
+  useEffect(()=>{setProjections(null);setProjectionError('');},[projectionGameKey]);
+  const loadPP=async()=>{if(!selectedGame||loadingPP)return;setLoadingPP(true);setProjectionError('');
+    try{const data=await read<{players:Array<{name:string;pp:number|null;q80:number|null;quality:string}>}>(`/api/nba-live/projections?away=${encodeURIComponent(selectedGame.away.name)}&home=${encodeURIComponent(selectedGame.home.name)}`,new AbortController().signal);
+      if(selectedGameRef.current===projectionGameKey){const map=new Map<string,{pp:number|null;q80:number|null;quality:string}>();for(const p of data.players)map.set(norm(p.name),{pp:p.pp,q80:p.q80,quality:p.quality});setProjections(map)}
+    }catch(e){setProjectionError(e instanceof Error?e.message:'Modellprognosen nicht erreichbar')}finally{setLoadingPP(false)}
+  };
+  const current=detail?.game.id===selectedGame?.id?detail:null;
+  const game=current?.game??selectedGame,all=current?.players??[],plays=current?.plays??[];
+  const teams=useMemo(()=>game?[game.away,game.home].map(team=>({team,players:all.filter(p=>p.teamId===team.id).sort((a,b)=>Number(b.starter)-Number(a.starter)||(b.stats?.minutes??0)-(a.stats?.minutes??0))})):[],[game,all]);
+  const owned=useMemo(()=>all.filter(p=>myCards?.has(norm(p.name))),[all,myCards]);
+  const showPlayer=selectedPlayer?all.find(p=>p.id===selectedPlayer.id)??selectedPlayer:null;
+  const updated=current?time(current.updatedAt):'–';
+  return <section className="live-wrap" aria-label="NBA Live Center">
+    <div className="live-head"><strong>◉ NBA LIVE CENTER</strong><span>ESPN Gamecast · letzter Abruf {updated} · {game?.status==='live'?'LIVE, ca. alle 20 Sekunden':game?.status==='final'?'Spiel beendet':'Aktualisierung bei Bedarf'}</span></div>
+    <div className="live-grid"><aside className="live-side"><div className="live-title"><b>SPIELAUSWAHL</b><button type="button" onClick={()=>setDay(todayBerlin())}>Heute</button></div>
+      <div className="live-date"><button type="button" aria-label="Vortag" onClick={()=>setDay(d=>shift(d,-1))}>‹</button><input aria-label="Datum wählen" type="date" value={day} onChange={e=>/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)&&setDay(e.target.value)}/><button type="button" aria-label="Folgetag" onClick={()=>setDay(d=>shift(d,1))}>›</button></div>
+      {feedWarning&&<p className="live-hint">{feedWarning}</p>}
+      {scheduleError&&<p className="live-error" role="alert">Scoreboard: {scheduleError}. {games.length?'Letzter Stand wird angezeigt.':''}</p>}
+      <div className="live-games">{games.map(g=><button type="button" key={g.id} onClick={()=>{setEventId(g.id);setSelectedPlayer(null)}} aria-pressed={g.id===game?.id} className={`live-game ${g.id===game?.id?'active':''}`}><div><TeamLogo url={g.away.logo} abbr={g.away.abbreviation}/><span>{g.away.abbreviation}</span><b>{g.away.score??'–'} : {g.home.score??'–'}</b><span>{g.home.abbreviation}</span><TeamLogo url={g.home.logo} abbr={g.home.abbreviation}/></div><small>{gameLabel(g)}</small></button>)}{loading&&<p className="live-muted">Spiele werden geladen …</p>}{!loading&&!games.length&&!scheduleError&&<p className="live-muted">Keine NBA-Spiele für diesen Tag.</p>}</div>
+    </aside><div className="live-main">{game?<>
+      <header className="live-scoreboard"><div><TeamLogo url={game.away.logo} abbr={game.away.abbreviation}/><strong>{game.away.name}</strong><b>{game.away.score??'–'}</b></div><div className="live-score-status"><small className={game.status==='live'?'is-live':''}>{game.status.toUpperCase()}</small><strong>{gameLabel(game)}</strong><span>NBA</span></div><div><b>{game.home.score??'–'}</b><strong>{game.home.name}</strong><TeamLogo url={game.home.logo} abbr={game.home.abbreviation}/></div></header>
+      {detailError&&<p className="live-error" role="alert">{detailError}. {current?'Letzte Daten bleiben erhalten.':''}</p>}{current?.warning&&<p className="live-hint">{current.warning}</p>}
+      <div className="live-top-panels"><section className="live-court-wrap"><div className="live-title"><b>STARTING FIVE</b><small>{teams.every(t=>t.players.filter(p=>p.starter).length>=5)?'Offizielle Starter im Feed':'Noch nicht vollständig bestätigt'}</small></div>
+      <div className="live-court"><div className="live-court-line"/><div className="live-court-circle"/>{teams.map((side,i)=><div className={`live-half h${i}`} key={side.team.id}>{side.players.filter(p=>p.starter).slice(0,5).map((p,j)=><button key={p.id} type="button" className={`live-marker m${j}`} onClick={()=>setSelectedPlayer(p)} title={`Details: ${p.name}`}><Avatar url={p.headshot} name={p.name}/><b>{fmt(p.score)}</b><small>{short(p.name)}</small></button>)}{!side.players.some(p=>p.starter)&&<span className="live-unconfirmed">Starter nicht bestätigt</span>}</div>)}</div><p className="live-caption">Schematische Aufstellung, keine Echtzeit-Spielerpositionen.</p>
+      </section><section className="live-plays-wrap"><div className="live-title"><b>PLAY-BY-PLAY</b><small>{plays.length} Aktionen</small></div><div className="live-plays">{plays.slice(0,80).map(p=><div className={`live-play ${p.scoring?'scored':''}`} key={`${p.id}:${p.sort}`}><time>Q{p.period} {p.clock}</time><span>{p.text}</span>{p.scoreAway!==null&&p.scoreHome!==null&&<b>{p.scoreAway}:{p.scoreHome}</b>}</div>)}{!plays.length&&<p className="live-muted">Noch keine Spielaktionen vorhanden.</p>}</div></section></div>
+      <section className="live-rosters"><div className="live-title"><b>LIVE BOXSCORE · Sorare-Basisscore</b><div><button onClick={()=>void loadPP()} disabled={loadingPP} title="Aktuelle PP/Q80-Modellwerte für diese zwei NBA-Teams auf Abruf laden; keine eingefrorenen Pregame-Prognosen">{loadingPP?"PP laden …":"PP/Q80 laden"}</button><button className={section==='all'?'active':''} onClick={()=>setSection('all')}>Alle Spieler</button><button className={section==='mine'?'active':''} onClick={()=>setSection('mine')}>Meine Karten ({owned.length})</button></div></div>
+      {projectionError&&<p className="live-error">PP: {projectionError}</p>}
+      {projections&&<p className="live-hint">PP/Q80: aktuelle Modellwerte (kein archivierter Pregame-Snapshot). Kein Live-Sorare-Score.</p>}
+      {section==='mine'?(myCards===null?<p className="live-muted">Keine vollständig verifizierte NBA-Sammlung im Browser. <Link href="/collection?sport=nba">Sammlung öffnen ↗</Link></p>:owned.length?<div className="live-mine">{owned.map(p=><button key={p.id} onClick={()=>setSelectedPlayer(p)}><Avatar url={p.headshot} name={p.name}/><strong>{p.name}</strong><span>{fmt(p.score)} Punkte {myCards.get(norm(p.name))!==null?`· Karte +${fmt(myCards.get(norm(p.name))??null)} %`:''}</span></button>)}</div>:<p className="live-muted">Keine verifizierten eigenen Spieler in diesem Spiel.</p>):<div className="live-roster-tables">{teams.map(({team,players})=><div key={team.id} className="live-roster-team"><h3><TeamLogo url={team.logo} abbr={team.abbreviation}/>{team.name}</h3><div className="live-roster-scroll"><table><thead><tr><th>Spieler</th><th>MIN</th><th>PTS</th><th>REB</th><th>AST</th><th>3PM</th><th>STL</th><th>BLK</th><th>TO</th><th>PP</th><th>Q80</th><th>Sorare</th></tr></thead><tbody>{players.map(p=><tr key={p.id} className={myCards?.has(norm(p.name))?'mine':''}><td><button onClick={()=>setSelectedPlayer(p)} type="button"><Avatar url={p.headshot} name={p.name}/><span>{p.shortName}{p.starter&&<small>Starter</small>}</span></button></td><td>{fmt(p.stats?.minutes??null,0)}</td><td>{p.stats?.points??'–'}</td><td>{p.stats?.rebounds??'–'}</td><td>{p.stats?.assists??'–'}</td><td>{p.stats?.threes??'–'}</td><td>{p.stats?.steals??'–'}</td><td>{p.stats?.blocks??'–'}</td><td>{p.stats?.turnovers??'–'}</td><td>{fmt(projections?.get(norm(p.name))?.pp??null)}</td><td>{fmt(projections?.get(norm(p.name))?.q80??null)}</td><td><b>{fmt(p.score)}</b></td></tr>)}{!players.length&&<tr><td colSpan={12}>Noch kein Live-Boxscore verfügbar.</td></tr>}</tbody></table></div></div>)}</div>}
+      </section><p className="live-disclaimer">Live-Daten: ESPN-Webfeed (inoffiziell, ohne garantierte Verfügbarkeit). Sorare-Wertung = vorläufige Berechnung aus dem NBA-Boxscore, ohne Karten-/Captain-/Wettbewerbsboni. Nachträgliche Statistik-Korrekturen und offizielle Sorare-Ergebnisse können abweichen. Quellen-/API-Limits werden respektiert.</p>
+      </>:<p className="live-muted">{loading?'Lade NBA-Spielplan …':'Wähle ein NBA-Spiel aus.'}</p>}</div></div>
+    {showPlayer&&<div className="live-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setSelectedPlayer(null)}}><section className="live-player-modal" role="dialog" aria-modal="true" aria-label={`Live-Daten ${showPlayer.name}`}><div className="live-modal-head"><Avatar url={showPlayer.headshot} name={showPlayer.name}/><div><h2>{showPlayer.name}</h2><small>{showPlayer.starter?'Starter':'Spieler'} · {showPlayer.stats?.minutes!==null?fmt(showPlayer.stats?.minutes??null,0)+' Minuten':'Spielzeit unbekannt'}</small></div><button onClick={()=>setSelectedPlayer(null)} aria-label="Schließen">✕</button></div><div className="live-modal-metrics"><div>Live-Sorare <strong>{fmt(showPlayer.score)}</strong></div><div>Minuten <strong>{fmt(showPlayer.stats?.minutes??null,0)}</strong></div><div>PP <strong>{fmt(projections?.get(norm(showPlayer.name))?.pp??null)}</strong></div></div><StatBreakdown stats={showPlayer.stats}/><p className="live-caption">PP ist nur nach dem optionalen Modellabruf verfügbar; kein archivierter Pregame-Snapshot. Live-Sorare nur vorläufiger Basisscore.</p></section></div>}
+  </section>
+}

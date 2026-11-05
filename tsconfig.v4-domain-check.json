@@ -29,6 +29,8 @@
     "lib/prediction-engine-v2.ts",
     "lib/builder-v30.ts",
     "lib/tracking.ts",
-    "lib/qol-presets.ts"
+    "lib/qol-presets.ts",
+    "lib/nba-live-core.ts",
+    "lib/nba-live-server.ts"
   ]
 }

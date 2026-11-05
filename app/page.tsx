@@ -4,7 +4,7 @@ const cards=[
   {url:"/builder/football",icon:"⚽",title:"Football Set Builder",detail:"Positionen, Kartenbonus, Captain, Multi-Team und intelligente Optimierung.",meta:"Fußball"},
   {url:"/builder/nba",icon:"◉",title:"NBA Set Builder",detail:"Fünferteams, 16 Sterne, Value, Risiko und unterschiedliche Strategien.",meta:"NBA"},
   {url:"/daily-missions",icon:"✦",title:"Daily Mission Center",detail:"Fußball-Aktionen und NBA L10 + 7 direkt aus deiner Sammlung.",meta:"Missionen"},
-  {url:"/match-center",icon:"▤",title:"Match Center",detail:"Spieltermine, Gegner und erwartete Startoptionen an einem Ort.",meta:"Spiele"},
+  {url:"/match-center?sport=nba",icon:"▤",title:"NBA Live Match Center",detail:"Live-Spielstand, Play-by-Play, Starting Five und vorläufige Sorare-Wertung.",meta:"Live NBA"},
   {url:"/players",icon:"⌕",title:"Player Database",detail:"Schnelle, filterbare Spielerlisten mit Profilen und Formanalyse.",meta:"Scouting"},
   {url:"/collection",icon:"▣",title:"Meine Sammlung",detail:"Sorare-Sync, gültiges Football Set und Kartenboni.",meta:"Galerie"},
 ];
