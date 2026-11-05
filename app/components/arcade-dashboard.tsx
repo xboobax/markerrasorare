@@ -856,7 +856,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
           matchupSource={automaticMatchups.source} scheduleStatus={nbaSchedule.status}/>}</div>)} 
 
         {activeTab==="analytics"&&(<section data-tab="analytics" className="panel forecast-lab" id="forecast-lab">
-          <div className="section-top"><div><span className="section-kicker">03 / PREDICTION ENGINE 3.0 · V4.0.3</span><h2>PP, Q80, Matchups & Risiko transparent.</h2></div><span className="lab-stage">EXPERIMENTELL · NICHT VALIDIERT</span></div>
+          <div className="section-top"><div><span className="section-kicker">03 / PREDICTION ENGINE 3.0 · V4.0.4</span><h2>PP, Q80, Matchups & Risiko transparent.</h2></div><span className="lab-stage">EXPERIMENTELL · NICHT VALIDIERT</span></div>
           <p className="lab-intro">V3.0 trennt PP/Q80 bei Einsatz von risikoangepassten Punkten und berücksichtigt Kartenboni erst nach der Rohprognose. Q80 nutzt eine einheitliche bedingte Punkteverteilung für beide Sportarten und ist noch unkalibriert. Die V2.0 Engine kombiniert die vorhandenen Sorare-Daten mit einem vorsichtig gewichteten Formsignal und zeigt Floor, Ceiling sowie einen nachvollziehbaren Risikoindex. Gegner und manuell gepflegte Minuten wirken nur einmal. <strong>V1.7 und V1.8 bleiben unverändert auswählbar.</strong> Ein Leistungsgewinn ist erst durch echte Ergebnisse nachzuweisen.</p>
           <div className="lab-model-switch" role="group" aria-label="Prognosemodell wählen">
             <button type="button" aria-pressed={modelMode==="v3"} className={modelMode==="v3"?"active":""} onClick={()=>setModelMode("v3")}>✧ V3.0 · PP & Q80</button>

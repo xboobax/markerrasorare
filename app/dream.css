@@ -210,3 +210,17 @@
 .dream-frame .dream-player-details:hover{color:#f0d487!important}
 /* Collection sync diagnostics: compact, readable without exposing auth credentials. */
 .v28-status-error {color:#f7b7a7!important;border-left:3px solid #e28d78;padding-left:10px;overflow-wrap:anywhere}
+
+/* V4.0.4 — original verified card images. Fallback remains the player avatar.
+   Card artwork must be compact, lazily loaded and never stretched into a headshot. */
+.dream-embedded .v23-card .v23-portrait .dream-official-card-art,
+.workspace-v23 .v24-card .v23-portrait .dream-official-card-art{
+ display:block;width:min(100%,104px);height:132px;max-width:100%;object-fit:contain;object-position:center;
+ border:0;border-radius:6px;background:transparent;box-shadow:none;padding:0;margin:1px auto;
+}
+.dream-opponent-label{display:flex;gap:4px;align-items:center;justify-content:center;min-height:17px;
+ width:100%;font-size:8px;font-weight:600;color:#d7c696;text-align:center;overflow:hidden}
+.dream-opponent-label img{display:block;width:15px;height:15px;object-fit:contain;flex-shrink:0}
+.dream-opponent-label span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:620px){.dream-embedded .v23-card .v23-portrait .dream-official-card-art,
+ .workspace-v23 .v24-card .v23-portrait .dream-official-card-art{height:85px}}

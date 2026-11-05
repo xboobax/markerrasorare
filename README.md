@@ -1,3 +1,5 @@
+> **V4.0.4 Preview:** Lineup zeigt jetzt PP bei Einsatz und Q80 + Kartenbonus getrennt vom Risiko-PP; die Summe der einzelnen Spieler-Q80 ist als Σ Q80 gekennzeichnet. Originale Sorare-Kartenbilder für verifiziert eigene Karten, sofern von der Sorare-API geliefert; Gegnerlogos nur falls verfügbar. Die Prognosen bleiben unkalibriert, nicht automatisch SoProb-genau. Siehe `UPDATE_V4_0_4_PP_Q80_KARTENBILDER_DE.md`.
+
 > **V4.0.3 Preview:** Prediction Engine 3.0 (Beta), PP Raw / Q80 Raw / Risiko-PP getrennt. Siehe `UPDATE_V4_0_3_PREDICTION_ENGINE_3_0_DE.md`. Werte sind **nicht** identisch mit SoProb und Q80 ist noch nicht kalibriert.
 
 > **V4.0.2 Sorare-Sync-Korrektur:** siehe [`UPDATE_V4_0_2_SORARE_SYNC_FIX_DE.md`](UPDATE_V4_0_2_SORARE_SYNC_FIX_DE.md).

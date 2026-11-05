@@ -39,7 +39,7 @@ export default function DreamShell({children}:{children:React.ReactNode}){
   const filtered=items.filter(item=>`${item.label} ${item.href}`.toLowerCase().includes(commandQuery.toLowerCase()));
   return <div className="dream-frame">
     <aside className={`dream-sidebar ${open?"is-open":""}`} aria-label="Hauptnavigation">
-      <Link href="/" className="dream-brand" aria-label="MarkErras Sorare Dream Startseite"><span className="dream-monogram">M<span>◆</span></span><span><strong>MarkErras</strong><small>SORARE DREAM <b>4.0.3</b></small></span></Link>
+      <Link href="/" className="dream-brand" aria-label="MarkErras Sorare Dream Startseite"><span className="dream-monogram">M<span>◆</span></span><span><strong>MarkErras</strong><small>SORARE DREAM <b>4.0.4</b></small></span></Link>
       <span className="dream-sidebar-label">WORKSPACE</span>
       <nav className="dream-nav">{items.map(item=><Link href={item.href} key={item.label} aria-current={active(item.href)?"page":undefined} className={active(item.href)?"active":""}><span className="dream-nav-icon" aria-hidden="true">{item.icon}</span>{item.label}</Link>)}</nav>
       <div className="dream-sidebar-foot"><span className="dream-online-dot"/> Kostenloser Datenmodus<br/><small>Sync über Sorare · kein Upstash nötig</small></div>

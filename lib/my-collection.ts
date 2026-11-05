@@ -4,7 +4,9 @@ export type OwnedSorareCard={assetId:string;slug:string;sport:"NBA"|"FOOTBALL";r
   /** Sorare-reported card bonuses without the separate football captain modifier. Null means missing data. */
   bonusPercent?:number|null;bonusDetails?:SorareBonusPart[];grade?:number|null;
   /** Exact Sorare Set identifier. Pro cards and legacy cached cards have no Set. */
-  cardSetSlug?:string|null;cardSetName?:string|null};
+  cardSetSlug?:string|null;cardSetName?:string|null;
+  /** Official Sorare card artwork URL, when present in verified card metadata. */
+  pictureUrl?:string|null};
 /** Independent, per-card values returned by Sorare powerBreakdown. */
 export type SorarePowerBreakdown={xpBasisPoints?:unknown;seasonBasisPoints?:unknown;collectionBasisPoints?:unknown;scarcityBasisPoints?:unknown;specialEditionCardsBasisPoints?:unknown;fidelityBasisPoints?:unknown;otherBonusBasisPoints?:unknown};
 /** Basis points are hundredths of a percent (100 bp = 1%). Never infer bonuses from rarity alone. */

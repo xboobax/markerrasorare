@@ -1,6 +1,7 @@
 import {NextRequest,NextResponse} from "next/server";
 import {sessionForRequest,setSessionCookie,graphQl,SorareApiError} from "@/lib/sorare-oauth-session";
 import {parseSorareCardBonus} from "@/lib/my-collection";
+import {safeImageUrl} from "@/lib/sorare";
 export const dynamic="force-dynamic";
 const QUERY=`query MarkerrasOwnedCollection($after: String) {
   currentUser { slug }
@@ -17,13 +18,35 @@ const QUERY=`query MarkerrasOwnedCollection($after: String) {
     totalCount
   }
 }`;
+// Optional pictureUrl is requested only when the deployed Sorare schema accepts
+// it. A schema mismatch must NEVER break the previously reliable collection sync.
+// Cache the capability per server instance; an unavailable image is not invented.
+const WITH_PICTURE=QUERY.replace('nodes { assetId slug sport', 'nodes { pictureUrl(derivative: "tinified") assetId slug sport');
+let pictureCapability:null|boolean=null;
+async function collectionPage(token:string,after:string|null){
+  if(pictureCapability===false)return graphQl(token,QUERY,{after});
+  try{
+    const data=await graphQl(token,WITH_PICTURE,{after});
+    pictureCapability=true;
+    return data;
+  }catch(error){
+    const message=error instanceof Error?error.message:'';
+    if(!(error instanceof SorareApiError)&&!message)return Promise.reject(error);
+    // Only an unsupported GraphQL picture field/argument triggers fallback.
+    // HTTP 429, auth, timeouts and all other errors keep their original meaning.
+    if(!/(cannot query field|unknown argument|unknown field|field .* not defined|doesn.t exist)/i.test(message) ||
+       !/pictureUrl|derivative/i.test(message))throw error;
+    pictureCapability=false;
+    return graphQl(token,QUERY,{after});
+  }
+}
 export async function GET(request:NextRequest){
   const user=await sessionForRequest(request);
   if(!user)return NextResponse.json({error:"Bitte zuerst mit Sorare verbinden."},{status:401,headers:{"Cache-Control":"no-store"}});
   const after=request.nextUrl.searchParams.get("after");
   if(after&&after.length>1024)return NextResponse.json({error:"Ungültiger Cursor."},{status:400});
   try{
-    const result=await graphQl(user.session.accessToken,QUERY,{after:after||null});
+    const result=await collectionPage(user.session.accessToken,after||null);
     const current=result.currentUser as {slug?:string}|null;
     const data=result.cardsWhere as {nodes?:unknown[];pageInfo?:{hasNextPage?:boolean;endCursor?:string};totalCount?:number}|null;
     // Never treat a failed / partial provider response as an empty, successfully synced collection.
@@ -45,7 +68,8 @@ export async function GET(request:NextRequest){
         playerSlug:typeof p?.slug==="string"?p.slug:"",playerName:typeof p?.displayName==="string"?p.displayName:"",grade:typeof c.grade==="number"?c.grade:null,
         cardSetSlug:typeof (c.cardSet as Record<string,unknown>|null)?.slug==="string"?(c.cardSet as Record<string,unknown>).slug:null,
         cardSetName:typeof (c.cardSet as Record<string,unknown>|null)?.name==="string"?(c.cardSet as Record<string,unknown>).name:null,
-        bonusPercent:parsed.bonusPercent,bonusDetails:parsed.bonusDetails};
+        bonusPercent:parsed.bonusPercent,bonusDetails:parsed.bonusDetails,
+        pictureUrl:safeImageUrl(c.pictureUrl)};
     }).filter(c=>c.assetId&&c.playerSlug&&(c.sport==="NBA"||c.sport==="FOOTBALL"));
     const res=NextResponse.json({userSlug:current.slug,cards,activeFootballSet:currentFootballSet,pageInfo:data.pageInfo,totalCount:data.totalCount??cards.length,fetchedAt:new Date().toISOString()},{headers:{"Cache-Control":"private, no-store"}});
     if(user.changed)setSessionCookie(res,user.session);

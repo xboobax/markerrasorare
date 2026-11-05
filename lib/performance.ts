@@ -8,7 +8,13 @@ export function indexCurrentCardAssets(cards:readonly OwnedSorareCard[]):Map<str
     const list=result.get(card.playerSlug);
     if(list)list.push(card);else result.set(card.playerSlug,[card]);
   }
-  for(const list of result.values())list.sort((a,b)=>(b.bonusPercent??-1)-(a.bonusPercent??-1)||
+  // Prefer the verified Divination edition if a player has several owned cards.
+  // Do not invent editions or discard other cards; the user can override the
+  // exact asset in the existing picker. Absent set labels preserve old sorting.
+  const isDivination=(card:OwnedSorareCard)=>/divination/i.test(`${card.cardSetSlug??''} ${card.cardSetName??''}`);
+  for(const list of result.values())list.sort((a,b)=>Number(isDivination(b))-Number(isDivination(a))||
+    Number(Boolean(b.pictureUrl))-Number(Boolean(a.pictureUrl))||
+    (b.bonusPercent??-1)-(a.bonusPercent??-1)||
     a.rarity.localeCompare(b.rarity)||String(b.seasonYear??'').localeCompare(String(a.seasonYear??'')));
   return result;
 }

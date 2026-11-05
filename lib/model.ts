@@ -20,6 +20,7 @@ export type Player = {
   nextGame?: string;
   nextGameTipoff?: string; // ISO 8601 / UTC, nur aus bestätigtem Spielplan
   opponent?: string;   // nächster Gegner, wenn Sorare ein Fixture liefert
+  opponentLogoUrl?: string | null; // Nur von vertrauenswürdiger Team-API
 };
 
 export type ForecastSource = {label: string; value: number; share: number; origin: "Sorare" | "Historie"};

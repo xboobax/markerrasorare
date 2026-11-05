@@ -23,6 +23,7 @@ import {nbaValueScore,topNbaValuePlayers,type NbaValueMode} from "@/lib/builder-
 import AutoBuilderSettings from "@/app/components/auto-builder-settings";
 import {v30ForTeam,estimatedQ80,historical70Plus,projectionValue,type BuilderV30State} from "@/lib/builder-v30";
 import {withPredictionV3Bonus,type PredictionV3} from "@/lib/prediction-engine-v3";
+import {conditionalCardScore,sumConditionalScores} from "@/lib/prediction-presentation";
 
 type CardSettings={owned?:boolean;stars?:number|null;bonusPercent?:number;bonusSource?:"sorare";starSource?:"sorare";locked?:boolean;excluded?:boolean};
 type Props={sport:Sport;league:string;availability:ReturnType<typeof useAvailability>;availabilityById:Record<string,AvailabilityReport>;players:Forecast[];cardStore:Record<string,CardSettings>;ownedOnly:boolean;verifiedOwnedReady:boolean;verifiedCollection:OwnedCollection|null;updateCard:(id:string,patch:CardSettings)=>void;
@@ -45,6 +46,22 @@ function Avatar({player}:{player:Forecast}){
   useEffect(()=>setFailed(false),[player.imageUrl]);
   return player.imageUrl&&!failed?<img src={player.imageUrl} loading="lazy" referrerPolicy="no-referrer" alt={`Foto: ${player.name}`} onError={()=>setFailed(true)}/>
     :<span className="v23-avatar-empty">{player.name.split(/\s+/).slice(0,2).map(part=>part[0]??"").join("")}</span>;
+}
+/** Display actual owned Sorare artwork, never substitute a generated "Divination"
+ * image for cards that are not present in the authenticated collection. */
+function OfficialCardArt({url,player}:{url:string|null|undefined;player:Forecast}){
+  const [failed,setFailed]=useState(false);
+  useEffect(()=>setFailed(false),[url]);
+  return url&&!failed?<img className="dream-official-card-art" src={url} alt={`Originale Sorare-Karte: ${player.name}`} loading="lazy" referrerPolicy="no-referrer" onError={()=>setFailed(true)}/>:<Avatar player={player}/>;
+}
+function OpponentLogo({player,url}:{player:Forecast;url:string|null|undefined}){
+  const [failed,setFailed]=useState(false);
+  useEffect(()=>setFailed(false),[url]);
+  if(!player.opponent)return null;
+  return <span className="dream-opponent-label" title={`Nächster bestätigter Gegner: ${player.opponent}`}>
+    {url&&!failed&&<img src={url} alt="" loading="lazy" referrerPolicy="no-referrer" onError={()=>setFailed(true)}/>}
+    <span>vs {player.opponent}</span>
+  </span>;
 }
 function Bars({player,compact=false}:{player:Forecast;compact?:boolean}){
   const values=(player.recentScores??[]).filter(n=>Number.isFinite(n)&&n>=0).slice(0,10).reverse();
@@ -71,6 +88,22 @@ function MiniStat({label,value,tone}:{label:string;value:string;tone?:"good"|"wa
 }
 function BuilderWorkspace({sport,league,availability,availabilityById,players,cardStore,ownedOnly,verifiedOwnedReady,verifiedCollection,updateCard,targetScore,onOpenProfile,onSavePredictions,requestedPlayer,favorites,onToggleFavorite,nbaSchedule,matchupRatings,matchupSource,v30State,onV30Change,leagues}:Props){
   const [teams,setTeams]=useState<WorkspaceTeam[]>(initialTeams);
+  const [opponentLogos,setOpponentLogos]=useState<Record<string,string>>({});
+  useEffect(()=>{
+    let cancelled=false;
+    setOpponentLogos({});
+    fetch(`/api/team-logos?sport=${sport}`)
+      .then(r=>r.ok?r.json():null)
+      .then(data=>{if(!cancelled&&data?.logos&&typeof data.logos==='object')setOpponentLogos(data.logos);})
+      .catch(()=>{});
+    return ()=>{cancelled=true;};
+  },[sport]);
+  const opponentLogoFor=(p:Forecast)=>{
+    if(!p.opponent)return null;
+    const normalize=(name:string)=>name.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
+    const wanted=normalize(p.opponent);
+    return opponentLogos[p.opponent]??Object.entries(opponentLogos).find(([name])=>normalize(name)===wanted)?.[1]??null;
+  };
   const [activeTeamId,setActiveTeamId]=useState("team-1");
   const [loadedSport,setLoadedSport]=useState<Sport|null>(null);
   const [activeSlot,setActiveSlot]=useState<number|null>(null);
@@ -381,7 +414,7 @@ function BuilderWorkspace({sport,league,availability,availabilityById,players,ca
         if(sort==="value")return nbaValueScore(p,cardStore[p.id]?.stars,"projection");
         if(sort==="valueFloor")return nbaValueScore(p,cardStore[p.id]?.stars,"floor");
         if(sort==="valueCeiling")return nbaValueScore(p,cardStore[p.id]?.stars,"ceiling");
-        if(sort==="raw")return p.weighted;
+        if(sort==="raw")return engineV3For(p)?.ppRaw??p.expected;
         if(sort==="q80")return estimatedQ80(p);
         if(sort==="historical70")return historical70Plus(p);
         if(sort==="l5")return p.last5Avg;
@@ -498,6 +531,7 @@ function BuilderWorkspace({sport,league,availability,availabilityById,players,ca
           const recommended=sport==="football"?smartCaptain(base,availabilityById,team.captainMode??"projection"):null;
           const missing=Math.max(0,5-team.selection.filter(Boolean).length);
           const multiCount=sport==="nba"?result.picks.filter(p=>gamesFor(p.player.team).length>=2).length:0;
+          const v3Totals=sumConditionalScores(result.picks);
           const teamAvailabilityAlerts=team.selection.filter((id):id is string=>!!id).map(id=>({id,report:availabilityById[id],player:byId.get(id)})).filter(({report})=>report&&(report.status==="out"||report.status==="doubtful"||report.status==="questionable"));
           const confirmedOuts=teamAvailabilityAlerts.filter(({report})=>report?.status==="out");
           const nonOwnedCount=onlyMyCards?team.selection.filter((id):id is string=>!!id).filter(id=>!isInSelectedCollection(id,cardStore,true,verifiedOwnedReady)).length:0;
@@ -507,7 +541,7 @@ function BuilderWorkspace({sport,league,availability,availabilityById,players,ca
               <button type="button" className="v23-collapse" onClick={()=>changeTeam(team.id,t=>({...t,collapsed:!t.collapsed}))} aria-label={`Team ${teamIndex+1} ${team.collapsed?"ausklappen":"einklappen"}`}>{team.collapsed?"▸":"⌄"}</button>
               <button type="button" className="v23-team-name" onClick={()=>{setActiveTeamId(team.id);setActiveSlot(null);}}>TEAM {teamIndex+1}</button>
               <span className={`v23-team-state ${confirmedOuts.length?"bad":result.valid?"good":result.errors.length?"bad":"idle"}`} title={result.errors.join(" · ")||"Noch nicht vollständig"}>{confirmedOuts.length?`⚠ ${confirmedOuts.length} OUT`:result.valid?"✓ Gültig":result.errors.length?"! Prüfen":`${result.picks.length}/5`}</span>
-              <div className="v23-team-score"><span>{sport==="nba"?"STERNE":"PS"}<b className={sport==="nba"&&result.starsUsed>16?"danger":""}>{sport==="nba"?fmt(result.starsUsed):short(result.projectedScore)}</b></span><span>PROG.<b>{fmt(result.projectedScore)}</b></span><label>ZIEL<input type="number" min="1" max="10000" placeholder={targetScore===null?"—":String(targetScore)} value={team.goal??""} aria-label={`Zielscore Team ${teamIndex+1}`} onChange={e=>changeTeam(team.id,t=>({...t,goal:e.target.value?Math.max(1,Math.min(10000,Number(e.target.value))):null}))}/></label></div>
+              <div className="v23-team-score"><span>{sport==="nba"?"STERNE":"PS"}<b className={sport==="nba"&&result.starsUsed>16?"danger":""}>{sport==="nba"?fmt(result.starsUsed):short(result.projectedScore)}</b></span><span title="Erwartete Punkte mit Einsatzrisiko; nicht PP bei Einsatz">RISIKO-PP<b>{fmt(result.projectedScore)}</b></span>{v3Totals&&<span title="Summe der individuellen Q80 inklusive gewähltem Kartenbonus. Nicht das 80. Perzentil der gesamten Teamverteilung.">Σ Q80<b>{fmt(v3Totals.q80)}</b></span>}<label>ZIEL<input type="number" min="1" max="10000" placeholder={targetScore===null?"—":String(targetScore)} value={team.goal??""} aria-label={`Zielscore Team ${teamIndex+1}`} onChange={e=>changeTeam(team.id,t=>({...t,goal:e.target.value?Math.max(1,Math.min(10000,Number(e.target.value))):null}))}/></label></div>
               <div className="v23-team-tools"><button type="button" onClick={()=>autoFill(team.id)} title="Nur freie Slots ergänzen – vorhandene Spieler bleiben stehen">✦</button><button type="button" onClick={()=>cloneTeam(team.id)} title="Team duplizieren">⧉</button><button type="button" onClick={()=>void copyTeam(team.id)} title="Team kopieren">▣</button><button type="button" onClick={()=>clearTeam(team.id)} title="Team leeren">⌫</button>{teams.length>1&&<button type="button" onClick={()=>removeTeam(team.id)} title="Team löschen">×</button>}</div>
             </div>
             {!team.collapsed&&<>
@@ -520,6 +554,7 @@ function BuilderWorkspace({sport,league,availability,availabilityById,players,ca
                   const games=player?gamesFor(player.team):[];
                   const matchup=player?assessMatchup(player.opponent,matchupRatings,sport):null;
                   const report=player?availabilityById[player.id]:undefined;
+                  const selectedArt=player?chooseCardAsset(playerAssets(player.id),team.assetIds?.[player.id])?.pictureUrl:null;
                   return <article key={`${slot}-${index}`} className={`v23-card v24-card ${player?"filled":"empty"} ${isSelected?"focused":""} ${locked?"v24-locked":""} ${dragHere?"v24-drop-target":""} ${tapSource?"v25-tap-ready":""} ${report?.status==="out"?"v26-card-out":report?.status==="questionable"?"v26-card-questionable":""}`}
                     draggable={!!player&&!locked} onDragStart={event=>player&&beginDrag(event,{kind:"slot",playerId:player.id,teamId:team.id,slot:index})}
                     onDragEnd={()=>{dragRef.current=null;setDragTarget(null);}}
@@ -528,20 +563,24 @@ function BuilderWorkspace({sport,league,availability,availabilityById,players,ca
                     onDrop={event=>dropOnSlot(event,team.id,index)}>
                     <div className="v23-card-top"><span>{sport==="nba"?`#${index+1}`:({GK:"TW",DEF:"VER",MID:"MF",FWD:"ST",FLEX:"EX"} as Record<string,string>)[slot]}</span>{sport==="football"&&player&&<button type="button" className={`v29-crown ${captain===player.id?"active":""}`} aria-pressed={captain===player.id} aria-label={`${player.name} als Kapitän auswählen, 50 Prozent Bonus`} title={captain===player.id?"Kapitän · +50 % (fest)":"Diesen Spieler zum Kapitän machen"} onClick={()=>changeTeam(team.id,t=>({...t,captainId:player.id}))}>👑</button>}<div><button type="button" aria-label={`Slot ${index+1} wählen`} onClick={()=>{if(tapSource){tapTransfer(team.id,index);}else{setActiveTeamId(team.id);setActiveSlot(index);setMsg("");}}} title={tapSource?"Ausgewählten Spieler hierhin übertragen":"Slot wählen"}> {tapSource?"◎":"✎"}</button>{player&&<><button type="button" className={tapSource?.teamId===team.id&&tapSource.slot===index?"v25-active-action":""} title="Spieler zum Kopieren oder Verschieben per Klick auswählen (auch auf Mobilgeräten)" aria-label={`${player.name} für Teamtransfer wählen`} onClick={()=>{setTapSource({teamId:team.id,slot:index,playerName:player.name});setActiveTeamId(team.id);}}>⤴</button><button type="button" className={locked?"v24-lock-active":""} title={locked?"Spieler entsperren":"Spieler in diesem Team fixieren"} aria-label={`${player.name} ${locked?"entsperren":"fixieren"}`} aria-pressed={locked} onClick={()=>toggleLock(team.id,player.id)}>{locked?"🔒":"♧"}</button><button type="button" title="Quick Swap: passende Alternativen zeigen" aria-label={`Quick Swap für ${player.name}`} onClick={()=>{setActiveTeamId(team.id);setActiveSlot(index);setSwapTarget(v=>v?.teamId===team.id&&v.slot===index?null:{teamId:team.id,slot:index});setPreviewSwapId(null);}}>⇄</button><button type="button" title={cardStore[player.id]?.excluded?"Spieler freigeben":"Spieler für den Auto-Builder sperren"} aria-label={`${player.name} für Auto-Builder ${cardStore[player.id]?.excluded?"freigeben":"sperren"}`} disabled={locked} onClick={()=>{updateCard(player.id,{excluded:!cardStore[player.id]?.excluded,locked:false});setMsg("Auto-Builder-Sperre aktualisiert. Der Spieler bleibt in diesem manuellen Team, bis du ihn entfernst.");}}>⊘</button><button type="button" aria-label={`${player.name} entfernen`} disabled={locked} onClick={()=>changeTeam(team.id,t=>({...t,selection:t.selection.map((id,i)=>i===index?null:id),locks:t.locks.filter(v=>v!==player.id)}))}>−</button></>}</div></div>
                     {player?<>
-                      {sorarePlayerUrl(sport,player.id)?<a href={sorarePlayerUrl(sport,player.id)!} target="_blank" rel="noopener noreferrer" className="v23-portrait" title={`Offizielles Sorare-Profil: ${player.name}`}><Avatar player={player}/></a>
-                        :<button type="button" className="v23-portrait" onClick={()=>{setIntelId(player.id);setActiveTeamId(team.id);}} title={`${player.name} Details öffnen`}><Avatar player={player}/></button>}
+                      {sorarePlayerUrl(sport,player.id)?<a href={sorarePlayerUrl(sport,player.id)!} target="_blank" rel="noopener noreferrer" className="v23-portrait" title={`Offizielles Sorare-Profil: ${player.name}`}><OfficialCardArt url={selectedArt} player={player}/></a>
+                        :<button type="button" className="v23-portrait" onClick={()=>{setIntelId(player.id);setActiveTeamId(team.id);}} title={`${player.name} Details öffnen`}><OfficialCardArt url={selectedArt} player={player}/></button>}
                       {sorarePlayerUrl(sport,player.id)?<a className="v23-player-name" href={sorarePlayerUrl(sport,player.id)!} target="_blank" rel="noopener noreferrer" title={`Sorare-Profil ${player.name}`}>{player.name} ↗</a>
                         :<button type="button" className="v23-player-name" onClick={()=>{setIntelId(player.id);setActiveTeamId(team.id);}} title={player.name}>{player.name}</button>}
                       <button type="button" className="v40-player-info" aria-label={`${player.name} interne Prognose öffnen`} onClick={()=>{setIntelId(player.id);setActiveTeamId(team.id);}}>ⓘ Daten</button>
                       <span className="v23-role">{positionNames[player.position]??player.position}</span>
                       <AvailabilityBadge report={report}/>
                       {sport==="nba"&&<span className={`v25-game-label ${games.length>=2?"v25-multi":games.length?"v25-single":"v25-unknown"}`} title={`Bestätigte Spiele im ${gameWindow}-Tage-Fenster, keine offizielle Sorare-Gameweek`}>{games.length?multiGameLabel(games.length):"Kein Spielplan"}</span>}
-                      <MatchupPill opponent={player.opponent} ratings={matchupRatings} sport={sport}/>
+                      <MatchupPill opponent={player.opponent} ratings={matchupRatings} sport={sport}/><OpponentLogo player={player} url={opponentLogoFor(player)}/>
                       <div className="v23-mini-grid">
                         {sport==="nba"?<><MiniStat label="L5" value={player.last5Avg===null?"—":short(player.last5Avg)}/><MiniStat label="Ø" value={player.avg===null?"—":short(player.avg)}/><MiniStat label="★" tone="star" value={isValidNbaStars(cardStore[player.id]?.stars)?fmt(cardStore[player.id]!.stars!):"—"}/></>
                           :<><MiniStat label="Einsatz*" value={`${short(player.playProb*100)}%`} tone={player.playProb<.65?"warn":"good"}/><MiniStat label="L5" value={player.last5Avg===null?"—":short(player.last5Avg)}/><MiniStat label="Bonus" tone="star" value={`+${base.slots[index]?.bonusPercent??0}%`}/></>}
                       </div>
-                      <div className="v23-mini-grid second"><MiniStat label="Prognose" value={pick?fmt(pick.projectedScore):"—"}/><MiniStat label="Floor" value={pick?fmt(pick.floorScore):"—"}/><MiniStat label="Ceiling" value={pick?fmt(pick.ceilingScore):"—"}/></div>
+                      <div className="v23-mini-grid second">{pick&&conditionalCardScore(player,pick.bonusPercent)?<>
+                        <MiniStat label="PP bei Einsatz" value={fmt(conditionalCardScore(player,pick.bonusPercent)!.pp)}/>
+                        <MiniStat label="Q80 · Karte" tone="star" value={fmt(conditionalCardScore(player,pick.bonusPercent)!.q80)}/>
+                        <MiniStat label="Risiko-PP" value={fmt(pick.projectedScore)}/>
+                      </>:<><MiniStat label="Risiko-PP" value={pick?fmt(pick.projectedScore):"—"}/><MiniStat label="Floor*" value={pick?fmt(pick.floorScore):"—"}/><MiniStat label="Risiko-Ceiling*" value={pick?fmt(pick.ceilingScore):"—"}/></>}</div>
                       {sport==="nba"&&<span className="v293-sorare-bonus">Kartenbonus +{fmt(base.slots[index]?.bonusPercent??0)} % {playerAssets(player.id).some(c=>typeof c.bonusPercent==="number")?"· Sorare":"· Manuell / Bonus nicht verfügbar"}</span>}
                       <Bars player={player} compact/>
                       {sport==="football"&&captain===player.id&&<span className="v29-captain-glow">👑 CAPTAIN · +50 % · +{fmt(captainExtra(base,captain))} PS</span>}
@@ -574,7 +613,7 @@ function BuilderWorkspace({sport,league,availability,availabilityById,players,ca
                 <div className="v24-goal-track"><span style={{width:`${meter.percentage}%`}}/></div>
                 <small>{result.valid&&result.targetProbability!==null?`Geschätzte Zielchance ${short(result.targetProbability*100)} % · nicht kalibriert`:"Zielchance erst mit einem gültigen Team und belastbaren Sorare-Daten"}</small>
               </div>}
-              <footer className="v23-team-footer"><span><b>{result.picks.length}/5</b> Spieler</span><span>Floor <b>{fmt(result.floorScore)}</b></span>{sport==="nba"&&<span className={multiCount?"v25-multi-text":""}>{multiCount} Mehrfachspieler / {gameWindow} T.</span>}<span>Ceiling <b>{fmt(result.ceilingScore)}</b></span>{sport==="nba"&&<span>Budget <b className={result.starsUsed>16?"v23-danger":""}>{fmt(result.starsUsed)}/16 ★</b></span>}<span>Zielchance* <b>{result.targetProbability===null?"—":`${short(result.targetProbability*100)} %`}</b></span></footer>
+              <footer className="v23-team-footer"><span><b>{result.picks.length}/5</b> Spieler</span><span>Floor <b>{fmt(result.floorScore)}</b></span>{sport==="nba"&&<span className={multiCount?"v25-multi-text":""}>{multiCount} Mehrfachspieler / {gameWindow} T.</span>}<span title="Einsatzrisiko-gewichtetes Ceiling, NICHT Q80">Risiko-Ceiling* <b>{fmt(result.ceilingScore)}</b></span>{v3Totals&&<span title="Summe der individuellen Q80-Werte, inklusive Kartenboni. Kein echtes Team-80%-Perzentil.">Σ Q80 (bei Einsatz) <b>{fmt(v3Totals.q80)}</b></span>}{sport==="nba"&&<span>Budget <b className={result.starsUsed>16?"v23-danger":""}>{fmt(result.starsUsed)}/16 ★</b></span>}<span>Zielchance* <b>{result.targetProbability===null?"—":`${short(result.targetProbability*100)} %`}</b></span></footer>
               {active&&sport==="nba"&&<div className="v25-multi-note">▣ <strong>{multiCount} Spieler mit 2+ Spielen</strong> im {gameWindow}-Tage-Fenster. Nur der beste Einzelspiel-Score zählt in entsprechenden NBA-Gameweek-Wettbewerben; kein automatischer Bonus für Arcade. Die Anzeige ersetzt keine Prüfung der offiziellen Gameweek-Berechtigung.</div>}
               {active&&<details className={`v24-risk-radar ${result.errors.length||confirmedOuts.length?"v24-risk-critical":riskCount?"v24-risk-warning":"v24-risk-clear"}`} open={result.errors.length>0||confirmedOuts.length>0}>
                 <summary><span>◈ LINEUP RISK RADAR</span><b>{result.errors.length?`${result.errors.length} Regelprobleme`:missing?`${missing} freie Slots · ${riskCount} Hinweise`:riskCount?`${riskCount} Hinweise`:"Keine Warnungen"}</b></summary>
@@ -629,7 +668,7 @@ function BuilderWorkspace({sport,league,availability,availabilityById,players,ca
         <div className="v35-quickfilters" role="group" aria-label="Quick Filters"><button type="button" className={matchdayReady?"active":""} aria-pressed={matchdayReady} onClick={toggleMatchdayReady}>⚡ Matchday Ready</button><button type="button" className={pool==="favorites"?"active":""} aria-pressed={pool==="favorites"} onClick={()=>setPool(v=>v==="favorites"?"all":"favorites")}>★ Favoriten</button><button type="button" className={pool==="healthy"?"active":""} aria-pressed={pool==="healthy"} onClick={()=>setPool(v=>v==="healthy"?"all":"healthy")}>✓ Gute Datenlage</button>{sport==="nba"&&<button type="button" className={valueFilter!=="all"?"active":""} aria-pressed={valueFilter!=="all"} onClick={()=>{setValueFilter(v=>v==="all"?"projection":"all");setSort("value");setSortDescending(true);}}>★ NBA Value</button>}<button type="button" onClick={()=>{setPool("all");setValueFilter("all");setPosition("all");setAvailabilityFilter("all");setMultiOnly(false);setQuery("");setMatchdayReady(false);}}>× Filter zurücksetzen</button></div>
         <div className="v23-pool-filters v292-pool-filters">
           <input type="search" aria-label="Spieler oder Team suchen" placeholder="⌕ Spieler, Team oder Gegner suchen …" value={query} onChange={e=>setQuery(e.target.value)}/>
-          <label className="v292-sort-label"><span>Sortieren</span><select aria-label="Spieler sortieren" value={sort} onChange={e=>setSort(e.target.value as PoolSort)}><option value="weighted">Prognose</option><option value="raw">PS Raw (ohne Bonus)</option><option value="q80">Q80 Modellschätzung*</option><option value="historical70">Historisch 70+ %</option><option value="ceiling">Ceiling (inkl. Einsatz)</option><option value="floor">Floor (inkl. Einsatz)</option><option value="upside">Upside (Ceiling − Prognose)</option><option value="l5">L5-Form</option><option value="l10">L10-Form</option><option value="play">Einsatzchance / Risiko</option><option value="kickoff">Nächstes Spiel</option>{sport==="nba"&&<><option value="stars">Sterne</option><option value="value">Prognose / Stern</option><option value="valueFloor">Floor / Stern</option><option value="valueCeiling">Ceiling / Stern</option><option value="games">Mehrfachspiele</option></>}<option value="matchup">Günstiges Matchup</option><option value="name">Name A–Z</option></select></label>
+          <label className="v292-sort-label"><span>Sortieren</span><select aria-label="Spieler sortieren" value={sort} onChange={e=>setSort(e.target.value as PoolSort)}><option value="weighted">Prognose</option><option value="raw">PP Raw (bei Einsatz)</option><option value="q80">Q80 Modellschätzung*</option><option value="historical70">Historisch 70+ %</option><option value="ceiling">Ceiling (Risiko-gewichtet)</option><option value="floor">Floor (inkl. Einsatz)</option><option value="upside">Upside (Ceiling − Prognose)</option><option value="l5">L5-Form</option><option value="l10">L10-Form</option><option value="play">Einsatzchance / Risiko</option><option value="kickoff">Nächstes Spiel</option>{sport==="nba"&&<><option value="stars">Sterne</option><option value="value">Prognose / Stern</option><option value="valueFloor">Floor / Stern</option><option value="valueCeiling">Ceiling / Stern</option><option value="games">Mehrfachspiele</option></>}<option value="matchup">Günstiges Matchup</option><option value="name">Name A–Z</option></select></label>
           <button type="button" className="v291-sort-direction" onClick={()=>setSortDescending(v=>!v)} aria-label={sortDescending?"Sortierrichtung umkehren: aufsteigend":"Sortierrichtung umkehren: absteigend"} title="Sortierrichtung wechseln">{sort==="name"?(sortDescending?"A–Z":"Z–A"):sort==="kickoff"?(sortDescending?"Früh zuerst":"Spät zuerst"):(sortDescending?"↓ Absteigend":"↑ Aufsteigend")}</button>
           <details className="v292-pool-more"><summary>Mehr Filter ⌄</summary><div>
             <select aria-label="Position filtern" value={position} onChange={e=>setPosition(e.target.value)}><option value="all">Alle Positionen</option>{(sport==="nba"?["G","F","C"]:["GK","DEF","MID","FWD"]).map(pos=><option key={pos} value={pos}>{positionNames[pos]}</option>)}</select>
@@ -694,7 +733,7 @@ function BuilderWorkspace({sport,league,availability,availabilityById,players,ca
           (horizon==="today"||horizon==="tomorrow")?`Keine bestätigten Spiele für ${activeCalendarDay??"den ausgewählten Tag"} im geladenen ${sport==="nba"?"NBA":"Fußball"}-Pool. Prüfe Liga, Kartenfilter und Spielplan oder wähle einen größeren Zeitraum.`:
           onlyMyCards?"Keine passenden Karten aus deiner synchronisierten Sammlung. Prüfe die Synchronisierung unter ‚Meine Karten‘ oder den gewählten Verein / die Liga.":"Keine passenden Spieler im aktuell geladenen Pool. Prüfe Liga, Filter, Slotposition oder Spieltermin."}</div>}
         {showCount<sortedPlayers.length&&<button className="v23-load-more" type="button" onClick={()=>setShowCount(count=>count+40)}>Weitere 40 Spieler anzeigen · {sortedPlayers.length-showCount} verbleiben ↓</button>}
-        <div className="v23-pool-foot"><span>V4.0.3: PP Raw und Q80 Raw gelten bei Einsatz ohne Kartenbonus. Bei V3 kommt der Kartenbonus nach der Prognose hinzu; Auto-Builder und Team-Ceiling berücksichtigen weiterhin das Einsatzrisiko. Alte V2-Q80-Werte benötigen mindestens 8 Einzelscores. Q80 und P70/P80 sind noch nicht kalibriert. 70+ historisch ist eine Vergangenheitsquote, keine Prognose. Fehlende P70/P80-/xG-/xGA-/G/A-/WIN-/Startelf-/CS-Daten bleiben bewusst „—". Ausfallstatus aus externen Meldungen, mit Quellenangabe. Keine Meldung = unbekannt, nicht gesund. Die angezeigte Einsatzwahrscheinlichkeit, Floor/Ceiling und Zielchance sind <b>Modellschätzungen</b>. Gegnerstärke: {matchupSource??"manuelle Bewertung oder unbekannt"}, 1 = günstig, 5 = schwierig. Mehrfachspiele beziehen sich auf das gewählte Zeitfenster – nicht auf eine bestätigte Arcade-Gameweek. Keine Summierung der NBA-Einzelspiel-Scores.</span><button type="button" onClick={()=>{
+        <div className="v23-pool-foot"><span>V4.0.4: PP Raw und Q80 Raw gelten bei Einsatz ohne Kartenbonus. Bei V3 kommt der Kartenbonus nach der Prognose hinzu; Auto-Builder und Team-Ceiling berücksichtigen weiterhin das Einsatzrisiko. Alte V2-Q80-Werte benötigen mindestens 8 Einzelscores. Q80 und P70/P80 sind noch nicht kalibriert. 70+ historisch ist eine Vergangenheitsquote, keine Prognose. Fehlende P70/P80-/xG-/xGA-/G/A-/WIN-/Startelf-/CS-Daten bleiben bewusst „—". Ausfallstatus aus externen Meldungen, mit Quellenangabe. Keine Meldung = unbekannt, nicht gesund. Die angezeigte Einsatzwahrscheinlichkeit, Floor/Ceiling und Zielchance sind <b>Modellschätzungen</b>. Gegnerstärke: {matchupSource??"manuelle Bewertung oder unbekannt"}, 1 = günstig, 5 = schwierig. Mehrfachspiele beziehen sich auf das gewählte Zeitfenster – nicht auf eine bestätigte Arcade-Gameweek. Keine Summierung der NBA-Einzelspiel-Scores.</span><button type="button" onClick={()=>{
           if(!currentResult?.picks.length){setMsg("Zum Speichern zuerst Spieler auswählen.");return;}
           onSavePredictions(currentResult.picks.map(p=>p.player));setMsg("Prognosen des aktiven Teams im Forecast Lab gespeichert.");
         }}>Prognosen sichern ↗</button></div>
