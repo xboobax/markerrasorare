@@ -97,7 +97,8 @@ export function footballStatLine(labels:unknown,values:unknown):FootballLiveStat
   const columns=arr(labels).map(v=>str(v).toUpperCase().replace(/[^A-Z0-9 ]/g,'').trim());
   const fields=arr(values);if(!columns.length||!fields.length)return null;
   const stats=defaultFootballStats();
-  const take=(keys:string[])=>{const idx=columns.findIndex(k=>keys.includes(k));return idx<0?null:count(fields[idx]);};
+  // Blank, DNP and dash cells are missing observations, never statistical zeroes.
+  const take=(keys:string[])=>{const idx=columns.findIndex(k=>keys.includes(k));return idx<0?null:numeric(fields[idx]);};
   const miIndex=columns.findIndex(k=>aliases.minutes.includes(k));stats.minutes=miIndex<0?null:parseFootballStatMinutes(fields[miIndex]);
   (Object.keys(aliases) as Array<Exclude<keyof FootballLiveStats,'sorareEvents'|'reportedFields'|'observedFields'>>).forEach(key=>{if(key==='minutes')return;const v=take(aliases[key]);if(v!==null)stats[key]=v as never;});
   const sorareEvents:SorareScoringInputs={};
@@ -107,9 +108,44 @@ export function footballStatLine(labels:unknown,values:unknown):FootballLiveStat
   }
   stats.sorareEvents=sorareEvents;
   stats.reportedFields=Object.keys(sorareEvents);
-  stats.observedFields=(Object.entries(aliases) as Array<[Exclude<keyof FootballLiveStats,'sorareEvents'|'reportedFields'|'observedFields'>,string[]]>).filter(([_,names])=>columns.some(column=>names.includes(column))).map(([name])=>name);
+  stats.observedFields=(Object.entries(aliases) as Array<[Exclude<keyof FootballLiveStats,'sorareEvents'|'reportedFields'|'observedFields'>,string[]]>).filter(([_,names])=>columns.some((column,i)=>names.includes(column)&&numeric(fields[i])!==null)).map(([name])=>name);
   const hasAny=(Object.keys(stats) as Array<keyof FootballLiveStats>).some(key=>typeof stats[key]==='number'&&key!=='minutes'&&(stats[key] as number)>0);
   return stats.minutes!==null||hasAny||stats.reportedFields.length>0?stats:null;
+}
+/** Some ESPN soccer summaries expose their statistics under roster entries or
+ * named athlete objects rather than boxscore.players[].statistics[].athletes[].
+ * Only explicitly named, numeric cells are accepted; no invented 0 values.
+ */
+export function footballNamedStatLine(source:unknown):FootballLiveStats|null{
+  const named:{label:string;value:unknown}[]=[];
+  if(Array.isArray(source)){
+    for(const entry of source){const item=obj(entry);const label=str(item.abbreviation)||str(item.name)||str(item.label)||str(item.displayName);
+      const value=item.value??item.displayValue??item.stat;
+      if(label&&value!==undefined)named.push({label,value});}
+  }else if(source&&typeof source==='object'){
+    for(const [label,value] of Object.entries(obj(source))){
+      if(value!==null&&(typeof value==='string'||typeof value==='number'))named.push({label,value});
+    }
+  }
+  return named.length?footballStatLine(named.map(v=>v.label),named.map(v=>v.value)):null;
+}
+const observedPerformance=(stats:FootballLiveStats|null):boolean=>Boolean(stats&&(
+  (stats.minutes??0)>0 ||
+  (stats.observedFields??[]).some(k=>k!=='minutes'&&Number((stats as unknown as Record<string,unknown>)[k])>0)||
+  Object.values(stats.sorareEvents??{}).some(v=>typeof v==='number'&&v>0)
+));
+/** Combine observed stat categories; keep original observed-field indicators. */
+function combineFootballStats(left:FootballLiveStats|null,right:FootballLiveStats|null):FootballLiveStats|null{
+  if(!right)return left;
+  const result=left?{...left}:defaultFootballStats();
+  for(const key of Object.keys(result) as Array<keyof FootballLiveStats>){
+    if(key==='minutes'){result.minutes=right.minutes??result.minutes;continue;}
+    if(typeof result[key]==='number'&&typeof right[key]==='number')result[key]=Math.max(result[key] as number,right[key] as number) as never;
+  }
+  result.sorareEvents={...(result.sorareEvents??{}),...(right.sorareEvents??{})};
+  result.reportedFields=Array.from(new Set([...(result.reportedFields??[]),...(right.reportedFields??[])]));
+  result.observedFields=Array.from(new Set([...(result.observedFields??[]),...(right.observedFields??[])]));
+  return result;
 }
 const posOrder=(raw:string|null)=>{const p=(raw||'').toUpperCase();if(/^GK|GOAL/.test(p))return 1;if(/^(DEF|D|CB|LB|RB|WB)/.test(p))return 2;if(/^(MID|M|DM|CM|AM)/.test(p))return 3;if(/^(FWD|F|ST|ATT|W)/.test(p))return 4;return 5;};
 export function sorareFootballEstimate(stats:FootballLiveStats,position:string|null):FootballScoreEstimate{
@@ -136,18 +172,9 @@ export function parseEspnFootballPlayers(raw:unknown,game:FootballLiveGame):Foot
         const a=obj(row),athlete=obj(a.athlete);const id=str(athlete.id);if(!id)continue;
         const name=str(athlete.displayName)||str(athlete.fullName);if(!name)continue;
         const note=str(a.didNotPlayReason)||str(a.reason)||str(a.status);const didNotPlay=Boolean(a.didNotPlay)||/DNP|OUT|INACTIVE|DID NOT/i.test(note);
-        const statPart=didNotPlay?null:footballStatLine(labels,a.stats);const base=players.get(id)??{id,name,shortName:str(athlete.shortName)||name.split(' ').slice(-1)[0],headshot:validPhoto(obj(athlete.headshot).href)||validPhoto(obj(athlete).image),teamId,starter:a.starter===true||athlete.starter===true,played:false,position:str(obj(athlete.position).abbreviation)||str(a.position)||null,stats:null,score:null,status:didNotPlay?note||'DNP':null};
-        const merged=base.stats??defaultFootballStats();
-        if(statPart){
-          for(const key of Object.keys(merged) as Array<keyof FootballLiveStats>){
-            if(key==='minutes'){merged.minutes=statPart.minutes??merged.minutes;continue;}
-            if(typeof merged[key]==='number'&&typeof statPart[key]==='number')merged[key]=Math.max(merged[key] as number,statPart[key] as number) as never;
-          }
-        }
-        merged.sorareEvents={...(merged.sorareEvents??{}),...(statPart?.sorareEvents??{})};
-        merged.reportedFields=Array.from(new Set([...(merged.reportedFields??[]),...(statPart?.reportedFields??[])]));
-        merged.observedFields=Array.from(new Set([...(merged.observedFields??[]),...(statPart?.observedFields??[])]));
-        const played=!didNotPlay&&Boolean((merged.minutes??0)>0||merged.goals||merged.assists||merged.saves||merged.shotsOnTarget||merged.clearances||merged.tacklesWon||merged.interceptions);
+        const statPart=didNotPlay?null:(Array.isArray(a.stats)?footballStatLine(labels,a.stats):null)??footballNamedStatLine(a.statistics??a.stats);const base=players.get(id)??{id,name,shortName:str(athlete.shortName)||name.split(' ').slice(-1)[0],headshot:validPhoto(obj(athlete.headshot).href)||validPhoto(obj(athlete).image),teamId,starter:a.starter===true||athlete.starter===true,played:false,position:str(obj(athlete.position).abbreviation)||str(a.position)||null,stats:null,score:null,status:didNotPlay?note||'DNP':null};
+        const merged=combineFootballStats(base.stats,statPart);
+        const played=!didNotPlay&&observedPerformance(merged);
         const finalStats=played||statPart?merged:null;
         const finalPosition=base.position||str(obj(athlete.position).abbreviation)||null;
         players.set(id,{...base,starter:base.starter||a.starter===true||athlete.starter===true,position:finalPosition,stats:finalStats,played,status:didNotPlay?note||'DNP':base.status,score:finalStats&&played?sorareFootballEstimate(finalStats,finalPosition):null});
@@ -167,16 +194,29 @@ export function parseEspnFootballPlayers(raw:unknown,game:FootballLiveGame):Foot
       if(!id||!name)continue;
       const starter=entry.starter===true||athlete.starter===true;
       const note=str(entry.didNotPlayReason)||str(entry.status);
+      const didNotPlay=Boolean(entry.didNotPlay)||/DNP|OUT|INACTIVE|DID NOT/i.test(note);
+      // Prefer explicitly labelled roster statistics when the traditional
+      // boxscore is missing; a bare lineup entry is never a performance.
+      const groupLabels=group.labels??group.names;
+      const arrayCells=Array.isArray(entry.stats)&&entry.stats.some((v:unknown)=>typeof v==='string'||typeof v==='number');
+      const rosterStats=didNotPlay?null:(arrayCells?footballStatLine(groupLabels,entry.stats):null)
+        ??footballNamedStatLine(entry.statistics??entry.stats??athlete.statistics);
       const existing=players.get(id);
       if(existing){
+        const merged=combineFootballStats(existing.stats,rosterStats);
+        const played=!didNotPlay&&(existing.played||observedPerformance(merged));
+        const position=existing.position||str(obj(athlete.position).abbreviation)||str(obj(entry.position).abbreviation)||null;
         players.set(id,{...existing,starter:existing.starter||starter,
           headshot:existing.headshot||validPhoto(obj(athlete.headshot).href)||null,
-          position:existing.position||str(obj(athlete.position).abbreviation)||str(obj(entry.position).abbreviation)||null});
+          position,played,stats:merged,status:didNotPlay?note||'DNP':existing.status,
+          score:merged&&played?sorareFootballEstimate(merged,position):null});
       }else{
+        const position=str(obj(athlete.position).abbreviation)||str(obj(entry.position).abbreviation)||null;
+        const played=!didNotPlay&&observedPerformance(rosterStats);
         players.set(id,{id,name,shortName:str(athlete.shortName)||name.split(' ').slice(-1)[0],
-          headshot:validPhoto(obj(athlete.headshot).href)||null,teamId,starter,played:false,
-          position:str(obj(athlete.position).abbreviation)||str(obj(entry.position).abbreviation)||null,
-          stats:null,score:null,status:note||null});
+          headshot:validPhoto(obj(athlete.headshot).href)||null,teamId,starter,played,
+          position,stats:rosterStats,score:rosterStats&&played?sorareFootballEstimate(rosterStats,position):null,
+          status:note||null});
       }
     }
   }
