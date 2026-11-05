@@ -35,6 +35,20 @@ export async function v45SavePerformances(sport:Sport,raw:V45Performance[]):Prom
     RETURNING sport`,[JSON.stringify(input)]);
   return result.length;
 }
+/** Read a recent window of already persisted football FINAL games. The primary
+ * key (sport, competition, game_id, player_id) makes repeated writes safe.
+ * Competition+game ID is used to avoid assuming IDs are global across sports.
+ */
+export async function v455ArchivedFootballGames(firstBerlinDay:string):Promise<Set<string>>{
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(firstBerlinDay))throw Error('Ungültiges Nachimportdatum');
+  // A Berlin-local game can start on the previous UTC date; include one day
+  // of safety margin. Only recent archive rows are inspected.
+  const earliestUtc=new Date(Date.parse(`${firstBerlinDay}T00:00:00Z`)-86400000).toISOString();
+  const rows=await query(`SELECT DISTINCT competition,game_id
+    FROM learning_v45_player_performances
+    WHERE sport='football' AND fixture_start >= $1::timestamptz`,[earliestUtc]);
+  return new Set(rows.map((r:any)=>`${String(r.competition)}:${String(r.game_id)}`));
+}
 export type V45RecentPerformance={player:string;team:string;competition:string;fixtureStart:string;minutes:number|null;
   started:boolean|null;stats:Record<string,number>;reportedFields:string[]};
 export async function v45PerformanceReport(sport:Sport):Promise<{summary:V45PerformanceSummary;recent:V45RecentPerformance[]}>{

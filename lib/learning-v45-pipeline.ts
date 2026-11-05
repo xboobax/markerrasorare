@@ -8,7 +8,8 @@ import {nbaLiveScoreboard,nbaLiveGame} from './nba-live-server';
 import {footballLiveScoreboard,footballLiveGame} from './football-live-server';
 import {FOOTBALL_COMPETITIONS,type FootballLeagueKey} from './football-competitions';
 import {v45NbaObservations,v45FootballObservations,type V45Performance} from './learning-v45-performance';
-import {v45SavePerformances} from './learning-v45-db';
+import {v45SavePerformances,v455ArchivedFootballGames} from './learning-v45-db';
+import {v455FootballStatsDays,v455SelectPendingGames} from './learning-v455-backfill';
 import {v44SaveJob} from './learning-v44-db';
 
 export const NBA_STAT_SHARDS=5;
@@ -49,21 +50,33 @@ export async function v45NbaStats(shard:number,now=new Date()){
 }
 export async function v45FootballStats(batch:FootballStatBatch,now=new Date()){
   if(!validFootballStatBatch(batch))throw Error('Ungültiger Fußball-Statistik-Bereich.');
-  const today=localDay(now),days=[dayShift(today,-1),today];
+  const days=v455FootballStatsDays(batch,now);
   const competitions=FOOTBALL_STAT_BATCHES[batch] as readonly FootballLeagueKey[];
-  // Keep request fan-out modest: two days, max four concurrent scoreboards.
+  // At most 15 ESPN scoreboard requests for the Europe batch; all other
+  // batches stay at two days. No fixture or player data is invented.
   const input=competitions.flatMap(league=>days.map(day=>({league,day})));
-  const results=await inBatches(input,4,async({league,day})=>footballLiveScoreboard(day,league));
+  const results=await inBatches(input,5,async({league,day})=>footballLiveScoreboard(day,league));
   const available=results.filter((r):r is PromiseFulfilledResult<Awaited<ReturnType<typeof footballLiveScoreboard>>>=>r.status==='fulfilled');
   if(!available.length)throw Error('Fußball-Scoreboards nicht verfügbar');
   const found=new Map<string,Awaited<ReturnType<typeof footballLiveScoreboard>>['games'][number]>();
   for(const response of available)for(const game of response.value.games){if(game.status==='final')found.set(`${game.leagueKey}:${game.id}`,game);}
-  const games=Array.from(found.values()).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,12);
+  const allFinalGames=Array.from(found.values());
+  // DB-backed game-level dedupe makes catch-up spend its quota on unprocessed
+  // games instead of repeatedly consuming the first 12 results each day.
+  const archived=await v455ArchivedFootballGames(days[days.length-1]);
+  const games=v455SelectPendingGames(allFinalGames,archived);
   const details=await inBatches(games,3,async game=>v45FootballObservations(await footballLiveGame(game.id,game.leagueKey)));
   const all:V45Performance[]=details.flatMap(r=>r.status==='fulfilled'?r.value:[]);
   const saved=await v45SavePerformances('football',all);
-  const failures=results.filter(r=>r.status==='rejected').length+details.filter(r=>r.status==='rejected').length;
-  const message=`Football ${batch}: ${games.length} Final-Spiele, ${all.length} Spielerstatistiken, ${saved} aktualisiert, ${failures} Feedfehler.`;
+  const failedScoreboards=results.filter(r=>r.status==='rejected').length;
+  const failedDetails=details.filter(r=>r.status==='rejected').length;
+  const withoutUsableStats=details.filter(r=>r.status==='fulfilled'&&r.value.length===0).length;
+  const failures=failedScoreboards+failedDetails;
+  const alreadyArchived=allFinalGames.filter(g=>archived.has(`${g.leagueKey}:${g.id}`)).length;
+  const remaining=Math.max(0,allFinalGames.length-alreadyArchived-games.length);
+  const message=`Football ${batch}: ${allFinalGames.length} Final-Spiele (${days.length} Tage), ${alreadyArchived} bereits archiviert, ${games.length} geprüft, ${withoutUsableStats} ohne auswertbare Spielerwerte, ${all.length} Spielerstatistiken, ${saved} aktualisiert, ${remaining} offene Spiele, ${failures} Feedfehler.`;
   await v44SaveJob({scope:`v45:stats:football-${batch}`,at:now.toISOString(),ok:failures===0,count:saved,message});
-  return {sport:'football' as Sport,batch,games:games.length,players:all.length,saved,failures,message};
+  return {sport:'football' as Sport,batch,daysScanned:days,finalGames:allFinalGames.length,
+    alreadyArchived,inspectedGames:games.length,games:games.length,withoutUsableStats,
+    remaining,players:all.length,saved,failures,failedScoreboards,failedDetails,message};
 }
