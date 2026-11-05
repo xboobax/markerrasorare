@@ -234,3 +234,11 @@ Neu: Lineup Doctor (regelvalidierte Wechselideen), Hidden Gems Finder (NBA Punkt
 - NBA: Daily Picker Classic mit offizieller L10+7-Punkte-Regel und 20-Managerpunkte-Untergrenze, Prognoseabstand und historischen Treffern.
 - Berlin-Zeitraum Heute/Morgen sowie NBA +24h, verifizierte Startzeiten, Besitzfilter und Ausschluss bestätigter Ausfälle.
 - Kompakte Builder-Integration ohne fünften Haupt-Tab; zusätzliche Tests; Upstash optional wie bisher.
+
+### V4.4.0 – Separate Prediction Learning Engines (NBA / Football)
+- Neon PostgreSQL-Snapshots mit unveränderlichen V3-PP-/Q80-Werten vor Spielbeginn.
+- Automatische Sorare-FINAL-Abgleiche, strikte Sporttrennung und zeitlich getrennte Holdout-Kalibrierung.
+- Eigene sportweite PP- und Q80-Offsets; Aktivierung nur nach bestandenem Test und Freigabe.
+- NBA 3PM/3PA mit verifizierter Zuordnung zu Sorare-FINAL; historische Dreiertrends werden ohne Lookahead für zukünftige Modelle vorbereitet.
+- 20 gesicherte tägliche Vercel-Cronjobs, separates V4.4-Dashboard und unveränderter Basisbetrieb ohne Datenbank.
+- Einrichtung: UPDATE_V4_4_0_LEARNING_ENGINE_DE.md

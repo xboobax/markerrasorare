@@ -13,7 +13,7 @@ import HiddenGems from "@/app/components/hidden-gems";
 import DataHealthCenter from "@/app/components/data-health-center";
 import ArcadeIntelligenceLab from "@/app/components/arcade-intelligence-lab";
 import PredictionLabPro from "@/app/components/prediction-lab-pro";
-import PredictionLearningCloud from "@/app/components/prediction-learning-cloud";
+import PredictionLearningCloud from "@/app/components/prediction-learning-v44";
 import AutoBuilderSettings from "@/app/components/auto-builder-settings";
 import {initialV30State,restoreV30State,v30Key,v30ForTeam,limitLineupReuse,type BuilderV30State,type BuilderV30Settings} from "@/lib/builder-v30";
 import {buildArcadeIntelligence} from "@/lib/arcade-intelligence";
@@ -39,7 +39,7 @@ import { pendingForAutoCheck, type AutomaticResult } from "@/lib/tracking-auto";
 import {alignOpponentNames, type AutomaticMatchupData} from "@/lib/auto-matchups";
 import {buildForecastV18, pointsAtLeast, type ForecastV18} from "@/lib/forecast-v18";
 import {buildPredictionV2,backtestPredictionV2,type PredictionV2} from "@/lib/prediction-engine-v2";
-import {buildPredictionV3,withPredictionV3Bonus,evaluatePredictionV3,type PredictionV3} from "@/lib/prediction-engine-v3";
+import {buildPredictionV3,withPredictionV3Bonus,evaluatePredictionV3,withV44Calibration,type PredictionV3} from "@/lib/prediction-engine-v3";
 import {backtestForecasts} from "@/lib/backtesting";
 import {loadArchive, persistArchive} from "@/lib/prediction-db";
 import {parseWatchlist, toggleWatchlist, watchlistKey} from "@/lib/watchlist";
@@ -110,6 +110,14 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   },[]);
   const [compactExplorer,setCompactExplorer]=useState(true);
   const [showCloudLearning,setShowCloudLearning]=useState(false);
+  const [v44Model,setV44Model]=useState<{sport:Sport;ppOffset:number;q80Offset:number;version:number}|null>(null);
+  useEffect(()=>{const c=new AbortController();setV44Model(null);
+    fetch(`/api/learning-v44/model?sport=${sport}`,{signal:c.signal})
+      .then(r=>r.ok?r.json():null).then(data=>{if(!c.signal.aborted&&data?.model?.sport===sport&&
+        Number.isFinite(data.model.ppOffset)&&Number.isFinite(data.model.q80Offset))setV44Model(data.model);})
+      .catch(()=>{/* fail closed to unchanged V3 */});return ()=>c.abort();
+  },[sport]);
+
   const [gameweekOpen,setGameweekOpen]=useState(false);
   const [search, setSearch] = useState("");
   const deferredSearch=useDeferredValue(search);
@@ -495,15 +503,16 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   // player's expensive v1.8/v2 prediction. Cache per-player input signatures;
   // genuine scouting, opponent, roster or model changes still recompute as needed.
   type CachedPrediction=ScoutedForecast & {modelV18:ForecastV18;modelV2:PredictionV2;modelV3:PredictionV3;modelV3Active:boolean};
-  type PredictionEntry={base:Forecast;ratings:OpponentRatings;sport:Sport;mode:typeof modelMode;
+  type PredictionEntry={base:Forecast;ratings:OpponentRatings;sport:Sport;mode:typeof modelMode;calibrationKey:string;
     expectedMinutes?:number|null;typicalMinutes?:number|null;xg?:number|null;xa?:number|null;value:CachedPrediction};
+  const calibrationKey=v44Model&&v44Model.sport===sport?`${v44Model.version}:${v44Model.ppOffset}:${v44Model.q80Offset}`:'base';
   const predictionCache=useRef(new Map<string,PredictionEntry>());
   const players:CachedPrediction[] = useMemo(() => {
     const next=new Map<string,PredictionEntry>();
     const result=basePlayers.map(p => {
       const scouting=cardStore[p.id];
       const prior=predictionCache.current.get(p.id);
-      if(prior&&prior.base===p&&prior.ratings===effectiveRatings&&prior.sport===sport&&prior.mode===modelMode&&
+      if(prior&&prior.base===p&&prior.ratings===effectiveRatings&&prior.sport===sport&&prior.mode===modelMode&&prior.calibrationKey===calibrationKey&&
         prior.expectedMinutes===scouting?.expectedMinutes&&prior.typicalMinutes===scouting?.typicalMinutes&&
         prior.xg===scouting?.xg&&prior.xa===scouting?.xa){
         next.set(p.id,prior);
@@ -518,7 +527,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
     });
     const modelV18=buildForecastV18(scouted,sport);
     const modelV2=buildPredictionV2(scouted,sport);
-    const modelV3=buildPredictionV3(scouted,sport,modelV2);
+    const modelV3=withV44Calibration(buildPredictionV3(scouted,sport,modelV2),v44Model);
     const value={...scouted,modelV18,modelV2,modelV3,modelV3Active:modelMode==="v3",
       ...(modelMode === "v3" && modelV3.applicable ? {
         expected:modelV3.ppRaw!,weighted:modelV3.riskAdjustedPP!,
@@ -533,14 +542,14 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
         floor:modelV2.floor,ceiling:modelV2.ceiling,
         variability:modelV2.conditionalSd,confidence:modelV2.quality,
       } : {})};
-    next.set(p.id,{base:p,ratings:effectiveRatings,sport,mode:modelMode,
+    next.set(p.id,{base:p,ratings:effectiveRatings,sport,mode:modelMode,calibrationKey,
       expectedMinutes:scouting?.expectedMinutes,typicalMinutes:scouting?.typicalMinutes,
       xg:scouting?.xg,xa:scouting?.xa,value});
     return value;
     });
     predictionCache.current=next;
     return result;
-  }, [basePlayers, sport, effectiveRatings, cardStore,modelMode]);
+  }, [basePlayers, sport, effectiveRatings, cardStore,modelMode,calibrationKey,v44Model]);
   // Automatic snapshots are only taken for known fixture dates strictly in the
   // future; today's fixture lacks a trusted kickoff time and is not auto-saved.
   useEffect(()=>{
@@ -1137,7 +1146,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
           <div className="v39-reality-strip" aria-label="Prediction Reality Check">
             <strong>◈ Reality Check</strong><span>{realityCheck.matched} bestätigte Vor-Spiel-Paare · MAE {realityCheck.mae===null?'—':`${fmt(realityCheck.mae)} PS`} · Bias {realityCheck.bias===null?'—':`${fmt(realityCheck.bias)} PS`}</span><small>{realityCheck.message}</small>
           </div>
-          <div className="v35-optional-cloud"><button type="button" aria-expanded={showCloudLearning} onClick={()=>setShowCloudLearning(v=>!v)}>☁ {showCloudLearning?"Cloud-Labor ausblenden":"Optionales Cloud-Labor anzeigen"} (Upstash nicht erforderlich)</button>{showCloudLearning&&<PredictionLearningCloud sport={sport}/>}</div>
+          <div className="v35-optional-cloud"><button type="button" aria-expanded={showCloudLearning} onClick={()=>setShowCloudLearning(v=>!v)}>◈ {showCloudLearning?"Learning Engine ausblenden":"Prediction Learning Engine 4.4 öffnen"} (NBA/Fußball getrennt)</button>{showCloudLearning&&<PredictionLearningCloud sport={sport}/>}</div>
           <p className="matchup-disclaimer">Dein <strong>persönliches Browser-Archiv</strong> bleibt ohne Upstash nutzbar. Hier kannst du bisherige Aufzeichnungen bearbeiten und JSON-Dateien sichern. Das Cloud-Labor arbeitet unabhängig im Hintergrund; deine privaten Karten- und Browser-Einstellungen werden nicht übertragen.</p>
           <div className="archive-banner">
             <div><strong>Persönliches Prognosearchiv</strong><small>{archiveBackend==="indexeddb"?"IndexedDB · auf diesem Gerät gespeichert":"Browser-Speicher (Ersatzmodus)"} · {tracked.length} gespeicherte Einträge · nicht geräteübergreifend synchronisiert</small></div>

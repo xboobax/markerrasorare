@@ -233,3 +233,8 @@ Offizieller Sorare-OAuth-Login und automatische Synchronisierung eigener NBA-/Fu
 ### V2.8.2 – Fix für „Field anyCards doesn't exist on CurrentUser“
 
 Bei bereits installiertem V2.8.1 das kleine V2.8.2-Update einspielen. Der Sorare-Sammlungsabruf verwendet jetzt das offiziell dokumentierte paginierte Root-Feld `cardsWhere(ownedByMe: true)`. Die bisherige OAuth-Konfiguration und alle gespeicherten Teams bleiben erhalten. Siehe `UPDATE_V2_8_2_DE.md`.
+
+
+## V4.4 – Separate NBA- und Fußball-Learning Engines
+
+Getrennte, eingefrorene Vor-Spiel-PP/Q80-Snapshots, offizielle Sorare-FINAL-Abgleiche, NBA 3PM/3PA und ein V4.4-Dashboard. Neon PostgreSQL als optionale **dauerhafte** Datenbank; kein Upstash notwendig. Ohne `DATABASE_URL` und bestätigte Live-Daten bleiben V3-Prognosen unverändert. Alle 20 Vercel-Cronjobs benötigen `CRON_SECRET` und starten erst im Produktions-Deployment. Ein validierter Modell-Offset wird erst bei `V44_AUTO_PROMOTE=true` und bestandenem zeitlichen Holdout freigegeben. Details: `UPDATE_V4_4_0_LEARNING_ENGINE_DE.md`.

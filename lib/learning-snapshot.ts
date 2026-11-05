@@ -8,6 +8,7 @@ import {createTrackedPrediction,type TrackedPrediction} from './tracking';
 import {enrichForecast} from './matchups';
 import {buildForecastV18} from './forecast-v18';
 import {buildPredictionV2} from './prediction-engine-v2';
+import {buildPredictionV3} from './prediction-engine-v3';
 import {fixtureDay} from './tracking-auto';
 import type {OpponentRatings} from './matchups';
 
@@ -32,11 +33,13 @@ export function freezeCloudPredictions(players:Forecast[],sport:Sport,ratings:Op
       const scouted=enrichForecast(p,sport,ratings);
       const v18=buildForecastV18(scouted,sport);
       const v2=buildPredictionV2(scouted,sport);
+      const v3=buildPredictionV3(scouted,sport,v2);
       return createTrackedPrediction(scouted,sport,now,{
         baselinePredicted:v18.baselineWeighted,advancedPredicted:v18.advancedWeighted,
         intervalP10:v18.unconditionalP10,intervalP90:v18.unconditionalP90,
         modelVersion:'1.8.0',selectedMode:'v2',
         engineV2Predicted:v2.weighted,engineV2P10:v2.unconditionalP10,engineV2P90:v2.unconditionalP90,
+        ...(v3.applicable?{engineV3PP:v3.ppRaw!,engineV3Q80:v3.q80Raw!}:{}),
       });
     });
 }

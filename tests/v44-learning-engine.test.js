@@ -1,0 +1,47 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+const {v44Candidate,v44Evaluate,validV44TrainingRow,dedupeV44,applyV44Offsets}=require('../.test-build/lib/learning-v44-calibration');
+const {withV44Calibration}=require('../.test-build/lib/prediction-engine-v3');
+const {espnStatLine}=require('../.test-build/lib/nba-live-core');
+const mk=(sport,day,n,error=5)=>{
+  const date=new Date(Date.UTC(2026,0,1+day)).toISOString().slice(0,10);
+  return {sport,key:`${sport}:${day}-${n}`,playerId:`player-${n}`,fixtureDay:date,
+    capturedAt:new Date(Date.parse(date+'T00:00:00Z')-86400000).toISOString(),fixtureStart:null,
+    pp:40,q80:50,actual:40+error,actualSource:'sorare',appeared:true,nba3pm:null,nba3pa:null,pregame3pm:null,pregame3pa:null};
+};
+const nba=Array.from({length:30},(_,d)=>Array.from({length:9},(_,n)=>mk('nba',d,n,5))).flat();
+const foot=Array.from({length:30},(_,d)=>Array.from({length:9},(_,n)=>mk('football',d,n,-3))).flat();
+assert.equal(v44Evaluate(nba,'nba').eligible,270);
+assert.equal(v44Evaluate(nba,'football').eligible,0);
+assert.equal(v44Evaluate(foot,'football').eligible,270);
+assert.equal(v44Candidate(nba,'football'),null,'Football MUST NOT learn NBA results');
+const n=v44Candidate(nba,'nba');assert.ok(n&&n.train>95&&n.holdout>35);assert.ok(n.promotable,'large stable bias permits sport-specific PP calibration');
+const f=v44Candidate(foot,'football');assert.ok(f&&f.promotable);assert.ok(n.ppOffset>0);assert.ok(f.ppOffset<0);
+assert.equal(applyV44Offsets(40,50,'football',{sport:'nba',ppOffset:7,q80Offset:8}).pp,40);
+assert.ok(applyV44Offsets(40,50,'nba',{sport:'nba',ppOffset:7,q80Offset:8}).pp===47);
+const invalid={...nba[0],capturedAt:new Date(Date.parse(nba[0].fixtureDay+'T00:00:00Z')+100000).toISOString()};
+assert.equal(validV44TrainingRow(invalid,'nba'),false,'never use after fixture snapshots');
+assert.equal(validV44TrainingRow({...nba[0],appeared:null},'nba'),false,'unknown appearance must not train');
+assert.equal(validV44TrainingRow({...nba[0],actualSource:null},'nba'),false,'live ESPN estimate must not train');
+assert.equal(dedupeV44([nba[0],{...nba[0],key:'nba:duplicate',capturedAt:new Date(Date.parse(nba[0].capturedAt)+1000).toISOString()}],'nba').length,1);
+assert.equal(v44Candidate(nba.slice(0,8),'nba'),null,'minimum sample size');
+assert.equal(espnStatLine(['MIN','PTS','REB','AST','3PT','STL','BLK','TO'],['30:00','15','1','1','4-10','1','0','1']).threeAttempts,10);
+assert.equal(espnStatLine(['MIN','PTS','REB','AST','3PM','3PA','STL','BLK','TO'],['30:00','15','1','1','4','12','1','0','1']).threeAttempts,12);
+assert.equal(espnStatLine(['MIN','PTS','REB','AST','3PM','3PA','STL','BLK','TO'],['30:00','15','1','1','5','2','1','0','1']),null,'3PA cannot be less than 3PM');
+const v3={version:'3.0.0',applicable:true,sport:'nba',ppRaw:40,q80Raw:60,q20Raw:20,riskAdjustedPP:32,playProbability:.8,conditionalSd:10,sampleSize:10,p70Conditional:0,p80Conditional:0,p70IncludingDnp:0,p80IncludingDnp:0,quality:'hoch',source:'Sorare-Prognose + Sorare-Scores + optionale Scoutingdaten',reasons:[]};
+assert.equal(withV44Calibration(v3,{sport:'football',ppOffset:8,q80Offset:8}).ppRaw,40);
+assert.equal(withV44Calibration(v3,{sport:'nba',ppOffset:5,q80Offset:8}).ppRaw,45);
+assert.equal(withV44Calibration(v3,{sport:'nba',ppOffset:5,q80Offset:8}).riskAdjustedPP,36);
+const root=path.join(__dirname,'..');
+for(const file of ['schema/learning-v44.sql','lib/learning-v44-pipeline.ts','lib/learning-v44-db.ts','app/api/cron/v44/route.ts','app/api/learning-v44/route.ts','app/api/learning-v44/model/route.ts','app/components/prediction-learning-v44.tsx'])assert.ok(fs.existsSync(path.join(root,file)),`${file} exists`);
+const schema=fs.readFileSync(path.join(root,'schema/learning-v44.sql'),'utf8');
+assert.match(schema,/sport TEXT NOT NULL CHECK \(sport IN \('nba','football'\)\)/);
+assert.match(schema,/nba_three_attempts/);
+const source=fs.readFileSync(path.join(root,'lib/learning-v44-pipeline.ts'),'utf8');
+assert.match(source,/freezeCloudPredictions/);assert.match(source,/v44SaveOfficial/);assert.match(source,/v44PopulatePregameThrees/);
+assert.match(source,/V44_AUTO_PROMOTE/);
+const ui=fs.readFileSync(path.join(root,'app/components/arcade-dashboard.tsx'),'utf8');
+assert.match(ui,/withV44Calibration/);assert.match(ui,/calibrationKey/);
+const json=require('../vercel.json');assert.ok(json.crons.some(c=>c.path.includes('/api/cron/v44')));
+console.log('V4.4: independent sports, strict FINAL-only temporal validation, Q80 and 3PM/3PA capture, rollback-safe baseline + model activation passed');

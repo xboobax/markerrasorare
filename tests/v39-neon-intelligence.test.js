@@ -61,5 +61,5 @@ assert.match(picker,/NBA Breakout Finder/);
 assert.match(picker,/Football Action Hunter/);
 assert.match(picker,/Spielbeginn ≠ offizielle Sorare-Abgabefrist/);
 const vercel=require('../vercel.json');
-assert.equal(vercel.crons,undefined);
+assert.ok(vercel.crons.every(c=>c.path.startsWith('/api/cron/v44')),'Only the authenticated V4.4 learning cron is active');
 console.log('V3.9: 10 compact features, validated rebuild, portfolio, real historical scores, honest deadline and scout ranking OK');

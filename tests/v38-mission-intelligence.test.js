@@ -64,5 +64,5 @@ assert.match(picker,/onSendToBuilder\(oneClick.row.player.id\)/);
 assert.match(dashboard,/availabilityById=\{injuryById\}/);
 assert.match(dashboard,/availabilitySnapshot=\{availability.data\}/);
 assert.match(dashboard,/\["missions","⚡","Daily Missions"\]/);
-assert.equal(require('../vercel.json').crons,undefined,'Upstash & Cron not required');
+assert.ok(require('../vercel.json').crons.every(c=>c.path.startsWith('/api/cron/v44')),'No legacy Upstash cron jobs');
 console.log('V3.8 missions: owned-only one-click, safety levels, reported OUT, NBA thresholds/timezones, honest football fallback OK');

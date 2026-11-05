@@ -5,7 +5,7 @@
  */
 export type LiveGameStatus='scheduled'|'live'|'final'|'delayed';
 export type LiveGame={id:string;date:string;home:{id:string;name:string;abbreviation:string;logo:string|null;score:number|null};away:{id:string;name:string;abbreviation:string;logo:string|null;score:number|null};status:LiveGameStatus;statusText:string;period:number;clock:string;lastUpdated:string|null};
-export type LiveStats={minutes:number|null;points:number;rebounds:number;assists:number;steals:number;blocks:number;threes:number;turnovers:number};
+export type LiveStats={minutes:number|null;points:number;rebounds:number;assists:number;steals:number;blocks:number;threes:number;turnovers:number;threeAttempts?:number|null};
 export type LivePlayer={id:string;name:string;shortName:string;headshot:string|null;teamId:string;starter:boolean;played:boolean;stats:LiveStats|null;score:number|null;status:string|null};
 export type LivePlay={id:string;period:number;clock:string;text:string;teamId:string|null;scoreHome:number|null;scoreAway:number|null;scoring:boolean;sort:number};
 export type LiveGameDetail={game:LiveGame;players:LivePlayer[];plays:LivePlay[];source:'ESPN Gamecast';updatedAt:string;warning:string|null};
@@ -75,7 +75,7 @@ export function parseStatMinutes(value:unknown):number|null{
   if(mm)return Number(mm[1])+Number(mm[2])/60;
   const n=numeric(s);return n!==null&&n>=0?n:null;
 }
-const statAliases:Record<keyof Omit<LiveStats,'minutes'>,string[]>={
+const statAliases:Record<keyof Omit<LiveStats,'minutes'|'threeAttempts'>,string[]>={
   points:['PTS','POINTS'],rebounds:['REB','REBOUNDS'],assists:['AST','ASSISTS'],
   steals:['STL','STEALS'],blocks:['BLK','BLOCKS'],threes:['3PM','3PTM','3FGM','3PT FG','3PT MADE'],turnovers:['TO','TOV','TURNOVERS'],
 };
@@ -98,15 +98,20 @@ export function espnStatLine(labels:unknown,values:unknown):LiveStats|null{
       return made!==null&&attempts!==null&&made<=attempts?made:null;}
     return strictStat(fields[split]);
   };
+  const splitThree=columns.findIndex(key=>key==='3PT'||key==='3FG');
+  const threeAttempts=splitThree>=0?(str(fields[splitThree]).match(/^(\d+)\s*-\s*(\d+)$/)?.[2]??null):null;
+  const directAttempts=columns.findIndex(key=>key==='3PA'||key==='3PTA'||key==='3FGA');
+  const attempts=threeAttempts===null?(directAttempts>=0?strictStat(fields[directAttempts]):null):strictStat(threeAttempts);
   const points=take(statAliases.points),rebounds=take(statAliases.rebounds),assists=take(statAliases.assists),
     steals=take(statAliases.steals),blocks=take(statAliases.blocks),threes=madeThrees(),turnovers=take(statAliases.turnovers);
   if([points,rebounds,assists,steals,blocks,threes,turnovers].some(x=>x===null))return null;
+  if(attempts!==null&&threes!==null&&attempts<threes)return null;
   const mi=columns.findIndex(l=>l==='MIN'||l==='MINUTES');
   const minutes=mi>=0?parseStatMinutes(fields[mi]):null;
   // The MIN column, when supplied, must also be valid. An absent MIN may be
   // tolerated if action stats prove the player actually appeared.
   if(mi>=0&&minutes===null)return null;
-  return {minutes,points:points!,rebounds:rebounds!,assists:assists!,steals:steals!,blocks:blocks!,threes:threes!,turnovers:turnovers!};
+  return {minutes,points:points!,rebounds:rebounds!,assists:assists!,steals:steals!,blocks:blocks!,threes:threes!,turnovers:turnovers!,threeAttempts:attempts};
 }
 /** Highest actual individual game score counts per player in a Sorare NBA Game Week.
  * This helper intentionally operates on *base scores* and does not mix card bonuses.

@@ -1,3 +1,85 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json"
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    {
+      "path": "/api/cron/v44?job=capture&scope=nba-0",
+      "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/cron/v44?job=capture&scope=nba-1",
+      "schedule": "15 5 * * *"
+    },
+    {
+      "path": "/api/cron/v44?job=capture&scope=nba-2",
+      "schedule": "30 5 * * *"
+    },
+    {
+      "path": "/api/cron/v44?job=capture&scope=football-Bundesliga-0",
+      "schedule": "45 5 * * *"
+    },
+    {
+      "path": "/api/cron/v44?job=capture&scope=football-Bundesliga-1",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/v44?job=capture&scope=football-LaLiga-0",
+      "schedule": "15 6 * * *"
+    },
+    {
+      "path": "/api/cron/v44?job=capture&scope=football-LaLiga-1",
+      "schedule": "30 6 * * *"
+    },
+    {
+      "path": "/api/cron/v44?job=capture&scope=football-Ligue%201-0",
+      "schedule": "45 6 * * *"
+    },
+    {
+      "path": "/api/cron/v44?job=capture&scope=football-Ligue%201-1",
+      "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/v44?job=capture&scope=football-Premier%20League-0",
+      "schedule": "15 7 * * *"
+    },
+    {
+      "path": "/api/cron/v44?job=capture&scope=football-Premier%20League-1",
+      "schedule": "30 7 * * *"
+    },
+    {
+      "path": "/api/cron/v44?job=results&sport=nba&shard=0",
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/v44?job=results&sport=nba&shard=1",
+      "schedule": "18 8 * * *"
+    },
+    {
+      "path": "/api/cron/v44?job=results&sport=nba&shard=2",
+      "schedule": "36 8 * * *"
+    },
+    {
+      "path": "/api/cron/v44?job=results&sport=football&shard=0",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/v44?job=results&sport=football&shard=1",
+      "schedule": "18 9 * * *"
+    },
+    {
+      "path": "/api/cron/v44?job=results&sport=football&shard=2",
+      "schedule": "36 9 * * *"
+    },
+    {
+      "path": "/api/cron/v44?job=threes",
+      "schedule": "0 10 * * *"
+    },
+    {
+      "path": "/api/cron/v44?job=train&sport=nba",
+      "schedule": "0 11 * * *"
+    },
+    {
+      "path": "/api/cron/v44?job=train&sport=football",
+      "schedule": "20 11 * * *"
+    }
+  ]
 }

@@ -99,3 +99,18 @@ export function evaluatePredictionV3(rows:readonly PredictionV3EvaluationRow[]){
   return {count,ppMae:round(valid.reduce((s,r)=>s+Math.abs(r.engineV3PP!-r.actual!),0)/count),
     q80Coverage:round(valid.filter(r=>r.actual!<=r.engineV3Q80!).length/count)};
 }
+
+/** Applies ONLY an independently validated per-sport calibration. No rerender API calls. */
+export function withV44Calibration(p:PredictionV3,model:{sport:Sport;ppOffset:number;q80Offset:number}|null):PredictionV3{
+  if(!p.applicable||!model||model.sport!==p.sport||!finite(p.ppRaw)||!finite(p.q80Raw)||
+     !finite(model.ppOffset)||!finite(model.q80Offset))return p;
+  const ppRaw=cap(p.ppRaw+model.ppOffset,0,500),q80Raw=cap(Math.max(ppRaw,p.q80Raw+model.q80Offset),0,500);
+  const q20Raw=p.q20Raw===null?null:cap(p.q20Raw+model.ppOffset,0,500);
+  const sd=p.conditionalSd;
+  const p70Conditional=sd!==null?pointsAtLeast(ppRaw,sd,1,70):null;
+  const p80Conditional=sd!==null?pointsAtLeast(ppRaw,sd,1,80):null;
+  return {...p,ppRaw,q80Raw,q20Raw,riskAdjustedPP:ppRaw*p.playProbability,
+    p70Conditional,p80Conditional,p70IncludingDnp:p70Conditional===null?null:p70Conditional*p.playProbability,
+    p80IncludingDnp:p80Conditional===null?null:p80Conditional*p.playProbability,
+    reasons:[...p.reasons,`V4.4: ${p.sport.toUpperCase()}-PP/Q80 durch getrennt validierten Modell-Offset kalibriert.`]};
+}

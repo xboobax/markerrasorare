@@ -21,5 +21,5 @@ assert.match(mission,/Datenbasis:/);
 assert.match(mission,/L10/);
 assert.match(mission,/keine kalibrierten Erfolgs- oder Verletzungswahrscheinlichkeiten/);
 assert.ok(fs.existsSync(path.join(root,'app/daily-missions/page.tsx')),'V4 dedicated Daily Missions route remains reachable');
-const vercel=require('../vercel.json');assert.equal(vercel.crons,undefined);
+const vercel=require('../vercel.json');assert.ok(vercel.crons.every(c=>c.path.startsWith('/api/cron/v44')),'Only the authenticated V4.4 learning cron is active');
 console.log('V3.7 Daily Missions dedicated fifth tab, compact scope, responsive nav and free-data ranking: OK');

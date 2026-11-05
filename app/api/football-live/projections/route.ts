@@ -2,7 +2,8 @@ import {NextRequest,NextResponse} from 'next/server';
 import {getFootballClubs,getPlayers} from '@/lib/sorare';
 import {forecast} from '@/lib/model';
 import {enrichForecast} from '@/lib/matchups';
-import {buildPredictionV3} from '@/lib/prediction-engine-v3';
+import {buildPredictionV3,withV44Calibration} from '@/lib/prediction-engine-v3';
+import {v44DbConfigured,v44ReadModel} from '@/lib/learning-v44-db';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 export const maxDuration=45;
@@ -18,7 +19,8 @@ export async function GET(req:NextRequest){
   try{
     const clubs=await getFootballClubs();const away=matchClub(clubs,a),home=matchClub(clubs,b);if(!away||!home||away.slug===home.slug)throw new Error('Teams bei Sorare derzeit nicht eindeutig auffindbar.');
     const raw=await getPlayers('football',[away,home]);if(raw.failed||!raw.players.length)throw new Error('Sorare hat keine vollständigen Prognosedaten der beiden Teams geliefert.');
-    const items=raw.players.map(p=>{const f=forecast(p),scouted=enrichForecast(f,'football',{}),v3=buildPredictionV3(scouted,'football');return {name:f.name,id:f.id,team:f.team,pp:v3.ppRaw,q80:v3.q80Raw,quality:v3.quality};});
-    return NextResponse.json({players:items,source:'Prediction Engine 3.0 · aktueller Sorare-Abruf',fetchedAt:new Date().toISOString(),warning:'Aktueller Modellabruf, keine vor Spielbeginn eingefrorene PP-Prognose. Nicht für rückwirkendes Prognose-Backtesting verwenden.'},{headers:{'Cache-Control':'public, s-maxage=180, stale-while-revalidate=60'}});
+    const calibration=v44DbConfigured()?await v44ReadModel('football').catch(()=>null):null;
+    const items=raw.players.map(p=>{const f=forecast(p),scouted=enrichForecast(f,'football',{}),v3=withV44Calibration(buildPredictionV3(scouted,'football'),calibration);return {name:f.name,id:f.id,team:f.team,pp:v3.ppRaw,q80:v3.q80Raw,quality:v3.quality};});
+    return NextResponse.json({players:items,calibrationVersion:calibration?.version??null,source:'Prediction Engine 3.0 · aktueller Sorare-Abruf',fetchedAt:new Date().toISOString(),warning:'Aktueller Modellabruf, keine vor Spielbeginn eingefrorene PP-Prognose. Nicht für rückwirkendes Prognose-Backtesting verwenden.'},{headers:{'Cache-Control':'public, s-maxage=180, stale-while-revalidate=60'}});
   }catch(e){return NextResponse.json({error:e instanceof Error?e.message:'Sorare-Modellprognosen derzeit nicht abrufbar.'},{status:503,headers:{'Cache-Control':'no-store'}})}
 }
