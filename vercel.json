@@ -80,6 +80,54 @@
     {
       "path": "/api/cron/v44?job=train&sport=football",
       "schedule": "20 11 * * *"
+    },
+    {
+      "path": "/api/cron/v44?job=playerstats&sport=nba&shard=0",
+      "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/cron/v44?job=playerstats&sport=nba&shard=1",
+      "schedule": "11 12 * * *"
+    },
+    {
+      "path": "/api/cron/v44?job=playerstats&sport=nba&shard=2",
+      "schedule": "22 12 * * *"
+    },
+    {
+      "path": "/api/cron/v44?job=playerstats&sport=nba&shard=3",
+      "schedule": "33 12 * * *"
+    },
+    {
+      "path": "/api/cron/v44?job=playerstats&sport=nba&shard=4",
+      "schedule": "44 12 * * *"
+    },
+    {
+      "path": "/api/cron/v44?job=playerstats&sport=football&batch=league-a",
+      "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/cron/v44?job=playerstats&sport=football&batch=league-b",
+      "schedule": "8 13 * * *"
+    },
+    {
+      "path": "/api/cron/v44?job=playerstats&sport=football&batch=europe",
+      "schedule": "16 13 * * *"
+    },
+    {
+      "path": "/api/cron/v44?job=playerstats&sport=football&batch=national-0",
+      "schedule": "24 13 * * *"
+    },
+    {
+      "path": "/api/cron/v44?job=playerstats&sport=football&batch=national-1",
+      "schedule": "32 13 * * *"
+    },
+    {
+      "path": "/api/cron/v44?job=playerstats&sport=football&batch=national-2",
+      "schedule": "40 13 * * *"
+    },
+    {
+      "path": "/api/cron/v44?job=playerstats&sport=football&batch=national-3",
+      "schedule": "48 13 * * *"
     }
   ]
 }

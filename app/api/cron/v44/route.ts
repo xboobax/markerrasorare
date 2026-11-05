@@ -2,6 +2,7 @@ import {cronAuthorized} from '@/lib/learning-cron-auth';
 import {v44DbConfigured} from '@/lib/learning-v44-db';
 import {V44_SCOPES,v44Capture,v44Reconcile,v44Train,v44NbaThrees} from '@/lib/learning-v44-pipeline';
 import type {Sport} from '@/lib/model';
+import {v45NbaStats,v45FootballStats,validFootballStatBatch} from '@/lib/learning-v45-pipeline';
 export const runtime='nodejs';export const dynamic='force-dynamic';export const maxDuration=60;
 /** Authenticated scheduler. A single Hobby-friendly daily cron rotates one bounded job.
  * For comprehensive per-match coverage invoke distinct jobs by an external scheduler.
@@ -17,6 +18,10 @@ export async function GET(req:Request){
       return Response.json(await v44Reconcile(sport,shard));}
     if(job==='train'){const sport=url.searchParams.get('sport');if(sport!=='nba'&&sport!=='football')return Response.json({error:'Ungültige Sportart'},{status:400});
       return Response.json(await v44Train(sport));}
+    if(job==='playerstats'){const sport=url.searchParams.get('sport');
+      if(sport==='nba'){const shard=Number(url.searchParams.get('shard'));if(!Number.isInteger(shard)||shard<0||shard>4)return Response.json({error:'Ungültiger NBA-Stats-Shard'},{status:400});return Response.json(await v45NbaStats(shard));}
+      if(sport==='football'){const batch=url.searchParams.get('batch')??'';if(!validFootballStatBatch(batch))return Response.json({error:'Ungültiger Fußball-Stats-Bereich'},{status:400});return Response.json(await v45FootballStats(batch));}
+      return Response.json({error:'Ungültige Statistik-Sportart'},{status:400});}
     if(job==='threes'){const date=url.searchParams.get('date')??new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Berlin'}).format(new Date());
       return Response.json(await v44NbaThrees(date));}
     if(job!=='cycle')return Response.json({error:'Ungültiger Job'},{status:400});

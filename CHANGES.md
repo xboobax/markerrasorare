@@ -1,3 +1,7 @@
+## V4.5.0 – Einzelstatistik-Archiv (NBA und Fußball)
+
+Neon-Migration `schema/learning-v45-performance.sql`, 12 begrenzte tägliche Statistik-Cronjobs, deduplizierte ESPN-FINAL-Spielerleistungen inklusive NBA-3PM/3PA und bei Fußball sämtlicher beobachteter Sorare-Eventnamen. Getrennte Sportauswertung unter dem V4.4-Learning-Dashboard. Keine Änderungen an bestehenden PP/Q80-Zielwerten oder Modellfreigaben.
+
 ## V4.3.0 – Europapokal & internationale Football Match Center
 
 - Fußball Gamecast unterstützt jetzt UEFA Champions League, Europa League und Conference League sowie die bisherigen vier nationalen Ligen.

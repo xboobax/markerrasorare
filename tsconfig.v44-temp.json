@@ -1,0 +1,4 @@
+{
+  "compilerOptions":{"target":"ES2020","module":"commonjs","moduleResolution":"node","jsx":"preserve","skipLibCheck":true,"strict":true,"noEmit":true,"esModuleInterop":true,"baseUrl":".","paths":{"@/*":["./*"]},"lib":["ES2020","DOM"],"types":[]},
+  "files":["/mnt/data/v440-typecheck/stubs.d.ts","lib/learning-v44-db.ts","lib/learning-v44-pipeline.ts","lib/learning-v44-calibration.ts","lib/learning-snapshot.ts","app/api/cron/v44/route.ts","app/api/learning-v44/route.ts","app/api/learning-v44/model/route.ts","app/components/prediction-learning-v44.tsx","app/api/nba-live/projections/route.ts","app/api/football-live/projections/route.ts"]
+}

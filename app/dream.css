@@ -258,3 +258,6 @@
 /* V4.3: football competition selectors. No additional network requests are
    initiated by rendering the chips; only the selected group is fetched. */
 .live-comp-groups{display:flex;flex-wrap:wrap;gap:6px;padding:10px 10px 0}.live-comp-groups button{flex:1 1 112px;white-space:nowrap;border:1px solid #5c5036;background:#212421;color:#d7c49d;border-radius:8px;padding:8px 6px;cursor:pointer;font-size:10px;font-weight:700}.live-comp-groups button.active{border-color:#dbc078;background:#4c3b20;color:#f9e6b1}.live-comp-groups button:hover,.live-leagues button:hover{border-color:#dfbd68}.live-comp-note{padding:7px 12px 10px;color:#aea99a;font-size:10px;line-height:1.5;margin:0;border-bottom:1px solid #373932}
+
+/* V4.5: read-only, separately cached performance archive under V4.4 learner */
+.learning-performance-v45{background:#0d0c13;border:1px solid #46385e;border-radius:12px;margin-top:16px;padding:12px;min-width:0;color:#eee8f4}.learning-performance-v45 .learning-cloud-table-wrap{overflow:auto}.learning-performance-v45 table{min-width:800px}.learning-performance-v45 .learning-cloud-metrics{margin-top:12px}

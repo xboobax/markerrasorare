@@ -10,7 +10,7 @@ export type {FootballLeagueKey} from './football-competitions';
  */
 export type FootballLiveGameStatus='scheduled'|'live'|'final'|'delayed';
 export type FootballLiveGame={id:string;leagueKey:FootballLeagueKey;leagueName:string;date:string;home:{id:string;name:string;abbreviation:string;logo:string|null;score:number|null};away:{id:string;name:string;abbreviation:string;logo:string|null;score:number|null};status:FootballLiveGameStatus;statusText:string;period:number;clock:string;lastUpdated:string|null;venue:string|null};
-export type FootballLiveStats={minutes:number|null;goals:number;assists:number;shotsOnTarget:number;saves:number;clearances:number;tacklesWon:number;interceptions:number;chancesCreated:number;crossesCompleted:number;duelsWon:number;foulsWon:number;yellowCards:number;redCards:number;ownGoals:number;goalsConceded:number;penaltiesSaved:number;penaltiesMissed:number;sorareEvents?:SorareScoringInputs;reportedFields?:string[]};
+export type FootballLiveStats={minutes:number|null;goals:number;assists:number;shotsOnTarget:number;saves:number;clearances:number;tacklesWon:number;interceptions:number;chancesCreated:number;crossesCompleted:number;duelsWon:number;foulsWon:number;yellowCards:number;redCards:number;ownGoals:number;goalsConceded:number;penaltiesSaved:number;penaltiesMissed:number;sorareEvents?:SorareScoringInputs;reportedFields?:string[];observedFields?:string[]};
 export type FootballScoreEstimate=SorareOfficialMatrixOutput & {cleanSheet:boolean|null;source:'INCOMPLETE_ESPN'|'UNVERIFIED_COMPLETE';};
 export type FootballLivePlayer={id:string;name:string;shortName:string;headshot:string|null;teamId:string;starter:boolean;played:boolean;position:string|null;stats:FootballLiveStats|null;score:FootballScoreEstimate|null;status:string|null};
 export type FootballLivePlay={id:string;minute:string;text:string;teamId:string|null;type:string|null;scoreHome:number|null;scoreAway:number|null;sort:number};
@@ -61,7 +61,7 @@ export function parseFootballStatMinutes(value:unknown):number|null{
   const quoted=s.match(/^(\d{1,3})(?:\+\d+)?'?$/);if(quoted)return Number(quoted[1]);
   const n=numeric(s);return n!==null&&n>=0?n:null;
 }
-const aliases:Record<Exclude<keyof FootballLiveStats,'sorareEvents'|'reportedFields'>,string[]>= {
+const aliases:Record<Exclude<keyof FootballLiveStats,'sorareEvents'|'reportedFields'|'observedFields'>,string[]>= {
   minutes:['MIN','MINUTES'],goals:['G','GLS','GOALS'],assists:['A','AST','ASSISTS'],shotsOnTarget:['SOG','SOT','SHOTSONTARGET','SHOTS ON TARGET'],saves:['SV','SAVES'],clearances:['CLR','CLEARANCES'],tacklesWon:['TCKL','TKL','TACKLES WON','TACKLES'],interceptions:['INT','INTERCEPTIONS'],chancesCreated:['CC','CHANCES CREATED'],crossesCompleted:['CCR','CROSSES COMPLETED','ACCURATE CROSSES'],duelsWon:['DW','DUELS WON'],foulsWon:['FW','FOULS WON'],yellowCards:['YC','YELLOW CARDS'],redCards:['RC','RED CARDS'],ownGoals:['OG','OWN GOALS'],goalsConceded:['GC','GOALS CONCEDED'],penaltiesSaved:['PS','PENS SAVED','PENALTIES SAVED'],penaltiesMissed:['PM','PENS MISSED','PENALTIES MISSED']
 };
 const defaultFootballStats=():FootballLiveStats=>({minutes:null,goals:0,assists:0,shotsOnTarget:0,saves:0,clearances:0,tacklesWon:0,interceptions:0,chancesCreated:0,crossesCompleted:0,duelsWon:0,foulsWon:0,yellowCards:0,redCards:0,ownGoals:0,goalsConceded:0,penaltiesSaved:0,penaltiesMissed:0});
@@ -99,7 +99,7 @@ export function footballStatLine(labels:unknown,values:unknown):FootballLiveStat
   const stats=defaultFootballStats();
   const take=(keys:string[])=>{const idx=columns.findIndex(k=>keys.includes(k));return idx<0?null:count(fields[idx]);};
   const miIndex=columns.findIndex(k=>aliases.minutes.includes(k));stats.minutes=miIndex<0?null:parseFootballStatMinutes(fields[miIndex]);
-  (Object.keys(aliases) as Array<Exclude<keyof FootballLiveStats,'sorareEvents'|'reportedFields'>>).forEach(key=>{if(key==='minutes')return;const v=take(aliases[key]);if(v!==null)stats[key]=v as never;});
+  (Object.keys(aliases) as Array<Exclude<keyof FootballLiveStats,'sorareEvents'|'reportedFields'|'observedFields'>>).forEach(key=>{if(key==='minutes')return;const v=take(aliases[key]);if(v!==null)stats[key]=v as never;});
   const sorareEvents:SorareScoringInputs={};
   for(const [key,keys] of Object.entries(sorareLiveAliases) as [keyof SorareScoringInputs,readonly string[]][]){
     const index=columns.findIndex(column=>keys.includes(column));
@@ -107,6 +107,7 @@ export function footballStatLine(labels:unknown,values:unknown):FootballLiveStat
   }
   stats.sorareEvents=sorareEvents;
   stats.reportedFields=Object.keys(sorareEvents);
+  stats.observedFields=(Object.entries(aliases) as Array<[Exclude<keyof FootballLiveStats,'sorareEvents'|'reportedFields'|'observedFields'>,string[]]>).filter(([_,names])=>columns.some(column=>names.includes(column))).map(([name])=>name);
   const hasAny=(Object.keys(stats) as Array<keyof FootballLiveStats>).some(key=>typeof stats[key]==='number'&&key!=='minutes'&&(stats[key] as number)>0);
   return stats.minutes!==null||hasAny||stats.reportedFields.length>0?stats:null;
 }
@@ -145,6 +146,7 @@ export function parseEspnFootballPlayers(raw:unknown,game:FootballLiveGame):Foot
         }
         merged.sorareEvents={...(merged.sorareEvents??{}),...(statPart?.sorareEvents??{})};
         merged.reportedFields=Array.from(new Set([...(merged.reportedFields??[]),...(statPart?.reportedFields??[])]));
+        merged.observedFields=Array.from(new Set([...(merged.observedFields??[]),...(statPart?.observedFields??[])]));
         const played=!didNotPlay&&Boolean((merged.minutes??0)>0||merged.goals||merged.assists||merged.saves||merged.shotsOnTarget||merged.clearances||merged.tacklesWon||merged.interceptions);
         const finalStats=played||statPart?merged:null;
         const finalPosition=base.position||str(obj(athlete.position).abbreviation)||null;

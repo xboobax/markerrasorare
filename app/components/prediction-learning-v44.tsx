@@ -3,6 +3,7 @@ import {useEffect,useState} from 'react';
 import type {Sport} from '@/lib/model';
 import type {V44Evaluation,V44Candidate,V44Calibration} from '@/lib/learning-v44-calibration';
 import type {V44Job} from '@/lib/learning-v44-db';
+import PredictionPerformanceV45 from './prediction-performance-v45';
 type Payload={sport:Sport;configured:boolean;active:V44Calibration|null;summary:V44Evaluation|null;candidate:V44Candidate|null;jobs:V44Job[];message:string};
 const f=(n:number|null|undefined,precision=1)=>typeof n==='number'?n.toLocaleString('de-DE',{maximumFractionDigits:precision}):'–';
 export default function PredictionLearningV44({sport}:{sport:Sport}){
@@ -15,7 +16,7 @@ export default function PredictionLearningV44({sport}:{sport:Sport}){
       .finally(()=>{if(!c.signal.aborted)setLoading(false);});return ()=>c.abort();
   },[sport,counter]);
   const summary=data?.summary,active=data?.active,candidate=data?.candidate;
-  return <section className="learning-cloud" aria-label="Prediction Learning Engine 4.4">
+  return <><section className="learning-cloud" aria-label="Prediction Learning Engine 4.4">
     <div className="learning-cloud-head"><div><span className="section-kicker">V4.4 · ADAPTIVE PREDICTION INTELLIGENCE</span>
       <h3>{sport==='nba'?'🏀 NBA':'⚽ Football'} · eigene Learning Engine</h3>
       <p>Getrennte Sportmodelle · unveränderliche Vor-Spiel-V3-Prognosen · nur bestätigte Sorare-FINAL-Werte · kein Upstash.</p></div>
@@ -48,5 +49,5 @@ export default function PredictionLearningV44({sport}:{sport:Sport}){
           {data.jobs.slice(0,9).map(job=><tr key={job.scope}><td title={job.message}>{job.scope.replace('v44:','')}</td><td>{job.ok?'OK':'Fehler'}</td><td>{new Date(job.at).toLocaleString('de-DE')}</td></tr>)}
         </tbody></table></div>}
       </>}
-  </section>;
+  </section><PredictionPerformanceV45 sport={sport}/></>;
 }
