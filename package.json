@@ -1,6 +1,6 @@
 {
   "name": "markerras-sorare-dream",
-  "version": "4.5.5",
+  "version": "4.5.6",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -10,7 +10,8 @@
     "test:v4": "npm run test:arcade && node tools/check-v4-syntax.js",
     "check:syntax": "node tools/check-v4-syntax.js",
     "check:domain": "tsc -p tsconfig.v4-domain-check.json",
-    "benchmark:synthetic": "node tools/dream-perf-benchmark.js"
+    "benchmark:synthetic": "node tools/dream-perf-benchmark.js",
+    "test:football-live-v456": "tsc --target ES2020 --module commonjs --moduleResolution node --strict --skipLibCheck --rootDir . --outDir .test-build lib/model.ts lib/football-live-core.ts lib/football-live-formation.ts lib/football-live-sorare.ts lib/football-competitions.ts lib/sorare-football-scoring.ts lib/learning-v45-performance.ts lib/learning-v454-football-audit.ts && node tests/v42-football-live.test.js && node tests/v454-football-source-audit.test.js && node tests/v456-football-live-layout.test.js"
   },
   "dependencies": {
     "next": "14.2.35",

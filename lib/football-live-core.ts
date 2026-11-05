@@ -12,9 +12,9 @@ export type FootballLiveGameStatus='scheduled'|'live'|'final'|'delayed';
 export type FootballLiveGame={id:string;leagueKey:FootballLeagueKey;leagueName:string;date:string;home:{id:string;name:string;abbreviation:string;logo:string|null;score:number|null};away:{id:string;name:string;abbreviation:string;logo:string|null;score:number|null};status:FootballLiveGameStatus;statusText:string;period:number;clock:string;lastUpdated:string|null;venue:string|null};
 export type FootballLiveStats={minutes:number|null;goals:number;assists:number;shotsOnTarget:number;saves:number;clearances:number;tacklesWon:number;interceptions:number;chancesCreated:number;crossesCompleted:number;duelsWon:number;foulsWon:number;yellowCards:number;redCards:number;ownGoals:number;goalsConceded:number;penaltiesSaved:number;penaltiesMissed:number;sorareEvents?:SorareScoringInputs;reportedFields?:string[];observedFields?:string[]};
 export type FootballScoreEstimate=SorareOfficialMatrixOutput & {cleanSheet:boolean|null;source:'INCOMPLETE_ESPN'|'UNVERIFIED_COMPLETE';};
-export type FootballLivePlayer={id:string;name:string;shortName:string;headshot:string|null;teamId:string;starter:boolean;played:boolean;position:string|null;stats:FootballLiveStats|null;score:FootballScoreEstimate|null;status:string|null};
+export type FootballLivePlayer={id:string;name:string;shortName:string;headshot:string|null;teamId:string;starter:boolean;played:boolean;position:string|null;formationPlace:number|null;entryMinute:number|null;exitMinute:number|null;stats:FootballLiveStats|null;score:FootballScoreEstimate|null;status:string|null};
 export type FootballLivePlay={id:string;minute:string;text:string;teamId:string|null;type:string|null;scoreHome:number|null;scoreAway:number|null;sort:number};
-export type FootballLiveGameDetail={game:FootballLiveGame;players:FootballLivePlayer[];plays:FootballLivePlay[];source:'ESPN Gamecast';updatedAt:string;warning:string|null};
+export type FootballLiveGameDetail={game:FootballLiveGame;players:FootballLivePlayer[];plays:FootballLivePlay[];formations:Record<string,string|null>;source:'ESPN Gamecast';updatedAt:string;warning:string|null};
 const obj=(x:unknown):Record<string,any>=>x&&typeof x==='object'&&!Array.isArray(x)?x as Record<string,any>:{};
 const arr=(x:unknown):any[]=>Array.isArray(x)?x:[];
 const str=(x:unknown):string=>typeof x==='string'?x.trim():'';
@@ -25,6 +25,27 @@ const numeric=(x:unknown):number|null=>{
 };
 const count=(x:unknown)=>Math.max(0,numeric(x)??0);
 const validPhoto=(url:unknown):string|null=>typeof url==='string'&&/^https:\/\//.test(url)&&url.length<700?url:null;
+const espnHeadshot=(athlete:Record<string,any>):string|null=>{
+  const direct=validPhoto(obj(athlete.headshot).href)||validPhoto(obj(athlete.headshot).url)||validPhoto(athlete.image)||validPhoto(obj(athlete.image).href);
+  if(direct)return direct;
+  const id=str(athlete.id);
+  return /^\d{2,12}$/.test(id)?`https://a.espncdn.com/i/headshots/soccer/players/full/${id}.png`:null;
+};
+const subMinute=(sub:unknown):number|null=>{
+  if(typeof sub==='boolean'||sub===null||sub===undefined)return null;
+  const v=obj(sub);
+  const raw=str(obj(v.clock).displayValue)||str(obj(v.time).displayValue)||str(v.minute)||str(v.displayTime);
+  const matched=raw.match(/^(\d{1,3})(?:\+\d{1,2})?/);
+  return matched?Number(matched[1]):null;
+};
+const optaPlace=(row:Record<string,any>,athlete:Record<string,any>):number|null=>{
+  const raw=row.formationPlace??athlete.formationPlace;
+  const n=numeric(raw);return n!==null&&Number.isInteger(n)&&n>=1&&n<=15?n:null;
+};
+const rosterMinutes=(entry:Record<string,any>):{entryMinute:number|null;exitMinute:number|null}=>({
+  entryMinute:subMinute(entry.subbedIn),exitMinute:subMinute(entry.subbedOut)
+});
+
 const extractTeam=(competitor:unknown)=>{
   const c=obj(competitor),team=obj(c.team);
   return {id:str(team.id),name:str(team.displayName)||str(team.name)||'Team unbekannt',abbreviation:str(team.abbreviation)||str(team.shortDisplayName)||str(team.name).slice(0,3).toUpperCase(),logo:validPhoto(team.logo)||validPhoto(arr(team.logos)[0]?.href),score:numeric(c.score)};
@@ -172,12 +193,12 @@ export function parseEspnFootballPlayers(raw:unknown,game:FootballLiveGame):Foot
         const a=obj(row),athlete=obj(a.athlete);const id=str(athlete.id);if(!id)continue;
         const name=str(athlete.displayName)||str(athlete.fullName);if(!name)continue;
         const note=str(a.didNotPlayReason)||str(a.reason)||str(a.status);const didNotPlay=Boolean(a.didNotPlay)||/DNP|OUT|INACTIVE|DID NOT/i.test(note);
-        const statPart=didNotPlay?null:(Array.isArray(a.stats)?footballStatLine(labels,a.stats):null)??footballNamedStatLine(a.statistics??a.stats);const base=players.get(id)??{id,name,shortName:str(athlete.shortName)||name.split(' ').slice(-1)[0],headshot:validPhoto(obj(athlete.headshot).href)||validPhoto(obj(athlete).image),teamId,starter:a.starter===true||athlete.starter===true,played:false,position:str(obj(athlete.position).abbreviation)||str(a.position)||null,stats:null,score:null,status:didNotPlay?note||'DNP':null};
+        const statPart=didNotPlay?null:(Array.isArray(a.stats)?footballStatLine(labels,a.stats):null)??footballNamedStatLine(a.statistics??a.stats);const base=players.get(id)??{id,name,shortName:str(athlete.shortName)||name.split(' ').slice(-1)[0],headshot:espnHeadshot(athlete),teamId,starter:a.starter===true||athlete.starter===true,played:false,position:str(obj(athlete.position).abbreviation)||str(a.position)||null,formationPlace:optaPlace(a,athlete),entryMinute:null,exitMinute:null,stats:null,score:null,status:didNotPlay?note||'DNP':null};
         const merged=combineFootballStats(base.stats,statPart);
         const played=!didNotPlay&&observedPerformance(merged);
         const finalStats=played||statPart?merged:null;
         const finalPosition=base.position||str(obj(athlete.position).abbreviation)||null;
-        players.set(id,{...base,starter:base.starter||a.starter===true||athlete.starter===true,position:finalPosition,stats:finalStats,played,status:didNotPlay?note||'DNP':base.status,score:finalStats&&played?sorareFootballEstimate(finalStats,finalPosition):null});
+        players.set(id,{...base,starter:base.starter||a.starter===true||athlete.starter===true,formationPlace:base.formationPlace??optaPlace(a,athlete),position:finalPosition,stats:finalStats,played,status:didNotPlay?note||'DNP':base.status,score:finalStats&&played?sorareFootballEstimate(finalStats,finalPosition):null});
       }
     }
   }
@@ -207,15 +228,16 @@ export function parseEspnFootballPlayers(raw:unknown,game:FootballLiveGame):Foot
         const played=!didNotPlay&&(existing.played||observedPerformance(merged));
         const position=existing.position||str(obj(athlete.position).abbreviation)||str(obj(entry.position).abbreviation)||null;
         players.set(id,{...existing,starter:existing.starter||starter,
-          headshot:existing.headshot||validPhoto(obj(athlete.headshot).href)||null,
+          headshot:espnHeadshot(athlete)||existing.headshot,
+          formationPlace:existing.formationPlace??optaPlace(entry,athlete),entryMinute:existing.entryMinute??rosterMinutes(entry).entryMinute,exitMinute:existing.exitMinute??rosterMinutes(entry).exitMinute,
           position,played,stats:merged,status:didNotPlay?note||'DNP':existing.status,
           score:merged&&played?sorareFootballEstimate(merged,position):null});
       }else{
         const position=str(obj(athlete.position).abbreviation)||str(obj(entry.position).abbreviation)||null;
-        const played=!didNotPlay&&observedPerformance(rosterStats);
+        const played=!didNotPlay&&(observedPerformance(rosterStats)||entry.subbedIn===true||obj(entry.subbedIn).didSub===true||(starter&&(entry.subbedOut===true||obj(entry.subbedOut).didSub===true)));
         players.set(id,{id,name,shortName:str(athlete.shortName)||name.split(' ').slice(-1)[0],
-          headshot:validPhoto(obj(athlete.headshot).href)||null,teamId,starter,played,
-          position,stats:rosterStats,score:rosterStats&&played?sorareFootballEstimate(rosterStats,position):null,
+          headshot:espnHeadshot(athlete),teamId,starter,played,
+          position,formationPlace:optaPlace(entry,athlete),...rosterMinutes(entry),stats:rosterStats,score:rosterStats&&played?sorareFootballEstimate(rosterStats,position):null,
           status:note||null});
       }
     }
@@ -239,7 +261,21 @@ export function parseEspnFootballSummary(raw:unknown,eventId:string,updatedAt:st
   const game=parseEspnFootballGame({id:header.id??eventId,date:comp.date??header.date,competitions:[comp]},updatedAt,leagueKey);
   if(!game||game.id!==eventId)throw new Error('ESPN-Spieldetails sind unvollständig oder gehören zu einem anderen Spiel.');
   const players=parseEspnFootballPlayers(raw,game);
-  return {game,players,plays:parseEspnFootballPlays(raw),source:'ESPN Gamecast',updatedAt,
+  const formations:Record<string,string|null>={};
+  for(const line of arr(obj(r.boxscore).form)){
+    const f=obj(line),teamId=str(obj(f.team).id);
+    if(teamId===game.home.id||teamId===game.away.id){
+      const rawFormation=str(f.formation)||str(f.formationName)||str(f.value)||str(f.name);
+      formations[teamId]=rawFormation||null;
+    }
+  }
+  for(const line of arr(r.rosters)){
+    const f=obj(line),teamId=str(obj(f.team).id);
+    if((teamId===game.home.id||teamId===game.away.id)&&!formations[teamId]){
+      formations[teamId]=str(f.formation)||str(f.formationName)||null;
+    }
+  }
+  return {game,players,formations,plays:parseEspnFootballPlays(raw),source:'ESPN Gamecast',updatedAt,
     warning:players.length===0?'Noch keine bestätigten Spielerkader oder Live-Statistiken verfügbar.':players.every(p=>p.stats===null)?'Kaderdaten vorhanden, aber noch kein auswertbarer Live-Boxscore.':null};
 }
 export const footballLeagueName=(key:FootballLeagueKey)=>footballCompetition(key).name;

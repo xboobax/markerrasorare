@@ -251,3 +251,7 @@ Neu: Lineup Doctor (regelvalidierte Wechselideen), Hidden Gems Finder (NBA Punkt
 - NBA 3PM/3PA mit verifizierter Zuordnung zu Sorare-FINAL; historische Dreiertrends werden ohne Lookahead für zukünftige Modelle vorbereitet.
 - 20 gesicherte tägliche Vercel-Cronjobs, separates V4.4-Dashboard und unveränderter Basisbetrieb ohne Datenbank.
 - Einrichtung: UPDATE_V4_4_0_LEARNING_ENGINE_DE.md
+
+## V4.5.6 — Football Live Match Center Pro
+- Taktische horizontale Aufstellungen mit bestätigten ESPN-/Opta-Slots, Sorare-PS über sicheren OAuth-Spielabgleich, ESPN-Spielminuten/Fallback mit Kennzeichnung sowie Spielerfotos und Banklisten.
+- Kein Datenbank- oder Cron-Umbau. Details: `UPDATE_V4_5_6_FOOTBALL_LIVE_MATCH_CENTER_DE.md`.

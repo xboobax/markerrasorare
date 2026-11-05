@@ -261,3 +261,33 @@
 
 /* V4.5: read-only, separately cached performance archive under V4.4 learner */
 .learning-performance-v45{background:#0d0c13;border:1px solid #46385e;border-radius:12px;margin-top:16px;padding:12px;min-width:0;color:#eee8f4}.learning-performance-v45 .learning-cloud-table-wrap{overflow:auto}.learning-performance-v45 table{min-width:800px}.learning-performance-v45 .learning-cloud-metrics{margin-top:12px}
+/* V4.5.6 Football Live Center: source-backed horizontal formation + official score. */
+.foot-tactical-panel{margin:10px;border:1px solid #353a38;border-radius:10px;background:#101413;overflow-x:auto;scrollbar-color:#4a5550 #111}
+.foot-tactical-panel>.live-title{border-bottom:1px solid #303933}
+.foot-team-headings{min-width:760px;display:grid;grid-template-columns:1fr 1fr;gap:22px;padding:12px 16px 2px}
+.foot-team-headings>div{display:flex;align-items:center;gap:9px;color:#e9ebe8;font-size:12px}.foot-team-headings>div:last-child{justify-content:flex-end}
+.foot-team-headings .live-logo{width:30px;height:30px}.foot-team-headings span:last-child{color:#b7c1ba;font-size:10px;font-variant-numeric:tabular-nums}
+.foot-pitch{position:relative;min-width:760px;height:470px;margin:12px;border-radius:10px;border:2px solid #7aad98;overflow:hidden;background:repeating-linear-gradient(90deg,#22684e 0%,#22684e 12.5%,#277258 12.5%,#277258 25%);box-shadow:inset 0 0 0 1px #1a4d39}
+.foot-pitch:before{content:"";position:absolute;inset:7px;border:2px solid #acd0b9a6;pointer-events:none}
+.foot-pitch:after{content:"";position:absolute;top:36%;bottom:36%;left:50%;width:2px;background:#acd0b990;pointer-events:none}
+.foot-midline{left:50%;right:auto;top:0;bottom:0;width:2px;height:100%;background:#b8d7c3aa;z-index:0}
+.foot-circle{width:135px;height:135px;border-color:#b8d7c3aa;z-index:0}
+.foot-left-box,.foot-right-box{position:absolute;z-index:0;top:25%;height:50%;width:10%;border:2px solid #c0d9c2a8;pointer-events:none}
+.foot-left-box{left:0;border-left:0}.foot-right-box{right:0;border-right:0}
+.foot-left-box:after,.foot-right-box:after{content:"";position:absolute;top:30%;height:40%;width:26%;border:2px solid #c0d9c2a8}.foot-left-box:after{left:0;border-left:0}.foot-right-box:after{right:0;border-right:0}
+.foot-team-overlay{position:static}
+.foot-marker{z-index:3;width:73px;gap:1px;text-shadow:0 2px 4px #081b13;transform:translate(-50%,-50%)}
+.foot-marker .live-avatar{width:43px;height:43px;background:#d5e0d8;border:2px solid #d7ebe0;box-shadow:0 2px 7px #0018}
+.foot-marker:hover .live-avatar,.foot-marker:focus-visible .live-avatar{outline:3px solid #ead08e}
+.foot-marker small{font-size:9px;max-width:74px;font-weight:700;color:#fff;line-height:1.2}
+.live-avatar{position:relative}.live-avatar-fallback{position:absolute;inset:0;display:grid;place-items:center;font-weight:700}.live-avatar img{position:relative;z-index:1}
+.foot-official-score{border-radius:999px;display:inline-flex;align-items:center;justify-content:center;min-width:36px;min-height:19px;color:#181a19;font-size:10px;font-weight:800;text-shadow:none;border:1px solid #fff3;background:#d9d9d7;line-height:1;padding:2px 6px;white-space:nowrap}
+.foot-official-score.unknown{background:#383e3a;border-color:#717a74;color:#cbd6cf}.foot-official-score.low{background:#e4a369}.foot-official-score.mid{background:#f0ce6c}.foot-official-score.good{background:#bce879}.foot-official-score.great{background:#71dabc}.foot-official-score.elite{background:#65c9f2}
+.foot-unverified{position:absolute;z-index:2;top:43%;width:36%;padding:12px;border:1px solid #bdae86;border-radius:9px;color:#eee8d9;background:#162920ed;text-align:center;font-size:11px;line-height:1.5}.foot-unverified.away{left:7%}.foot-unverified.home{right:7%}.foot-unverified small{display:block;color:#cccbbf}
+.foot-pitch-footer{min-width:760px;display:flex;justify-content:space-between;color:#9bb0a1;font-size:10px;gap:10px;padding:0 15px 10px}
+.foot-play-drawer{border-top:1px solid #303933;background:#131a16}.foot-play-drawer summary{cursor:pointer;padding:12px 14px;color:#d9d7bb;font-size:11px;font-weight:700}.foot-play-drawer .live-plays{height:230px;max-height:230px}
+.foot-score-source{border:1px solid #303b32;border-radius:7px;background:#142019;margin:8px 10px;padding:9px;color:#bfd4c2;font-size:11px;line-height:1.5}
+.foot-bench{display:grid;grid-template-columns:1fr 1fr;gap:12px;min-width:760px;padding:2px 14px 13px}.foot-bench>div{min-width:0}.foot-bench b{display:block;color:#cbdcd0;font-size:10px;margin-bottom:4px}.foot-bench>div>div{display:flex;flex-wrap:wrap;gap:4px}.foot-bench button{border:1px solid #405247;border-radius:6px;color:#e0e9df;background:#202c25;font-size:10px;padding:4px 7px;cursor:pointer}.foot-bench button:hover{border-color:#e1cb83}
+.live-roster-team .foot-official-score{margin-left:auto}
+@media(max-width:850px){.foot-tactical-panel{margin:8px}.foot-pitch{min-width:760px;height:440px}}
+@media(max-width:510px){.foot-marker{width:63px}.foot-marker .live-avatar{width:37px;height:37px}.foot-marker small{max-width:63px}.foot-pitch{height:430px}}
