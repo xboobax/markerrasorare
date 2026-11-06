@@ -1,5 +1,8 @@
 "use client";
 
+import FootballStatsDiagnostics from './football-stats-diagnostics';
+import FootballStatsPanel from './football-stats-panel';
+
 import MySorareCollection,{type CollectionSyncStatus} from "@/app/components/my-sorare-collection";
 import {ownedSlugs,mergeVerifiedOwned,ownedViewKey,isInSelectedCollection,bestOwnedBonusByPlayer,activeFootballSetReady,type OwnedCollection} from "@/lib/my-collection";
 
@@ -1263,6 +1266,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
           <div className="v39-reality-strip" aria-label="Prediction Reality Check">
             <strong>◈ Reality Check</strong><span>{realityCheck.matched} bestätigte Vor-Spiel-Paare · MAE {realityCheck.mae===null?'—':`${fmt(realityCheck.mae)} PS`} · Bias {realityCheck.bias===null?'—':`${fmt(realityCheck.bias)} PS`}</span><small>{realityCheck.message}</small>
           </div>
+          {sport==="football"&&<FootballStatsDiagnostics/>}
           <div className="v35-optional-cloud"><button type="button" aria-expanded={showCloudLearning} onClick={()=>setShowCloudLearning(v=>!v)}>◈ {showCloudLearning?"Learning Engine ausblenden":"Prediction Learning Engine 4.4 öffnen"} (NBA/Fußball getrennt)</button>{showCloudLearning&&<PredictionLearningCloud sport={sport}/>}</div>
           <p className="matchup-disclaimer">Dein <strong>persönliches Browser-Archiv</strong> bleibt ohne Upstash nutzbar. Hier kannst du bisherige Aufzeichnungen bearbeiten und JSON-Dateien sichern. Das Cloud-Labor arbeitet unabhängig im Hintergrund; deine privaten Karten- und Browser-Einstellungen werden nicht übertragen.</p>
           <div className="archive-banner">
@@ -1304,6 +1308,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
           <div className="profile-dialog" role="dialog" aria-modal="true" aria-label={`Spielerprofil ${selectedPlayer.name}`}>
             <button className="profile-close" type="button" autoFocus onClick={() => setSelectedPlayerId(null)} aria-label="Profil schließen">×</button>
             <div className="profile-head"><PlayerAvatar player={selectedPlayer}/><div><span className="section-kicker">SPIELERPROFIL · {sport === "nba" ? "NBA" : league === "__all" ? "FUẞBALL" : league}</span><h2>{selectedPlayer.name}</h2><p>{selectedPlayer.team} · {POS_LABEL[selectedPlayer.position] ?? selectedPlayer.position}</p></div></div>
+            {sport==="football"&&<FootballStatsPanel key={selectedPlayer.id} slug={selectedPlayer.id} name={selectedPlayer.name} team={selectedPlayer.team}/>}
             {sport==="nba"&&<div className="nba-profile-star"><strong>★ {isValidNbaStars(effectiveCardStore[selectedPlayer.id]?.stars)?fmt(effectiveCardStore[selectedPlayer.id].stars!):"—"}</strong><span>{nbaStarValue(officialStars[selectedPlayer.id],cardStore[selectedPlayer.id]?.stars).source==="sorare"?"Aktuelle Sorare-Spielersterne":isValidNbaStars(cardStore[selectedPlayer.id]?.stars)?"Manueller Fallback-Wert":"Sorare hat keinen gültigen Sternwert geliefert"} · Gameweek-Sternpreis kann abweichen</span></div>}
             <div className="profile-stats">
               <div><small>Erwarteter Score inkl. Einsatzrisiko</small><strong>{((selectedPlayer.sampleSize > 0 || selectedPlayer.proj !== null || selectedPlayer.avg !== null) ? fmt(selectedPlayer.weighted) : "—")}</strong></div>

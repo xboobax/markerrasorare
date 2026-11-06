@@ -11,6 +11,8 @@ import {v45NbaObservations,v45FootballObservations,type V45Performance} from './
 import {v45SavePerformances,v455ArchivedFootballGames} from './learning-v45-db';
 import {v455FootballStatsDays,v455SelectPendingGames} from './learning-v455-backfill';
 import {v44SaveJob} from './learning-v44-db';
+import {saveFootballMatchStats} from './football-stats-db-v4515';
+import {fromEspnPerformances,validatedEspnFinal} from './football-stats-v4515';
 
 export const NBA_STAT_SHARDS=5;
 const CLUB_BATCHES={
@@ -65,18 +67,25 @@ export async function v45FootballStats(batch:FootballStatBatch,now=new Date()){
   // games instead of repeatedly consuming the first 12 results each day.
   const archived=await v455ArchivedFootballGames(days[days.length-1]);
   const games=v455SelectPendingGames(allFinalGames,archived);
-  const details=await inBatches(games,3,async game=>v45FootballObservations(await footballLiveGame(game.id,game.leagueKey)));
+  const details=await inBatches(games,3,async game=>{
+    const detail=validatedEspnFinal(await footballLiveGame(game.id,game.leagueKey),game);
+    return detail?v45FootballObservations(detail):[];
+  });
   const all:V45Performance[]=details.flatMap(r=>r.status==='fulfilled'?r.value:[]);
   const saved=await v45SavePerformances('football',all);
+  // Independent additive archive: old V4.5 schema stays functional until SQL migration is applied.
+  let statsV4515=0,statsV4515Warning:string|null=null;
+  try {for(let i=0;i<all.length;i+=250)statsV4515+=await saveFootballMatchStats('espn',fromEspnPerformances(all.slice(i,i+250)));}
+  catch {statsV4515Warning='V4.5.15-Statistikarchiv noch nicht bereit (SQL-Migration prüfen)';}
   const failedScoreboards=results.filter(r=>r.status==='rejected').length;
   const failedDetails=details.filter(r=>r.status==='rejected').length;
   const withoutUsableStats=details.filter(r=>r.status==='fulfilled'&&r.value.length===0).length;
   const failures=failedScoreboards+failedDetails;
   const alreadyArchived=allFinalGames.filter(g=>archived.has(`${g.leagueKey}:${g.id}`)).length;
   const remaining=Math.max(0,allFinalGames.length-alreadyArchived-games.length);
-  const message=`Football ${batch}: ${allFinalGames.length} Final-Spiele (${days.length} Tage), ${alreadyArchived} bereits archiviert, ${games.length} geprüft, ${withoutUsableStats} ohne auswertbare Spielerwerte, ${all.length} Spielerstatistiken, ${saved} aktualisiert, ${remaining} offene Spiele, ${failures} Feedfehler.`;
+  const message=`Football ${batch}: ${allFinalGames.length} Final-Spiele (${days.length} Tage), ${alreadyArchived} bereits archiviert, ${games.length} geprüft, ${withoutUsableStats} ohne auswertbare Spielerwerte, ${all.length} Spielerstatistiken, ${saved} aktualisiert, V4.5.15: ${statsV4515}, ${remaining} offene Spiele, ${failures} Feedfehler.${statsV4515Warning?' '+statsV4515Warning:''}`;
   await v44SaveJob({scope:`v45:stats:football-${batch}`,at:now.toISOString(),ok:failures===0,count:saved,message});
   return {sport:'football' as Sport,batch,daysScanned:days,finalGames:allFinalGames.length,
     alreadyArchived,inspectedGames:games.length,games:games.length,withoutUsableStats,
-    remaining,players:all.length,saved,failures,failedScoreboards,failedDetails,message};
+    remaining,players:all.length,saved,statsV4515,statsV4515Warning,failures,failedScoreboards,failedDetails,message};
 }

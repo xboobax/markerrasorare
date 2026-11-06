@@ -76,7 +76,8 @@ export function v45FootballObservations(detail:FootballLiveGameDetail):V45Perfor
   const teamStarterCounts=new Map([game.home.id,game.away.id].map(teamId=>[teamId,detail.players.filter(p=>p.teamId===teamId&&p.starter).length]));
   const rows:V45Performance[]=[];
   for(const player of detail.players){
-    if(!player.played||!player.stats||!PLAYER_ID.test(player.id))continue;
+    if(!player.stats||!PLAYER_ID.test(player.id)||
+      !(player.played||(player.starter&&((player.stats.observedFields?.length??0)>0||player.stats.minutes!==null))))continue;
     const own=player.teamId===game.home.id?game.home:player.teamId===game.away.id?game.away:null;
     const opponent=own?.id===game.home.id?game.away:game.home;
     if(!own)continue;

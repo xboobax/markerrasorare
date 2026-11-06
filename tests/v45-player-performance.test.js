@@ -29,7 +29,7 @@ const root=path.join(__dirname,'..');
 for(const f of ['schema/learning-v45-performance.sql','lib/learning-v45-db.ts','lib/learning-v45-pipeline.ts',
   'features/matches/football-live-center.tsx','app/api/learning-v45/route.ts','app/components/prediction-performance-v45.tsx'])assert.ok(fs.existsSync(path.join(root,f)),f);
 const config=require('../vercel.json');const jobs=config.crons.filter(j=>j.path.includes('job=playerstats'));
-assert.equal(jobs.length,12);assert.equal(config.crons.length,32);
+assert.equal(jobs.length,12);assert.equal(config.crons.filter(c=>c.path.startsWith('/api/cron/v44')).length,32);
 for(const job of jobs)assert.match(job.schedule,/^\d{1,2} \d{1,2} \* \* \*$/);
 const cron=fs.readFileSync(path.join(root,'app/api/cron/v44/route.ts'),'utf8');assert.match(cron,/cronAuthorized/);assert.match(cron,/job==='playerstats'/);
 const schema=fs.readFileSync(path.join(root,'schema/learning-v45-performance.sql'),'utf8');assert.match(schema,/PRIMARY KEY \(sport, competition, game_id, player_id\)/);

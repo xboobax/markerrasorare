@@ -1,3 +1,5 @@
+> **V4.5.15 Football Stats Center 2.0:** ESPN-/Sorare-FINAL-Import, zusätzliches Neon-Statistikarchiv und Matchstats im Fußball-Spielerprofil. **Pflicht: SQL-Migration** `schema/football-stats-v4515.sql` einmalig in Neon ausführen. Die Understat-xG/xA-Anbindung ist optional und wird nicht ohne nachgewiesene Quellenberechtigung aktiviert. Details: [UPDATE_V4_5_15_FOOTBALL_STATS_CENTER_DE.md](UPDATE_V4_5_15_FOOTBALL_STATS_CENTER_DE.md). Prognosen/Optimizer unverändert.
+
 > **Neu V4.3.0:** Football Live Center unterstützt zusätzlich Champions League, Europa League, Conference League und Länderspiele weltweit (Freundschaftsspiele, Nations League, WM-/EM-Turniere und Qualifikationen). Effiziente Gruppen-/Liga-Filter, internationale Zeitzonen und verifizierte Set-Spieler. Siehe `UPDATE_V4_3_0_EUROPA_LAENDERSPIELE_DE.md`.
 
 > **Neu V4.1.0:** NBA Live Match Center mit ESPN-Gamecast-Adapter, Play-by-Play, Boxscore, vorläufigem Sorare-Basisscore, optionalen PP/Q80-Modellwerten auf Abruf und Berlin-Zeitzonenfilter. Siehe `UPDATE_V4_1_0_NBA_LIVE_CENTER_DE.md`.

@@ -14,7 +14,7 @@ assert.deepEqual(v455SelectPendingGames(raw,new Set(),1).map(g=>g.id),['402']);
 assert.deepEqual(v455SelectPendingGames(raw,new Set(raw.map(g=>g.leagueKey+':'+g.id))),[]);
 const root=path.join(__dirname,'..');
 const crons=require('../vercel.json').crons;
-assert.equal(crons.length,32,'no new Cron entries required');
+assert.equal(crons.filter(c=>c.path.startsWith('/api/cron/v44')).length,32,'original V4.4 jobs preserved');
 const route=fs.readFileSync(path.join(root,'app/api/cron/v44/route.ts'),'utf8');
 assert.match(route,/cronAuthorized/,'backfill remains behind existing cron authentication');
 const code=fs.readFileSync(path.join(root,'lib/learning-v45-pipeline.ts'),'utf8');

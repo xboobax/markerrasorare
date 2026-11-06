@@ -36,6 +36,6 @@ assert.match(css,/data-workspace="analytics"/);
 assert.match(css,/\.v35-workspace \.v23-team-column\{[^}]*position:sticky/);
 const vercel=JSON.parse(fs.readFileSync(path.join(__dirname,'../vercel.json'),'utf8'));
 const optional=JSON.parse(fs.readFileSync(path.join(__dirname,'../vercel.prediction-crons.optional.json'),'utf8'));
-assert.ok(vercel.crons.every(c=>c.path.startsWith('/api/cron/v44')),'Only the authenticated V4.4 learning cron is active');
+assert.ok(vercel.crons.every(c=>c.path.startsWith('/api/cron/v44')||c.path.startsWith('/api/cron/v4515')),'Only authenticated V4.4 and V4.5.15 server cron routes are active');
 assert.ok(optional.crons.length>=1);
 console.log('V3.5 Clean Workspace QoL / presets / lineup diff / optional cron: OK');

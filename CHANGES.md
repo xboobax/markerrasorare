@@ -306,3 +306,13 @@ Neu: Lineup Doctor (regelvalidierte Wechselideen), Hidden Gems Finder (NBA Punkt
 - Strikte bestätigte NBA-Terminfilter (Heute / 24h / Morgen / 7 Tage), Ausfallfilter und 16/11 Sterne-DP.
 - Sichere vollständige Fünferteam-Übernahme in den manuellen NBA Builder mit erneuter Regelprüfung und Schutz bestehender Teams.
 - Bestehende Prognose-/Learning-Pipelines sowie NBA- und Fußball-Live-Center unverändert.
+
+
+### V4.5.15 – Football Stats Center 2.0
+- Quellengetrennte, additive Neon-Tabellen für echte ESPN-/Understat-Fußballspielerstats, FINAL-Sorare-Scores, verifizierte Spielerlinks und Import-Cursor. SQL unter `schema/football-stats-v4515.sql`.
+- Reparierte ESPN-FINAL-Erkennung und vollständiger geschützter historischer Nachimport; bestehende ESPN-Archivierung bleibt parallel erhalten.
+- Offizielle Sorare-FINAL-Score-Historie mit Decisive/All-Around, vielen Einzelstatistiken und exakt `totalScore` je Scoringereignis; 5 kleine tägliche Sorare-Cron-Shards.
+- Player-Profil „Real Stats · Sorare Scoring“, saisonale Ansichten, L5/L15, Quellentrennung, pro 90 Minuten, bestätigte Same-Match-Verknüpfungen; kompakte Diagnose unter Analytics.
+- Optionaler Python-SoccerData/Understat-Adapter mit Dry-Run als Standard und privatem Upload ausschließlich bei nachgewiesen zulässiger Nutzung; keine neuen Pflicht-Abos oder Upstash.
+- Keine Änderungen an PP/Q80, NBA-/Football-Optimizer oder Modell-Learning.
+- Deployment & Einschränkungen: `UPDATE_V4_5_15_FOOTBALL_STATS_CENTER_DE.md`.

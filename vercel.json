@@ -128,6 +128,26 @@
     {
       "path": "/api/cron/v44?job=playerstats&sport=football&batch=national-3",
       "schedule": "48 13 * * *"
+    },
+    {
+      "path": "/api/cron/v4515?job=sorare&shard=0",
+      "schedule": "0 15 * * *"
+    },
+    {
+      "path": "/api/cron/v4515?job=sorare&shard=1",
+      "schedule": "10 15 * * *"
+    },
+    {
+      "path": "/api/cron/v4515?job=sorare&shard=2",
+      "schedule": "20 15 * * *"
+    },
+    {
+      "path": "/api/cron/v4515?job=sorare&shard=3",
+      "schedule": "30 15 * * *"
+    },
+    {
+      "path": "/api/cron/v4515?job=sorare&shard=4",
+      "schedule": "40 15 * * *"
     }
   ]
 }

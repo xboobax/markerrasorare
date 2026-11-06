@@ -306,3 +306,32 @@
 .dream-loading-panels{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:12px}
 .dream-loading-panel{height:220px}
 @media(max-width:730px){.dream-loading-panels{grid-template-columns:1fr}.dream-loading-panel{height:150px}}
+/* V4.5.15 – compact football real stats, never changes forecast cards */
+.v4515-stats-center{border:1px solid #25323b;border-radius:14px;background:#090c10;padding:14px;margin:14px 0;color:#f0f3f6}
+.v4515-stats-center>summary{cursor:pointer;display:flex;justify-content:space-between;gap:10px;align-items:center;font-size:12px;letter-spacing:.03em}
+.v4515-stats-center>summary>span{color:#8899a5;font-size:11px;letter-spacing:0}
+.v4515-stats-center h4{font-size:12px;margin:18px 0 9px;color:#c4d6e3;letter-spacing:.03em}
+.v4515-stats-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:13px 0}
+.v4515-stats-toolbar label{font-size:11px;color:#9aabba;display:flex;align-items:center;gap:7px}
+.v4515-stats-toolbar select{background:#111821;color:#edf2f8;border:1px solid #263441;border-radius:7px;padding:5px 9px;max-width:145px}
+.v4515-stats-toolbar input{accent-color:#93c6e5}
+.v4515-stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:7px}
+.v4515-stat{background:#11171e;border:1px solid #1a2833;border-radius:10px;padding:10px 9px;min-width:0}
+.v4515-stat small{font-size:10px;display:block;color:#91a5b3;line-height:1.4}
+.v4515-stat strong{font-size:19px;display:block;margin-top:4px;color:#fff;font-variant-numeric:tabular-nums}
+.v4515-source-notes{color:#8c9ba9;font-size:10px;display:flex;flex-wrap:wrap;gap:8px;margin-top:7px}
+.v4515-stats-warning{color:#eab68b;background:#211811;border-radius:8px;padding:10px;font-size:11px}
+.v4515-stats-history{border-top:1px solid #1e2b34;margin-top:13px;padding-top:10px}
+.v4515-stats-history>summary,.v4515-stat-match>summary{cursor:pointer;font-size:12px}
+.v4515-stat-match{border-bottom:1px solid #1a2933;padding:10px 0}
+.v4515-stat-match>summary{display:flex;justify-content:space-between;gap:12px;align-items:center}
+.v4515-stat-match>summary span{color:#c2cfd9;min-width:0}
+.v4515-stat-match>summary strong{white-space:nowrap;color:#fff;font-size:12px}
+.v4515-stat-match>summary strong small{display:block;font-weight:400;font-size:10px;color:#91a5b3}
+.v4515-all-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:5px;margin-top:10px}
+.v4515-all-stats>div{background:#111821;border-radius:7px;padding:7px;font-size:11px;display:flex;justify-content:space-between;gap:10px}
+.v4515-all-stats>div span{color:#9dadb9}.v4515-all-stats>div b{font-variant-numeric:tabular-nums}
+@media(max-width:600px){.v4515-stats-center>summary{flex-direction:column;align-items:flex-start}.v4515-stat-match>summary{flex-wrap:wrap}.v4515-all-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+.v4515-official-companion{display:flex;justify-content:space-between;flex-wrap:wrap;gap:5px 12px;margin:9px 0;border:1px solid #213b37;border-radius:8px;padding:8px 11px;background:#0c1715;color:#a3d6cc;font-size:11px}
+.v4515-official-companion>span{color:#bfd7d0}
