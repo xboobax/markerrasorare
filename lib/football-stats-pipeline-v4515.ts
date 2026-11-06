@@ -5,7 +5,7 @@ import {v45FootballObservations} from './learning-v45-performance';
 import {v45SavePerformances} from './learning-v45-db';
 import {fromEspnPerformances,validatedEspnFinal} from './football-stats-v4515';
 import {saveFootballMatchStats,scoreSyncCandidates,getFootballScoreCursor,
-  setFootballScoreCursor,saveOfficialFootballScores,linkFootballByOfficialGame} from './football-stats-db-v4515';
+  setFootballScoreCursor,saveOfficialFootballScores,linkFootballByOfficialGame,reconcileArchivedFootballScores} from './football-stats-db-v4515';
 import {fetchOfficialSorareHistory} from './football-stats-sorare-v4515';
 import {v44SaveJob} from './learning-v44-db';
 import type {FootballLiveGame} from './football-live-core';
@@ -76,4 +76,12 @@ export async function v4515FootballHistoricBackfill(batch:FootballStatBatch,star
     nextOffset:offset+games.length<found.size?offset+games.length:null,
     games:games.length,observations,saved,withoutStats:empty,failures,
     truncated:offset+games.length<found.size,message};
+}
+
+/** Daily + on-demand replay: does not fetch provider data or change predictions. */
+export async function v45161ReconcileArchivedScores(now=new Date(),pageSize=40){
+  const result=await reconcileArchivedFootballScores(pageSize);
+  await v44SaveJob({scope:'v45161:reconcile',at:now.toISOString(),ok:true,
+    count:result.linkedRows,message:result.message});
+  return result;
 }

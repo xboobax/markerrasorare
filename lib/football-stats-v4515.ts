@@ -2,6 +2,7 @@
 import type {V45Performance} from './learning-v45-performance';
 import type {FootballLiveGame,FootballLiveGameDetail} from './football-live-core';
 import {sorareNameKey} from './football-live-sorare';
+import {clubsIdentical} from './football-identity-reconcile-v45161';
 export type FootballStatsProvider='espn'|'understat'|'fbref'|'sofascore'|'whoscored'|'soccerdata_espn'|'matchhistory'|'clubelo'|'sofifa';
 export type FootballMatchStats={source:FootballStatsProvider;sourceGameId:string;sourcePlayerId:string;
   playerName:string;team:string;opponent:string;competition:string;fixtureStart:string;
@@ -82,7 +83,7 @@ export function verifiedProfileMatches<T extends {source:string;playerName:strin
   if(key.length<2)return [];
   const isLinked=(r:T)=>linkedIds.has(`${r.source}:${r.sourcePlayerId}`);
   const candidates=rows.filter(r=>isLinked(r)||
-    (normalizedName(r.playerName)===key&&club.length>=3&&sorareNameKey(r.team)===club));
+    (normalizedName(r.playerName)===key&&club.length>=3&&clubsIdentical(r.team,team)));
   const idsBySource=new Map<string,Set<string>>();
   for(const r of candidates){const source=(r as {source?:string}).source??'unknown';
     const ids=idsBySource.get(source)??new Set<string>();ids.add(r.sourcePlayerId);idsBySource.set(source,ids);}
@@ -114,13 +115,13 @@ export function linkStatsToOfficialMatches(
   for(const row of matches){
     const stamp=Date.parse(row.date);if(!Number.isFinite(stamp))continue;
     const team=sorareNameKey(row.team),opponent=sorareNameKey(row.opponent);
-    if(!team||!opponent||team===opponent)continue;
+    if(!team||!opponent||clubsIdentical(row.team,row.opponent))continue;
     const eligible=official.filter(score=>{
       const when=Date.parse(score.date);
       if(!Number.isFinite(when)||Math.abs(when-stamp)>3*60*60*1000)return false;
-      const home=sorareNameKey(score.home),away=sorareNameKey(score.away);
-      if(score.team&&team!==sorareNameKey(score.team))return false;
-      return (team===home&&opponent===away)||(team===away&&opponent===home);
+      if(score.team&&!clubsIdentical(row.team,score.team))return false;
+      return (clubsIdentical(row.team,score.home)&&clubsIdentical(row.opponent,score.away))||
+        (clubsIdentical(row.team,score.away)&&clubsIdentical(row.opponent,score.home));
     });
     if(eligible.length!==1)continue;
     const gameId=eligible[0].scoreId;

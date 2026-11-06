@@ -323,3 +323,9 @@ Neu: Lineup Doctor (regelvalidierte Wechselideen), Hidden Gems Finder (NBA Punkt
 - Optionaler Python-SoccerData/Understat-Adapter mit Dry-Run als Standard und privatem Upload ausschließlich bei nachgewiesen zulässiger Nutzung; keine neuen Pflicht-Abos oder Upstash.
 - Keine Änderungen an PP/Q80, NBA-/Football-Optimizer oder Modell-Learning.
 - Deployment & Einschränkungen: `UPDATE_V4_5_15_FOOTBALL_STATS_CENTER_DE.md`.
+
+
+## V4.5.16.1 – Player Matching Hotfix
+- Archivabgleich ESPN/Understat ↔ offizielle Sorare-FINAL-Scores, sicherer Vereins- und Gegnerabgleich.
+- GitHub-Workflow: `reconcile_preview` / `reconcile_import`; täglicher Cron und automatischer Abgleich nach ESPN-Backfill.
+- Profilansicht verwendet denselben Vereinsabgleich. Keine neuen SQL-Tabellen oder Änderungen an Prognosen.

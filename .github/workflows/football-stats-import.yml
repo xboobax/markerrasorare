@@ -13,6 +13,8 @@ on:
           - espn_import
           - soccerdata_preview
           - soccerdata_import
+          - reconcile_preview
+          - reconcile_import
       from_date:
         description: 'Beginn (YYYY-MM-DD)'
         type: string
@@ -120,6 +122,16 @@ jobs:
           set -euo pipefail
           if [ -z "$END_DATE" ]; then END_DATE="$(date -u +%F)"; fi
           case "$RUN_MODE" in
+            reconcile_preview)
+              python scripts/reconcile_football_stats.py
+              ;;
+            reconcile_import)
+              if [ -z "$FOOTBALL_STATS_BASE_URL" ] || [ -z "$CRON_SECRET" ]; then
+                echo 'Fehler: GitHub Secrets FOOTBALL_STATS_BASE_URL und CRON_SECRET fehlen.' >&2
+                exit 1
+              fi
+              python scripts/reconcile_football_stats.py --send
+              ;;
             espn_preview)
               python scripts/backfill_football_season.py --from "$START_DATE" --until "$END_DATE" --batches "$ESPN_BATCHES"
               ;;
@@ -129,6 +141,8 @@ jobs:
                 exit 1
               fi
               python scripts/backfill_football_season.py --from "$START_DATE" --until "$END_DATE" --batches "$ESPN_BATCHES" --send
+              # After ESPN history is saved, match archived official Sorare scores.
+              python scripts/reconcile_football_stats.py --send
               ;;
             soccerdata_preview|soccerdata_import)
               if [ "$SOURCE_RIGHTS_CONFIRMED" != 'true' ]; then

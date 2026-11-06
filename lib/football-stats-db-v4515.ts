@@ -3,6 +3,7 @@ import {neon} from '@neondatabase/serverless';
 import type {FootballStatsProvider,FootballMatchStats,FootballOfficialScore,FootballProfileRow} from './football-stats-v4515';
 import {normalizeStatsRows,normalizedName,verifiedProfileMatches} from './football-stats-v4515';
 import {sorareNameKey} from './football-live-sorare';
+import {verifiedIdentityProposals} from './football-identity-reconcile-v45161';
 const db=()=>{const d=process.env.DATABASE_URL;if(!d)throw new Error('DATABASE_URL fehlt');return neon(d);};
 const sql=(text:string,params:unknown[]=[])=>db().query(text,params as any[],{fetchOptions:{cache:'no-store'}});
 export const footballStatsDbReady=()=>Boolean(process.env.DATABASE_URL);
@@ -141,7 +142,7 @@ export async function footballStatsDiagnostic(){
     FROM football_stats_v4515_sorare_scores`);
   const links=await sql(`SELECT provider,count(*)::integer AS count FROM football_stats_v4515_identity_links GROUP BY provider`);
   const jobs=await sql(`SELECT scope,at,ok,message,count FROM learning_v44_jobs
-    WHERE scope LIKE 'v4515:%' OR scope LIKE 'v45:stats:football-%' ORDER BY at DESC LIMIT 15`);
+    WHERE scope LIKE 'v4515:%' OR scope LIKE 'v45161:%' OR scope LIKE 'v45:stats:football-%' ORDER BY at DESC LIMIT 15`);
   const fmt=(r:any)=>({...r,newest_match:r.newest_match?iso(r.newest_match):null,last_import:r.last_import?iso(r.last_import):null});
   return {sourceStats:data.map(fmt),officialScores:fmt(official[0]??{}),verifiedLinks:links,
     jobs:jobs.map((x:any)=>({...x,at:iso(x.at)})),predictionModelChanged:false};
@@ -161,4 +162,90 @@ export async function setFootballScoreCursor(scope:string,offset:number,message:
     VALUES($1,$2,NOW(),$3) ON CONFLICT(scope) DO UPDATE
     SET next_offset=EXCLUDED.next_offset,last_run=NOW(),last_status=EXCLUDED.last_status`,
     [scope,offset,message.slice(0,300)]);
+}
+
+/** V4.5.16.1: replay identity matching over existing FINAL Sorare scores.
+ * Batch access + persistent cursor avoid large/slow serverless requests. */
+export async function reconcileArchivedFootballScores(pageSize=40):Promise<{
+  processed:number;possibleCandidates:number;verifiedIdentities:number;linkedRows:number;
+  nextOffset:number;cycleComplete:boolean;message:string}>{
+  if(!Number.isInteger(pageSize)||pageSize<1||pageSize>60)throw new Error('Ungültige Reconciliation-Seitengröße');
+  const scope='v45161:reconcile';
+  const offset=await getFootballScoreCursor(scope);
+  const scoreRows=await sql(`SELECT sorare_score_id,sorare_slug,player_name,sorare_game_id,
+      fixture_start,home,away,team FROM football_stats_v4515_sorare_scores
+      WHERE score_status='FINAL'
+      ORDER BY fixture_start DESC,sorare_score_id DESC OFFSET $1 LIMIT $2`,[offset,pageSize]);
+  if(!scoreRows.length){await setFootballScoreCursor(scope,0,'Archivende: nächster Durchlauf beginnt von vorne');
+    return {processed:0,possibleCandidates:0,verifiedIdentities:0,linkedRows:0,
+      nextOffset:0,cycleComplete:true,message:'Keine weiteren FINAL-Scores; Neustart am Archivanfang'};}
+  const scores=scoreRows.map((r:any)=>({scoreId:String(r.sorare_score_id),slug:String(r.sorare_slug),
+    playerName:String(r.player_name),gameId:String(r.sorare_game_id),date:iso(r.fixture_start),
+    home:String(r.home),away:String(r.away),team:r.team?String(r.team):null}));
+  // Match ESPN names and fixture dates in SQL; verify both clubs, opponents,
+  // source match uniqueness and player IDs in pure deterministic TypeScript.
+  const candidates=await sql(`WITH score_input AS (
+    SELECT * FROM jsonb_to_recordset($1::jsonb) AS x
+      (score_id text,player_name text,fixture_start timestamptz)
+  ) SELECT s.score_id,e.source,e.source_game_id,e.source_player_id,
+      e.player_name,e.team,e.opponent,e.fixture_start
+    FROM score_input s JOIN football_stats_v4515_player_matches e
+      ON lower(e.player_name)=lower(s.player_name)
+     AND e.fixture_start BETWEEN s.fixture_start-INTERVAL '3 hours'
+                             AND s.fixture_start+INTERVAL '3 hours'
+    WHERE e.source IN ('espn','understat')`,[JSON.stringify(scores.map(s=>({
+      score_id:s.scoreId,player_name:s.playerName,fixture_start:s.date})))]);
+  const proposals=verifiedIdentityProposals(scores,candidates.map((r:any)=>({
+    scoreId:String(r.score_id),source:String(r.source),sourceGameId:String(r.source_game_id),
+    sourcePlayerId:String(r.source_player_id),playerName:String(r.player_name),
+    team:String(r.team),opponent:String(r.opponent),date:iso(r.fixture_start)})));
+  // Never replace or silently add a conflicting provider-to-Sorare mapping.
+  // A single slug may not silently accumulate different IDs from one provider.
+  let verifiedIdentities=0,linkedRows=0;
+  if(proposals.length){
+    const existing=await sql(`WITH proposed AS (SELECT * FROM jsonb_to_recordset($1::jsonb)
+      AS p(provider text,provider_player_id text,sorare_slug text))
+      SELECT DISTINCT l.provider,l.provider_player_id,l.sorare_slug
+      FROM football_stats_v4515_identity_links l JOIN proposed p
+      ON l.provider=p.provider AND
+        (l.provider_player_id=p.provider_player_id OR l.sorare_slug=p.sorare_slug)`,
+      [JSON.stringify(proposals.map(p=>({provider:p.provider,provider_player_id:p.providerPlayerId,
+        sorare_slug:p.sorareSlug})))]);
+    const approved=proposals.filter(p=>!existing.some((r:any)=>String(r.provider)===p.provider&&
+      ((String(r.provider_player_id)===p.providerPlayerId&&String(r.sorare_slug)!==p.sorareSlug)||
+      (String(r.sorare_slug)===p.sorareSlug&&String(r.provider_player_id)!==p.providerPlayerId))));
+    if(approved.length){
+      const input=approved.map(p=>({provider:p.provider,provider_player_id:p.providerPlayerId,
+        sorare_slug:p.sorareSlug,evidence:`verified_sorare_final_archive:${p.sorareGameId}`}));
+      const persisted=await sql(`WITH proposed AS (SELECT * FROM jsonb_to_recordset($1::jsonb)
+        AS p(provider text,provider_player_id text,sorare_slug text,evidence text))
+        INSERT INTO football_stats_v4515_identity_links AS current_link
+          (provider,provider_player_id,sorare_slug,evidence)
+        SELECT provider,provider_player_id,sorare_slug,evidence FROM proposed WHERE TRUE
+        ON CONFLICT(provider,provider_player_id) DO UPDATE SET
+          evidence=EXCLUDED.evidence,confirmed_at=NOW()
+        WHERE current_link.sorare_slug=EXCLUDED.sorare_slug
+        RETURNING provider,provider_player_id,sorare_slug,evidence`,[JSON.stringify(input)]);
+      verifiedIdentities=persisted.length;
+      if(persisted.length){
+        const updated=await sql(`WITH confirmed AS (SELECT * FROM jsonb_to_recordset($1::jsonb)
+          AS p(provider text,provider_player_id text,sorare_slug text,evidence text))
+          UPDATE football_stats_v4515_player_matches e SET
+            sorare_slug=p.sorare_slug,identity_evidence=p.evidence
+          FROM confirmed p
+          WHERE e.source=p.provider AND e.source_player_id=p.provider_player_id
+            AND (e.sorare_slug IS NULL OR e.sorare_slug=p.sorare_slug)
+          RETURNING e.source_game_id`,[JSON.stringify(persisted)]);
+        linkedRows=updated.length;
+      }
+    }
+  }
+  const nextOffset=scoreRows.length<pageSize?0:offset+scoreRows.length;
+  const cycleComplete=scoreRows.length<pageSize;
+  const message=`Archivabgleich: ${scores.length} FINAL-Scores, ${candidates.length} mögliche ESPN/Understat-Treffer, `+
+    `${verifiedIdentities} verifizierte Spieler-IDs, ${linkedRows} Statistikzeilen zugeordnet; `+
+    `${cycleComplete?'Durchlauf beendet':'Fortsetzung ab Offset '+nextOffset}`;
+  await setFootballScoreCursor(scope,nextOffset,message);
+  return {processed:scores.length,possibleCandidates:candidates.length,verifiedIdentities,
+    linkedRows,nextOffset,cycleComplete,message};
 }

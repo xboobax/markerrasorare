@@ -53,7 +53,7 @@ assert.match(dashboard,/^"use client";/,'Dashboard must keep client directive be
 assert(dashboard.includes('<FootballStatsPanel')&&dashboard.includes('<FootballStatsDiagnostics'));
 const manifest=JSON.parse(fs.readFileSync(path.join(P,'vercel.json')));
 const crons=manifest.crons.filter(c=>c.path.startsWith('/api/cron/v4515'));
-assert.equal(crons.length,5);assert(new Set(crons.map(c=>c.path)).size===5);
+assert.equal(crons.filter(c=>c.path.includes('job=sorare')).length,5);assert.equal(crons.filter(c=>c.path.includes('job=reconcile')).length,1);assert(new Set(crons.map(c=>c.path)).size===6);
 const migration=fs.readFileSync(path.join(P,'schema/football-stats-v4515.sql'),'utf8');
 for(const name of ['football_stats_v4515_player_matches','football_stats_v4515_sorare_scores','football_stats_v4515_identity_links','football_stats_v4515_import_cursor'])assert(migration.includes(`CREATE TABLE IF NOT EXISTS ${name}`));
 const sql=fs.readFileSync(path.join(P,'lib/football-stats-db-v4515.ts'),'utf8');
