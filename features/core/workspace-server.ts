@@ -1,4 +1,5 @@
 import {getFootballClubs,getPlayers,type Club} from "@/lib/sorare";
+import {unstable_cache} from "next/cache";
 import {getRegularNbaTeams} from "@/lib/regular-nba";
 import {forecast,type Forecast,type Sport} from "@/lib/model";
 import {FOOTBALL_LEAGUES,isFootballLeague} from "@/lib/leagues";
@@ -11,7 +12,7 @@ import type {FetchSummary} from "@/lib/data-health";
 import type {AutomaticMatchupData} from "@/lib/auto-matchups";
 export type WorkspaceData={sport:Sport;league:string;leagues:string[];team:string;clubs:Club[];players:Forecast[];info:string;error:string;automaticMatchups:AutomaticMatchupData;nbaSchedule:ScheduleData;fetchSummary:FetchSummary};
 export type WorkspaceQuery={sport?:string;league?:string;team?:string};
-export async function loadWorkspaceData(query:WorkspaceQuery,collectionOnly=false):Promise<WorkspaceData>{
+async function loadUncachedWorkspaceData(query:WorkspaceQuery,collectionOnly=false):Promise<WorkspaceData>{
   const sport:Sport=query.sport==="nba"?"nba":"football";
   const emptySchedule:ScheduleData={fixtures:[],status:"not-configured",source:null};
   let players:Forecast[]=[],clubs:Club[]=[],shownClubs:Club[]=[],leagues:string[]=[],league="",team=query.team??"",info="",error="";
@@ -48,4 +49,46 @@ export async function loadWorkspaceData(query:WorkspaceQuery,collectionOnly=fals
   const resolvedMatchups=espnDefense&&espnDefense.coverage>0?espnDefense:automaticMatchups;
   if(sport==="nba")players=attachNbaFixtures(players,nbaSchedule);
   return {sport,league,leagues,team,clubs:shownClubs,players,info,error,automaticMatchups:resolvedMatchups,nbaSchedule,fetchSummary};
+}
+
+/**
+ * Share public Sorare workspace data between the Builder, Analytics,
+ * Player Database and Daily Missions routes. Without this cache, changing
+ * menu entries replays the same multi-club roster walk and forecast work.
+ *
+ * This is intentionally server-only and contains NO owned cards, login
+ * tokens, user collection, browser settings or private Sorare data.
+ * It does not change the existing 300-second page revalidation contract.
+ * Failed or incomplete rosters are NOT retained in this cache.
+ */
+const cachedPublicWorkspace=unstable_cache(
+  async(sport:Sport,league:string,team:string):Promise<WorkspaceData>=>{
+    const data=await loadUncachedWorkspaceData({sport,league,team});
+    if(data.error||data.fetchSummary.failedTeams>0||data.fetchSummary.incompleteTeams>0){
+      // Throwing avoids storing an incomplete roster as a successful cache entry.
+      // Preserve the actual partial result for this request in memory only.
+      throw new IncompleteWorkspace(data);
+    }
+    return data;
+  },
+  ["dream-public-workspace-v4512"],
+  {revalidate:180}
+);
+class IncompleteWorkspace extends Error{
+  constructor(readonly data:WorkspaceData){super("Incomplete Sorare roster – not cached");}
+}
+export async function loadWorkspaceData(query:WorkspaceQuery,collectionOnly=false):Promise<WorkspaceData>{
+  if(collectionOnly)return loadUncachedWorkspaceData(query,true);
+  const sport:Sport=query.sport==="nba"?"nba":"football";
+  // Normalize equivalent URLs so the same cached dataset is shared by routes.
+  const league=sport==="nba"?"":query.league==="__all"||isFootballLeague(query.league)?query.league:"Bundesliga";
+  const team=typeof query.team==="string"?query.team:"";
+  try{
+    return await cachedPublicWorkspace(sport,league,team);
+  }catch(e){
+    if(e instanceof IncompleteWorkspace)return e.data;
+    // Cache/backend outages must not hide the original, previously functional
+    // workspace path; fall back without bypassing the roster safety warnings.
+    return loadUncachedWorkspaceData({...query,sport});
+  }
 }

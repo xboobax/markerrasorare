@@ -39,9 +39,9 @@ export default function DreamShell({children}:{children:React.ReactNode}){
   const filtered=items.filter(item=>`${item.label} ${item.href}`.toLowerCase().includes(commandQuery.toLowerCase()));
   return <div className="dream-frame">
     <aside className={`dream-sidebar ${open?"is-open":""}`} aria-label="Hauptnavigation">
-      <Link href="/" className="dream-brand" aria-label="MarkErras Sorare Dream Startseite"><span className="dream-monogram">M<span>◆</span></span><span><strong>MarkErras</strong><small>SORARE DREAM <b>4.4.0</b></small></span></Link>
+      <Link href="/" className="dream-brand" aria-label="MarkErras Sorare Dream Startseite"><span className="dream-monogram">M<span>◆</span></span><span><strong>MarkErras</strong><small>SORARE DREAM <b>4.5.12</b></small></span></Link>
       <span className="dream-sidebar-label">WORKSPACE</span>
-      <nav className="dream-nav">{items.map(item=><Link href={item.href} key={item.label} aria-current={active(item.href)?"page":undefined} className={active(item.href)?"active":""}><span className="dream-nav-icon" aria-hidden="true">{item.icon}</span>{item.label}</Link>)}</nav>
+      <nav className="dream-nav">{items.map(item=><Link href={item.href} prefetch={false} key={item.label} aria-current={active(item.href)?"page":undefined} className={active(item.href)?"active":""}><span className="dream-nav-icon" aria-hidden="true">{item.icon}</span>{item.label}</Link>)}</nav>
       <div className="dream-sidebar-foot"><span className="dream-online-dot"/> Kostenloser Datenmodus<br/><small>Sync über Sorare · kein Upstash nötig</small></div>
     </aside>
     {open&&<button className="dream-mobile-overlay" aria-label="Menü schließen" onClick={()=>setOpen(false)}/>}
@@ -49,7 +49,7 @@ export default function DreamShell({children}:{children:React.ReactNode}){
       <header className="dream-header"><button className="dream-menu" aria-label="Navigation öffnen" onClick={()=>setOpen(v=>!v)}>☰</button>
         <div className="dream-crumb">MARKERRAS <span>/</span> <strong>{items.find(i=>active(i.href))?.label??"Workspace"}</strong></div>
         <div className="dream-header-actions">
-          <div className="dream-sport" aria-label="Sportart wählen"><Link className={sport==="football"?"selected":""} href={pathname.startsWith("/builder/")?"/builder/football":`${pathname}?sport=football`}>⚽ Fußball</Link><Link className={sport==="nba"?"selected":""} href={pathname.startsWith("/builder/")?"/builder/nba":`${pathname}?sport=nba`}>◉ NBA</Link></div>
+          <div className="dream-sport" aria-label="Sportart wählen"><Link prefetch={false} className={sport==="football"?"selected":""} href={pathname.startsWith("/builder/")?"/builder/football":`${pathname}?sport=football`}>⚽ Fußball</Link><Link prefetch={false} className={sport==="nba"?"selected":""} href={pathname.startsWith("/builder/")?"/builder/nba":`${pathname}?sport=nba`}>◉ NBA</Link></div>
           <button className="dream-command-trigger" type="button" onClick={()=>setCommand(true)} aria-label="Schnellaktionen öffnen">⌕ <span>Aktionen</span> <kbd>Ctrl K</kbd></button>
         </div>
       </header>

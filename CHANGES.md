@@ -1,3 +1,8 @@
+## V4.5.12 – Fast Navigation
+- Shared short-lived public workspace cache by sport/league/team; failures never cached.
+- Immediate loading boundaries for main navigation; no automatic all-route prefetch.
+- No changes to card sync, predictions, NBA, learning or cron jobs.
+
 ## V4.5.11 – Performance / Faster Collection Sync (2026-11-06)
 
 - Slim Collection route avoids loading the full optimizer and scouting dependencies.

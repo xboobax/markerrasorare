@@ -296,3 +296,13 @@
 .live-wrap .live-avatar{position:relative;display:block;isolation:isolate;overflow:hidden}
 .live-wrap .live-avatar-fallback{position:absolute;inset:0;display:grid;place-items:center;z-index:0;font-weight:750;font-size:15px;line-height:1}
 .live-wrap .live-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:1;display:block;background:transparent}
+
+/* V4.5.12: instant, minimal server-side navigation fallback. */
+.dream-route-loading{min-height:300px;display:flex;flex-direction:column;gap:18px;padding:2px 0}
+.dream-route-loading-heading p{margin:13px 0 0;color:#939792;font-size:12px}
+.dream-loading-skeleton{background:linear-gradient(100deg,#1b1d1d,#242420 50%,#1b1d1d);border:1px solid #30312e;border-radius:10px}
+.dream-loading-kicker{width:160px;height:10px;border:0}
+.dream-loading-title{width:min(390px,76%);height:28px;margin-top:14px}
+.dream-loading-panels{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:12px}
+.dream-loading-panel{height:220px}
+@media(max-width:730px){.dream-loading-panels{grid-template-columns:1fr}.dream-loading-panel{height:150px}}

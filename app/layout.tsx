@@ -4,7 +4,7 @@ import "./globals.css";
 import "./dream.css";
 
 export const metadata={
-  title:"MarkErras Sorare Dream 4.1 | Football & NBA",
+  title:"MarkErras Sorare Dream 4.5.12 | Football & NBA",
   description:"Black & Gold Sorare Workspace für Fußball und NBA: Builder, Kartensammlung, Daily Missions, NBA Live Center, Match Center, Player Database und Analyse.",
 };
 
