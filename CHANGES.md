@@ -1,3 +1,10 @@
+### V4.5.14 – Football Smart Optimizer 3.0
+- Ersetzt den alten Fußball-Auto-Optimizer im bestehenden Menüpunkt.
+- Matchday Ready: Heute, exakt 24h, morgen, 7 Tage; Sorare-Fixture und verifizierte ESPN-Kickoffs.
+- Vier Strategien, Diversity 1–3 mit 90-%-Qualitätskontrolle.
+- Fünferteam-Übernahme inklusive Captain in den manuellen Builder mit erneuter Validierung.
+- Ohne zusätzliche Datenbank-/Cron-/Bezahl-API-Abhängigkeiten.
+
 ## V4.5.12 – Fast Navigation
 - Shared short-lived public workspace cache by sport/league/team; failures never cached.
 - Immediate loading boundaries for main navigation; no automatic all-route prefetch.

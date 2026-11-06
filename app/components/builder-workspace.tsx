@@ -3,6 +3,7 @@
 import {memo,useDeferredValue,useEffect,useMemo,useRef,useState,type DragEvent} from "react";
 import {ARCADE} from "@/config/divination";
 import {eligibleNbaStarsIds,verifyStarsTransfer,type StarsMatchdayWindow,type StarsBudget} from "@/lib/nba-stars-matchday";
+import {eligibleFootballOptimizerIds,verifyFootballOptimizerTransfer,type FootballMatchdayWindow,type ConfirmedFootballKickoff} from "@/lib/football-smart-matchday";
 import {sorarePlayerUrl} from "@/lib/sorare-profile";
 import {isValidNbaStars,slotAccepts,type CardInput,type Strategy} from "@/lib/arcade";
 import {evaluateManualLineup} from "@/lib/manual-lineup";
@@ -29,7 +30,7 @@ import {conditionalCardScore,sumConditionalScores} from "@/lib/prediction-presen
 type CardSettings={owned?:boolean;stars?:number|null;bonusPercent?:number;bonusSource?:"sorare";starSource?:"sorare";locked?:boolean;excluded?:boolean};
 type Props={sport:Sport;league:string;availability:ReturnType<typeof useAvailability>;availabilityById:Record<string,AvailabilityReport>;players:Forecast[];cardStore:Record<string,CardSettings>;ownedOnly:boolean;verifiedOwnedReady:boolean;verifiedCollection:OwnedCollection|null;updateCard:(id:string,patch:CardSettings)=>void;
   targetScore:number|null;onOpenProfile:(id:string)=>void;onSavePredictions:(picks:Forecast[])=>void;
-  requestedPlayer?:{id:string;seq:number}|null;requestedStarsLineup?:{ids:string[];seq:number;window:StarsMatchdayWindow;budget:StarsBudget}|null;onStarsLineupHandled?:(seq:number)=>void;favorites:string[];onToggleFavorite:(id:string)=>void;
+  requestedPlayer?:{id:string;seq:number}|null;requestedStarsLineup?:{ids:string[];seq:number;window:StarsMatchdayWindow;budget:StarsBudget}|null;onStarsLineupHandled?:(seq:number)=>void;requestedFootballLineup?:{ids:string[];captainId:string;seq:number;window:FootballMatchdayWindow}|null;footballKickoffs?:ConfirmedFootballKickoff[];onFootballLineupHandled?:(seq:number)=>void;favorites:string[];onToggleFavorite:(id:string)=>void;
   nbaSchedule:ScheduleData;matchupRatings:OpponentRatings;matchupSource:string|null;v30State:BuilderV30State;onV30Change:(next:BuilderV30State)=>void;leagues:string[];
 };
 const fmt=(n:number)=>Number.isFinite(n)?n.toLocaleString("de-DE",{minimumFractionDigits:1,maximumFractionDigits:1}):"—";
@@ -87,7 +88,7 @@ function AvailabilityBadge({report,small=false}:{report?:AvailabilityReport;smal
 function MiniStat({label,value,tone}:{label:string;value:string;tone?:"good"|"warn"|"star"}){
   return <div className="v23-mini-stat"><small>{label}</small><strong className={tone?`tone-${tone}`:""}>{value}</strong></div>;
 }
-function BuilderWorkspace({sport,league,availability,availabilityById,players,cardStore,ownedOnly,verifiedOwnedReady,verifiedCollection,updateCard,targetScore,onOpenProfile,onSavePredictions,requestedPlayer,requestedStarsLineup,onStarsLineupHandled,favorites,onToggleFavorite,nbaSchedule,matchupRatings,matchupSource,v30State,onV30Change,leagues}:Props){
+function BuilderWorkspace({sport,league,availability,availabilityById,players,cardStore,ownedOnly,verifiedOwnedReady,verifiedCollection,updateCard,targetScore,onOpenProfile,onSavePredictions,requestedPlayer,requestedStarsLineup,onStarsLineupHandled,requestedFootballLineup,footballKickoffs=[],onFootballLineupHandled,favorites,onToggleFavorite,nbaSchedule,matchupRatings,matchupSource,v30State,onV30Change,leagues}:Props){
   const [teams,setTeams]=useState<WorkspaceTeam[]>(initialTeams);
   const [opponentLogos,setOpponentLogos]=useState<Record<string,string>>({});
   useEffect(()=>{
@@ -279,6 +280,28 @@ function BuilderWorkspace({sport,league,availability,availabilityById,players,ca
     // One-shot transfer: team changes must not trigger a second import.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[requestedStarsLineup,loadedSport,sport]);
+  const lastFootballImport=useRef<number|null>(null);
+  useEffect(()=>{
+    if(sport!=="football"||loadedSport!==sport||!requestedFootballLineup||lastFootballImport.current===requestedFootballLineup.seq)return;
+    lastFootballImport.current=requestedFootballLineup.seq;
+    onFootballLineupHandled?.(requestedFootballLineup.seq);
+    const ids=requestedFootballLineup.ids;
+    const fixtures=eligibleFootballOptimizerIds(players,requestedFootballLineup.window,new Date(),footballKickoffs);
+    const allowed=new Set(ids.filter(id=>fixtures.has(id)&&!isConfirmedOut(availabilityById[id])&&
+      !cardStore[id]?.excluded&&(!ownedOnly||(verifiedOwnedReady&&cardStore[id]?.owned===true))));
+    const error=verifyFootballOptimizerTransfer(ids,new Map(players.map(p=>[p.id,p.position])),allowed,requestedFootballLineup.captainId);
+    if(error){setMsg(`Football Optimizer: ${error} Das bestehende Team wurde nicht verändert.`);return;}
+    const free=teams.find(t=>t.selection.every(id=>!id));
+    const destination=free??teams.find(t=>t.id===activeTeamId)??teams[0];
+    if(!destination){setMsg("Kein manuelles Team vorhanden.");return;}
+    if(destination.selection.some(Boolean)&&!window.confirm(`Team ${destination.id.replace("team-","")} durch die fünf Fußballspieler ersetzen?`)){
+      setMsg("Lineup-Übernahme abgebrochen. Bisherige Teams bleiben unverändert.");return;
+    }
+    changeTeam(destination.id,t=>({...t,selection:[...ids] as WorkspaceTeam["selection"],locks:[],captainId:requestedFootballLineup.captainId,assetIds:{},assetBonuses:{},collapsed:false}));
+    setActiveTeamId(destination.id);setActiveSlot(null);
+    setMsg(`Football Optimizer 3.0: Fünferteam inklusive Captain in ${destination.id} übernommen. Bitte Sorare-Spielberechtigung prüfen.`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[requestedFootballLineup,loadedSport,sport]);
   const clearTeam=(id:string)=>{
     const team=teams.find(t=>t.id===id);
     if(!team)return;

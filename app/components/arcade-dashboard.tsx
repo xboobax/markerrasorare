@@ -18,6 +18,9 @@ import AutoBuilderSettings from "@/app/components/auto-builder-settings";
 import {initialV30State,restoreV30State,v30Key,v30ForTeam,limitLineupReuse,type BuilderV30State,type BuilderV30Settings} from "@/lib/builder-v30";
 import {buildArcadeIntelligence} from "@/lib/arcade-intelligence";
 import {buildNbaStarsOptimizer,assessNbaStarsLineup,lineupChanges,NBA_STARS_MODES,type NbaStarsMode,type NbaLineupDiversity} from "@/lib/nba-stars-optimizer";
+import {buildFootballOptimizer,FOOTBALL_OPTIMIZER_MODES,type FootballOptimizerMode,type FootballLineupDiversity} from "@/lib/football-smart-optimizer";
+import {footballWindowLabel,footballKickoffsFromScoreboards,eligibleFootballOptimizerIds,verifyFootballOptimizerTransfer,playerFootballFixture,canonicalFootballTeam,type FootballMatchdayWindow,type ConfirmedFootballKickoff} from "@/lib/football-smart-matchday";
+import {offsetBerlinDay} from "@/lib/builder-pool";
 import type {FetchSummary} from "@/lib/data-health";
 import type {ScheduleData} from "@/lib/gameweek-center";
 import {canonicalNbaTeam} from "@/lib/nba-fixture-mapping";
@@ -229,7 +232,45 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const [nbaClock,setNbaClock]=useState<Date|null>(null);
   const [requestedStarsLineup,setRequestedStarsLineup]=useState<{ids:string[];seq:number;window:StarsMatchdayWindow;budget:StarsBudget}|null>(null);
   const [starsNotice,setStarsNotice]=useState("");
+  const [footballWindow,setFootballWindow]=useState<FootballMatchdayWindow>("24h");
+  const [footballDiversity,setFootballDiversity]=useState<FootballLineupDiversity>(2);
+  const [footballMode,setFootballMode]=useState<FootballOptimizerMode>("max");
+  const [footballNotice,setFootballNotice]=useState("");
+  const [footballKickoffs,setFootballKickoffs]=useState<ConfirmedFootballKickoff[]>([]);
+  const [footballKickoffStatus,setFootballKickoffStatus]=useState<"idle"|"loading"|"ready"|"partial">("idle");
+  const [requestedFootballLineup,setRequestedFootballLineup]=useState<{ids:string[];captainId:string;seq:number;window:FootballMatchdayWindow}|null>(null);
+  const footballTransferSeq=useRef(0);
+  useEffect(()=>{setActiveResult(0);setFootballNotice("");},[footballWindow,footballDiversity,footballMode]);
   useEffect(()=>{setNbaClock(new Date());const timer=window.setInterval(()=>setNbaClock(new Date()),300000);return ()=>clearInterval(timer);},[]);
+  // The 24-hour view requires independently confirmed kickoffs, not a guessed midnight timestamp.
+  // No background match search is performed when the football optimizer is not visible.
+  useEffect(()=>{
+    if(sport!=="football"||activeTab!=="builder"||builderMode!=="automatic"||footballWindow!=="24h"||!nbaClock)return;
+    const controller=new AbortController();setFootballKickoffStatus("loading");setFootballKickoffs([]);
+    const days=[offsetBerlinDay(nbaClock),offsetBerlinDay(nbaClock,1)];
+    // Avoid 17 unnecessary international feed requests when no player has an
+    // international fixture candidate during this 24-hour period.
+    const needsNational=players.some(p=>{
+      const f=playerFootballFixture(p);
+      if(!f||!days.includes(f.day))return false;
+      const club=canonicalFootballTeam(p.team);
+      return club!==canonicalFootballTeam(f.home)&&club!==canonicalFootballTeam(f.away);
+    });
+    const queries=days.flatMap(day=>(needsNational?["clubs","international"]:["clubs"]).map(group=>`/api/football-live/scoreboard?date=${day}&league=${group}`));
+    Promise.allSettled(queries.map(async url=>{
+      const response=await fetch(url,{signal:controller.signal});if(!response.ok)throw new Error("Fixture-Feed nicht verfügbar");
+      const body=await response.json();if(!Array.isArray(body?.games))throw new Error("Fixture-Feed unvollständig");
+      return body;
+    })).then(results=>{
+      if(controller.signal.aborted)return;
+      const success=results.filter(v=>v.status==="fulfilled").map(v=>(v as PromiseFulfilledResult<{games:import("@/lib/football-live-core").FootballLiveGame[]}>).value);
+      setFootballKickoffs(footballKickoffsFromScoreboards(success));
+      setFootballKickoffStatus(success.length===queries.length?"ready":"partial");
+    }).catch(()=>{if(!controller.signal.aborted){setFootballKickoffs([]);setFootballKickoffStatus("partial");}});
+    return ()=>controller.abort();
+  },[sport,activeTab,builderMode,footballWindow,nbaClock,players]);
+
+
   useEffect(()=>{setNbaVariantKey(null);setActiveResult(0);setStarsNotice("");},[nbaWindow,nbaStarsLimit]);
   const [nbaVariantKey,setNbaVariantKey]=useState<string|null>(null);
   const [nbaDiversity,setNbaDiversity]=useState<NbaLineupDiversity>(2);
@@ -600,6 +641,12 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
 
   const eligibleNbaIds=useMemo(()=>sport==="nba"&&nbaClock?eligibleNbaStarsIds(players,nbaSchedule,nbaWindow,nbaClock):new Set<string>(),[sport,players,nbaSchedule,nbaWindow,nbaClock]);
   const matchdayNbaCards=useMemo(()=>sport==="nba"?eligibleCards.filter(c=>eligibleNbaIds.has(c.player.id)&&!isConfirmedOut(injuryById[c.player.id])).map(c=>({...c,player:c.player.hasGame===false?{...c.player,hasGame:true}:c.player})):eligibleCards,[sport,eligibleCards,eligibleNbaIds,injuryById]);
+  const eligibleFootballIds=useMemo(()=>sport==="football"&&nbaClock?
+    eligibleFootballOptimizerIds(players,footballWindow,nbaClock,footballKickoffs):new Set<string>(),
+    [sport,players,footballWindow,nbaClock,footballKickoffs]);
+  const footballMatchdayCards=useMemo(()=>sport==="football"?eligibleCards.filter(c=>eligibleFootballIds.has(c.player.id)&&
+    !isConfirmedOut(injuryById[c.player.id])):eligibleCards,[sport,eligibleCards,eligibleFootballIds,injuryById]);
+
   const dailyMissionOwnedIds=useMemo(()=>{
     // With no verified current Football Set, never substitute old browser flags
     // for confirmed ownership in the Daily Mission Picker.
@@ -656,6 +703,14 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const nbaStarBoard=useMemo(()=>activeTab==="builder"&&sport==="nba"&&builderMode==="automatic"&&!v30ActiveSettings.excludedLeagues.includes(league)?
     buildNbaStarsOptimizer(matchdayNbaCards,v30Options(v30ActiveSettings),nbaDiversity,nbaStarsLimit):null,
     [activeTab,sport,builderMode,matchdayNbaCards,ownedOnly,lockedIds,excludedIds,v30ActiveSettings,league,validTarget,totalTarget,nbaDiversity,nbaStarsLimit]);
+  const footballBoard=useMemo(()=>activeTab==="builder"&&sport==="football"&&builderMode==="automatic"&&
+    !v30ActiveSettings.excludedLeagues.includes(league)?
+    buildFootballOptimizer(footballMatchdayCards,v30Options(v30ActiveSettings),footballDiversity):null,
+    [activeTab,sport,builderMode,footballMatchdayCards,v30ActiveSettings,league,validTarget,totalTarget,ownedOnly,lockedIds,excludedIds,footballDiversity]);
+  const footballProfileLines=(board:NonNullable<typeof footballBoard>)=>{
+    const preferred=board.variants.find(v=>v.mode===footballMode)?.lineup??board.variants[0]?.lineup;
+    return preferred?[preferred,...board.variants.filter(v=>v.lineup!==preferred).map(v=>v.lineup)]:[];
+  };
   const nbaProfileLines=(board:NonNullable<typeof nbaStarBoard>,settings:BuilderV30Settings)=>{
     const effectiveMode=settings.preset==="safe"?"safe":settings.preset==="ceiling"?"upside":nbaStarsMode;
     const candidates=board.pools[effectiveMode];
@@ -674,14 +729,14 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const lineups = useMemo(() => {
     // Never search lineups when only the manual editor or another workspace is shown.
     if(activeTab!=="builder"||builderMode!=="automatic")return [];
-    const poolFor=(settings:BuilderV30Settings)=>settings.excludedLeagues.includes(league)?[]:sport==="nba"?matchdayNbaCards:eligibleCards;
+    const poolFor=(settings:BuilderV30Settings)=>settings.excludedLeagues.includes(league)?[]:sport==="nba"?matchdayNbaCards:footballMatchdayCards;
     const makeCandidates=(settings:BuilderV30Settings)=>sport==="nba"?
       nbaProfileLines(buildNbaStarsOptimizer(poolFor(settings),v30Options(settings),nbaDiversity,nbaStarsLimit),settings):
-      optimizeArcadeLineups(poolFor(settings),v30Options(settings));
+      footballProfileLines(buildFootballOptimizer(poolFor(settings),v30Options(settings),footballDiversity));
     if(v30State.scope==="all"){
       const settings=v30State.global;
       const lines=sport==="nba"&&nbaStarBoard?nbaProfileLines(nbaStarBoard,settings):
-        sport==="nba"?[]:optimizeArcadeLineups(poolFor(settings),v30Options(settings));
+        sport==="nba"?[]:footballBoard?footballProfileLines(footballBoard):[];
       return portfolioDiversity?diversifyPortfolio(lines,settings.maxUses,5,.9):limitLineupReuse(lines,settings.maxUses,5);
     }
     const picked:ReturnType<typeof optimizeArcadeLineups>=[],usage=new Map<string,number>();
@@ -697,19 +752,11 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
       picked.push(chosen);for(const pick of chosen.picks)usage.set(pick.player.id,(usage.get(pick.player.id)??0)+1);
     }
     return picked;
-  }, [activeTab,eligibleCards,matchdayNbaCards,sport,ownedOnly,strategy,validTarget,totalTarget,lockedIds,excludedIds,v30State,league,nbaStarsMode,nbaVariantKey,nbaStarBoard,builderMode,nbaDiversity,nbaStarsLimit,portfolioDiversity]);
+  }, [activeTab,eligibleCards,matchdayNbaCards,footballMatchdayCards,sport,ownedOnly,strategy,validTarget,totalTarget,lockedIds,excludedIds,v30State,league,nbaStarsMode,nbaVariantKey,nbaStarBoard,footballBoard,footballMode,footballDiversity,builderMode,nbaDiversity,nbaStarsLimit,portfolioDiversity]);
   // The older Intelligence Lab builds independent candidates without V3 rules.
   // Hide it when any advanced constraints are active rather than bypassing them.
-  const intelligence=useMemo(()=>activeTab==="builder"&&builderMode==="automatic"&&sport==="football"&&!v30AnyChanged ? buildArcadeIntelligence(eligibleCards,{
-    sport,ownedOnly,limit:8,beamWidth:260,maxCandidatesPerSlot:115,
-    targetScore:validTarget?totalTarget:null,lockedPlayerIds:lockedIds,excludedPlayerIds:excludedIds,
-  }):null,[activeTab,builderMode,eligibleCards,sport,ownedOnly,validTarget,totalTarget,lockedIds,excludedIds,v30AnyChanged]);
-  const intelligenceView=useMemo(()=>intelligence&&sport==="football"?{...intelligence,variants:intelligence.variants.map(v=>{
-    const lineup=automaticCaptainLineup(v.lineup,sport,injuryById,validTarget?totalTarget:null).lineup!;
-    return {...v,lineup,targetGap:intelligence.target===null?null:lineup.projectedScore-intelligence.target};
-  })}:intelligence,[intelligence,sport,injuryById,validTarget,totalTarget]);
-  const activeIntelligence=intelligence?.variants.find(v=>v.key===intelligencePickKey)??null;
-  const chosenBase = activeIntelligence?.lineup??lineups[Math.min(activeResult, lineups.length - 1)] ?? null;
+  // The previous Football Intelligence Lab is superseded by the single 3.0 optimizer.
+  const chosenBase = lineups[Math.min(activeResult, lineups.length - 1)] ?? null;
   const autoCaptainKey=chosenBase?.picks.map(p=>p.player.id).join("|")??"";
   const chosenAuto=automaticCaptainLineup(chosenBase,sport,injuryById,validTarget?totalTarget:null,autoCaptainChoice?.key===autoCaptainKey?autoCaptainChoice.playerId:null);
   const chosen=chosenAuto.lineup;
@@ -723,6 +770,19 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
     if(error){setStarsNotice(error);return;}
     setRequestedStarsLineup(old=>({ids,seq:(old?.seq??0)+1,window:nbaWindow,budget:nbaStarsLimit}));
     setStarsNotice("Übertragung in den manuellen NBA Builder. Keine automatische Sorare-Einreichung.");
+    setBuilderMode("manual");
+  };
+  const transferFootballLineup=()=>{
+    if(sport!=="football"||!chosen||!nbaClock)return;
+    const ids=chosen.picks.map(p=>p.player.id);
+    const allowedFixtures=eligibleFootballOptimizerIds(players,footballWindow,new Date(),footballKickoffs);
+    const allowed=new Set(ids.filter(id=>allowedFixtures.has(id)&&!isConfirmedOut(injuryById[id])&&
+      !effectiveCardStore[id]?.excluded&&(!ownedOnly||(verifiedOwnedReady&&effectiveCardStore[id]?.owned===true))));
+    const captainId=chosenAuto.captainId??null;
+    const error=verifyFootballOptimizerTransfer(ids,new Map(players.map(p=>[p.id,p.position])),allowed,captainId);
+    if(error){setFootballNotice(error);return;}
+    setRequestedFootballLineup({ids,captainId:captainId!,seq:++footballTransferSeq.current,window:footballWindow});
+    setFootballNotice("Fünferteam wird in den manuellen Football Builder übertragen. Keine direkte Sorare-Einreichung.");
     setBuilderMode("manual");
   };
   const nbaMaxLine=nbaStarBoard?.variants.find(v=>v.mode==="max")?.lineup;
@@ -978,7 +1038,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
             {builderMode === "manual" ? <BuilderWorkspace sport={sport} league={league} availability={builderAvailability} availabilityById={injuryById} players={players} cardStore={effectiveCardStore} ownedOnly={ownedOnly} verifiedOwnedReady={verifiedOwnedReady} verifiedCollection={verifiedCollection} v30State={v30State} onV30Change={setV30State} leagues={leagues}
               updateCard={updateCard} targetScore={validTarget ? totalTarget : null}
               onOpenProfile={setSelectedPlayerId}
-              onSavePredictions={saveLineupForecasts} requestedPlayer={manualRequest} requestedStarsLineup={requestedStarsLineup} onStarsLineupHandled={seq=>setRequestedStarsLineup(prev=>prev?.seq===seq?null:prev)}
+              onSavePredictions={saveLineupForecasts} requestedPlayer={manualRequest} requestedStarsLineup={requestedStarsLineup} onStarsLineupHandled={seq=>setRequestedStarsLineup(prev=>prev?.seq===seq?null:prev)} requestedFootballLineup={requestedFootballLineup} footballKickoffs={footballKickoffs} onFootballLineupHandled={seq=>setRequestedFootballLineup(prev=>prev?.seq===seq?null:prev)}
               favorites={watchlist} onToggleFavorite={toggleFavorite}
               nbaSchedule={nbaSchedule} matchupRatings={effectiveRatings} matchupSource={automaticMatchups.source}/> : <>
             <div className="v35-presets" aria-label="Optimierungs-Presets"><div className="v35-presets-head"><strong>✦ Meine Optimierungs-Presets</strong><span>Nur in diesem Browser gespeichert</span></div>
@@ -987,15 +1047,37 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
             <details className="v35-advanced"><summary>⚙ Profi-Einstellungen · Team-Regeln, Stacks, Prognose-Optionen</summary><AutoBuilderSettings sport={sport} league={league} leagues={leagues} state={v30State} onChange={setV30State} teamId={v30EditTeam} onTeamChange={setV30EditTeam}/></details>
             <p className="v30-status" role="status">V3.0: {v30State.scope==="team"?"Individuelle Auto-Team-Strategien":"Gemeinsame Strategie"} · {v30ActiveSettings.projection.toUpperCase()} · {lineups.length} gültige Vorschläge. {v30ActiveSettings.projection==="q80"?"Q80 ist eine unkalibrierte Schätzung bei Einsatz. Das gewählte Auto-Team berücksichtigt weiterhin das Einsatzrisiko.":""} {v30ActiveSettings.projection==="raw"?"Die Auswahl wird ohne Kartenbonus optimiert; die Teamanzeige enthält weiterhin tatsächliche Karten-/Captain-Zuschläge.":""} {v30ActiveSettings.excludedLeagues.includes(league)?"Die aktuell geladene Liga wurde ausgeschlossen.":""}</p>
             <p className="v283-auto-scope">{ownedOnly?"✓ Automatische Aufstellungen ausschließlich aus verifiziert eigenen Karten":"Alle Spieler im Datenbereich · theoretische Aufstellungen"} · Einstellung oben ändern.</p>
-            {sport==="football"&&<div className="strategy-bar">
-              <div className="strategy-title"><strong>Optimierung</strong><small>Diese Auswahl gilt für „Custom“. Safe, Balanced und High Ceiling aus V3.0 setzen ein eigenes Optimierungsziel.</small></div>
-              <div className="strategy-options" role="group" aria-label="Lineup-Strategie">
-                {(["balanced","safe","upside","target"] as Strategy[]).map(value => <button type="button" key={value} disabled={value === "target" && !validTarget} title={value === "target" && !validTarget ? "Bitte zuerst unten ein Score-Ziel eingeben" : undefined} className={strategy === value ? "active" : ""} onClick={() => {setStrategy(value);setActiveResult(0);setIntelligencePickKey(null);}}>{({balanced:"Ausgewogen",safe:"Sicher",upside:"Offensiv",target:"Zielchance"} as Record<Strategy,string>)[value]}</button>)}
+            {sport==="football"&&<section className="nba31-panel" aria-label="Football Smart Optimizer 3.0">
+              <div className="nba31-heading"><div><span className="section-kicker">V4.5.14 · FOOTBALL OPTIMIZER 3.0</span><h3>Smart Matchday &amp; Diversity</h3><p>TW · VER · MF · ST · Extra · Captain +50 % · alle bestätigten Wettbewerbe.</p></div><span className="nba31-tag">5 Karten · Captain</span></div>
+              <div className="nba313-controls"><div><strong>Spielzeitraum</strong><div className="nba313-controls-buttons" role="group" aria-label="Fußball Spielzeitraum">
+                {(["today","24h","tomorrow","7d"] as FootballMatchdayWindow[]).map(w=><button type="button" key={w} className={footballWindow===w?"active":""} aria-pressed={footballWindow===w} onClick={()=>setFootballWindow(w)}>{footballWindowLabel(w)}</button>)}
+              </div></div></div>
+              <p className="nba313-scope" role="status">{eligibleFootballIds.size} Spieler mit bestätigter Spielpaarung für {footballWindowLabel(footballWindow)}. {footballWindow==="24h"?
+                footballKickoffStatus==="loading"?"Lade bestätigte ESPN-Anstoßzeiten (Ligen, UEFA, Länderspiele) …":
+                  footballKickoffStatus==="partial"?"⚠ Spielplan nur teilweise erreichbar. Spieler ohne bestätigte genaue Anstoßzeit bleiben ausgeschlossen.":
+                  "Nur eindeutig zugeordnete, noch nicht gestartete ESPN-Partien zählen.":
+                "Fußball-Spieldaten kommen aus dem Sorare-Spielerpool; ohne genaue Anstoßzeit gilt nur das bestätigte Kalenderdatum."} OUT ist ausgeschlossen. Eine bestätigte Partie ist keine Garantie für Sorare-Gameweek-Berechtigung.</p>
+              <div className="nba31-modes" role="group" aria-label="Fußball Optimierungsprofil">
+                {FOOTBALL_OPTIMIZER_MODES.map(m=><button type="button" key={m.id} className={footballMode===m.id?"active":""} aria-pressed={footballMode===m.id} title={m.detail} onClick={()=>setFootballMode(m.id)}>{m.label}</button>)}
               </div>
-            </div>}
-            {intelligenceView&&<ArcadeIntelligenceLab sport={sport} board={intelligenceView} target={target}
-              onTargetChange={value=>{setTarget(value);setIntelligencePickKey(null);}}
-              selectedKey={activeIntelligence?.key??null} onSelect={key=>{setIntelligencePickKey(key);setActiveResult(0);}}/>}
+              <div className="nba32-diversity"><div><strong>Lineup Diversity</strong><span>Mindestens 1–3 andere Spieler zwischen den Varianten, sofern regelkonform möglich.</span></div>
+              <div className="nba32-diversity-buttons" role="group" aria-label="Mindestanzahl anderer Fußballspieler">
+                {([1,2,3] as FootballLineupDiversity[]).map(n=><button type="button" key={n} className={footballDiversity===n?"active":""} aria-pressed={footballDiversity===n} onClick={()=>setFootballDiversity(n)}>{n===1?"Normal · 1":n===2?"Balanced · 2":"High Diversity · 3"}</button>)}
+              </div></div>
+              {footballBoard&&footballBoard.variants.length>0&&<div className="nba31-variants" aria-label="Fußball Optimierungsvarianten">
+                {footballBoard.variants.map(v=><button type="button" key={v.mode} className={footballMode===v.mode?"active":""} onClick={()=>setFootballMode(v.mode)}>
+                  <span>{FOOTBALL_OPTIMIZER_MODES.find(m=>m.id===v.mode)?.label}</span><strong>{fmt(v.lineup.projectedScore)} PS</strong>
+                  <small>{v.changedFromMax} anders als Max · −{fmt(v.lossPercent)} % gegenüber Max</small>
+                  <small className={v.meetsDiversity?"nba32-meets":"nba32-unmet"}>{v.meetsDiversity?"Diversity erreicht ✓":"Diversity teilweise nicht erreichbar"}</small>
+                </button>)}
+              </div>}
+              {footballBoard&&footballBoard.unmetDiversity.length>0&&<p className="nba32-warning" role="status">⚠ Nicht alle Diversity-Ziele erreichbar. Es werden nur positionsgültige Alternativen mit mindestens 90 % der Max-Prognose angeboten.</p>}
+              <div className="nba313-actions"><button type="button" disabled={!chosen||chosen.picks.length!==5} onClick={transferFootballLineup}>↪ Aktuelles Fußball-Lineup in manuellen Builder übernehmen</button>
+                <small>Prüft erneut Spieltermin, OUT-Status, Besitzfilter, Positionen und Captain. Bestehende Teams werden nicht ungefragt überschrieben. Keine direkte Sorare-Einreichung.</small>
+                {footballNotice&&<p role="status">{footballNotice}</p>}
+              </div>
+              <p className="nba31-note">{footballBoard?.note??"Noch kein Lineup für diesen Zeitraum."} Quelle: Sorare-Spielpaarungen, bei 24 Stunden ergänzt um ESPN-Anstoßzeiten. Nationalspiele werden nur berücksichtigt, wenn die Paarung dem Spieler zuverlässig zugeordnet ist.</p>
+            </section>}
             {sport==="nba"&&<section className="nba31-panel" aria-label="NBA Stars Optimizer 3.0">
               <div className="nba31-heading"><div><span className="section-kicker">V4.5.13 · NBA STARS OPTIMIZER 3.0</span><h3>Smart Matchday &amp; Diversity</h3><p>Nur bestätigte NBA-Partien · direkter Lineup-Transfer · vier Strategien.</p></div><span className="nba31-tag">5 Karten · ≤ {nbaStarsLimit} ★</span></div>
               <div className="nba313-controls" aria-label="NBA Matchday und Sternebudget">
@@ -1067,7 +1149,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
             ) : (
               <div className="target-shortcuts"><span>HOT STREAKS · ZIEL:</span><button className={target === "180" ? "active" : ""} onClick={() => setTarget("180")}>Schritt 2 · 180</button><button className={target === "360" ? "active" : ""} onClick={() => setTarget("360")}>Schritt 3 · 360</button></div>
             )}
-            {activeIntelligence&&<div className="intelligence-selected-notice" role="status"><span>✦ Aktives Intelligence-Lineup: <strong>{activeIntelligence.label}</strong> · {fmt(chosen?.projectedScore??0)} Pkt.</span><button type="button" onClick={()=>setIntelligencePickKey(null)}>Zur Standard-Optimierung zurück</button></div>}
+
             <div className="lineup-board" id="auto-lineup-visual">
               {(sport === "football" ? ARCADE.football.slots : ARCADE.nba.slots).map((slot, index) => {
                 const item = chosen?.picks[index];
