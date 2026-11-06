@@ -5,7 +5,7 @@ import {rememberVerifiedCollection,recentVerifiedCollection,forgetVerifiedCollec
 import type {Sport} from "@/lib/model";
 
 type Status={configured:boolean;connected:boolean;slug?:string;nickname?:string;error?:string};
-type Page={userSlug:string;cards:OwnedSorareCard[];totalCount:number;pageInfo:{hasNextPage:boolean;endCursor:string|null};fetchedAt:string;activeFootballSet:{slug:string;name:string}|null;error?:string};
+type Page={userSlug:string;cards:OwnedSorareCard[];totalCount:number;pageSize?:number;pageInfo:{hasNextPage:boolean;endCursor:string|null};fetchedAt:string;activeFootballSet:{slug:string;name:string}|null;error?:string};
 export type CollectionSyncStatus={phase:"checking"|"syncing"|"ready"|"error"|"disconnected";message:string};
 const fmtTime=(s:string)=>{try{return new Date(s).toLocaleString("de-DE",{dateStyle:"short",timeStyle:"short"});}catch{return "—";}};
 const pause=(ms:number)=>new Promise<void>(resolve=>window.setTimeout(resolve,ms));
@@ -50,6 +50,7 @@ function MySorareCollection({sport,onCollectionChange,onSyncStatus}:{sport:Sport
       return;
     }
     syncRef.current=true;
+    const startedAt=Date.now();
     setPhase("loading");setNotice("Karten werden seitenweise von Sorare eingelesen …");
     report({phase:"syncing",message:"Sorare-Kartensammlung wird vollständig geladen …"});
     // A proven, recent sync remains usable while a manual refresh runs.
@@ -66,26 +67,30 @@ function MySorareCollection({sport,onCollectionChange,onSyncStatus}:{sport:Sport
       const cards:OwnedSorareCard[]=[];
       const seenCards=new Set<string>();
       const seenCursors=new Set<string>();
-      let cursor:string|null=null;let lastCount=0;let complete=false;let activeFootballSet:{slug:string;name:string}|null|undefined;
-      // 240 pages of 50 cards supports large collections without endless requests.
+      let cursor:string|null=null;let lastCount=0;let complete=false;let pageSize=100;let activeFootballSet:{slug:string;name:string}|null|undefined;
+      // 100-card pages speed up normal syncs; 50-card fallback and the 12k hard limit remain safe.
       for(let i=0;i<240;i++){
         if(signal.aborted)throw new Error("Synchronisierung abgebrochen.");
         const url=new URL("/api/collection",window.location.origin);
         if(cursor)url.searchParams.set("after",cursor);
+        if(pageSize===50)url.searchParams.set("limit","50");
         const page=await readCollectionPage(url.toString(),signal);
+        if(page.pageSize===50)pageSize=50;
         if(page.userSlug!==userSlug)throw new Error("Sorare-Konto hat sich geändert. Bitte erneut verbinden.");
         if(!Object.prototype.hasOwnProperty.call(page,"activeFootballSet"))throw new Error("Aktuelles Fußball-Set konnte nicht bestätigt werden. Bestand nicht überschrieben.");
         if(activeFootballSet===undefined)activeFootballSet=page.activeFootballSet;
         else if(activeFootballSet?.slug!==page.activeFootballSet?.slug)throw new Error("Sorare hat während der Synchronisierung das aktive Set gewechselt. Bitte erneut synchronisieren.");
         for(const card of page.cards){if(card.assetId&&!seenCards.has(card.assetId)){cards.push(card);seenCards.add(card.assetId);}}
         lastCount=page.totalCount||cards.length;
+        if(cards.length>12000)throw new Error("Die Sammlung überschreitet das sichere Abruflimit (12.000 Karten). Alter Bestand bleibt erhalten.");
         if(i===0||i%5===4||!page.pageInfo.hasNextPage)setNotice(`${cards.length} Karten gelesen${lastCount?` · ${lastCount} laut Sorare gesamt`:""} …`);
         if(page.pageInfo.hasNextPage===false){complete=true;break;}
         const next=page.pageInfo.endCursor;
         if(!next||seenCursors.has(next))throw new Error("Die Sorare-Paginierung liefert keinen neuen Cursor.");
         seenCursors.add(next);cursor=next;
-        // API limit: authenticated Sorare requests are rate-limited.
-        if(i>=4)await pause(1250);
+        // Avoid fixed delays for ordinary collections. A long sync uses gentle
+        // pacing and the existing 429 / Retry-After exponential retry logic.
+        if(i>=12)await pause(850);
       }
       if(signal.aborted)throw new Error("Synchronisierung abgebrochen.");
       if(!complete)throw new Error("Die Sammlung überschreitet das sichere Abruflimit (12.000 Karten). Alter Bestand bleibt erhalten.");
@@ -97,7 +102,7 @@ function MySorareCollection({sport,onCollectionChange,onSyncStatus}:{sport:Sport
       try{window.localStorage.setItem(collectionKey(userSlug),JSON.stringify(fresh));}catch{}
       setCollection(fresh);ownerCallback.current(fresh);
       setPhase("ready");
-      const message=`${cards.length} Karten synchronisiert. ${activeCollectionCards(fresh,"football").length} Fußballkarten aus ${fresh.activeFootballSet?.name??"keinem aktiven Set"} verwendbar.`;
+      const message=`${cards.length} Karten in ${((Date.now()-startedAt)/1000).toFixed(1)} s synchronisiert. ${activeCollectionCards(fresh,"football").length} Fußballkarten aus ${fresh.activeFootballSet?.name??"keinem aktiven Set"} verwendbar.`;
       setNotice(message);report({phase:"ready",message});
     }catch(e){
       if(currentSlug.current!==userSlug)return;

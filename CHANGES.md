@@ -1,3 +1,11 @@
+## V4.5.11 – Performance / Faster Collection Sync (2026-11-06)
+
+- Slim Collection route avoids loading the full optimizer and scouting dependencies.
+- Sorare collection pages prefer 100 cards with safe 50-card API-limit fallback.
+- Pacing only for large collections, with existing Retry-After safeguards retained.
+- Parallel independent workspace feeds; full collection validation unchanged.
+- Added performance regression checks and repaired two old test harness issues.
+
 ## V4.5.10 – Dynamische Sorare-Vereine für alle Spiele (05.11.2026)
 
 - Die bisherigen fest hinterlegten Club-Slugs für Hoffenheim und Crystal Palace wurden entfernt.

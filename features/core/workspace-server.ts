@@ -17,25 +17,30 @@ export async function loadWorkspaceData(query:WorkspaceQuery,collectionOnly=fals
   let players:Forecast[]=[],clubs:Club[]=[],shownClubs:Club[]=[],leagues:string[]=[],league="",team=query.team??"",info="",error="";
   let fetchSummary:FetchSummary={scopeTeams:0,failedTeams:0,incompleteTeams:0,noScoreTeams:0,generatedAt:""};
   if(collectionOnly){return {sport,league,leagues,team:"",clubs,players,info,error,automaticMatchups:{ratings:{},source:null,season:0,coverage:0,error:null},nbaSchedule:emptySchedule,fetchSummary};}
-  try{
-    clubs=sport==="football"?await getFootballClubs():await getRegularNbaTeams();
-    if(sport==="football"){
-      leagues=[...FOOTBALL_LEAGUES];
-      league=query.league==="__all"||isFootballLeague(query.league)?query.league:"Bundesliga";
-      shownClubs=league==="__all"?clubs:clubs.filter(c=>c.league===league);
-    }else shownClubs=clubs;
-    if(team&&!shownClubs.some(c=>c.slug===team))team="";
-    const scope=team?shownClubs.filter(c=>c.slug===team):shownClubs;
-    fetchSummary.scopeTeams=scope.length;
-    const response=await getPlayers(sport,scope);
-    fetchSummary={...fetchSummary,failedTeams:response.failed,incompleteTeams:response.incomplete,noScoreTeams:response.noScoreFields};
-    players=response.players.map(forecast).sort((a,b)=>b.weighted-a.weighted);
-    info=`${players.length} Spieler · ${scope.length-response.failed}/${scope.length} Teams geladen.`;
-    if(response.failed||response.incomplete)info+=` ${response.failed} Teamabrufe fehlgeschlagen, ${response.incomplete} Kader möglicherweise unvollständig.`;
-    if(response.noScoreFields)info+=` Bei ${response.noScoreFields} Teams fehlen Scorefelder.`;
-  }catch(e){error=e instanceof Error?e.message:String(e);fetchSummary.error=error;}
-  fetchSummary.generatedAt=new Date().toISOString();
-  const [automaticMatchups,nbaSchedule]=await Promise.all([
+  // Independent schedule and defensive-form feeds must not wait for all club
+  // roster requests. The roster fetch keeps its original failure handling.
+  const rosterTask=(async()=>{
+    try{
+      clubs=sport==="football"?await getFootballClubs():await getRegularNbaTeams();
+      if(sport==="football"){
+        leagues=[...FOOTBALL_LEAGUES];
+        league=query.league==="__all"||isFootballLeague(query.league)?query.league:"Bundesliga";
+        shownClubs=league==="__all"?clubs:clubs.filter(c=>c.league===league);
+      }else shownClubs=clubs;
+      if(team&&!shownClubs.some(c=>c.slug===team))team="";
+      const scope=team?shownClubs.filter(c=>c.slug===team):shownClubs;
+      fetchSummary.scopeTeams=scope.length;
+      const response=await getPlayers(sport,scope);
+      fetchSummary={...fetchSummary,failedTeams:response.failed,incompleteTeams:response.incomplete,noScoreTeams:response.noScoreFields};
+      players=response.players.map(forecast).sort((a,b)=>b.weighted-a.weighted);
+      info=`${players.length} Spieler · ${scope.length-response.failed}/${scope.length} Teams geladen.`;
+      if(response.failed||response.incomplete)info+=` ${response.failed} Teamabrufe fehlgeschlagen, ${response.incomplete} Kader möglicherweise unvollständig.`;
+      if(response.noScoreFields)info+=` Bei ${response.noScoreFields} Teams fehlen Scorefelder.`;
+    }catch(e){error=e instanceof Error?e.message:String(e);fetchSummary.error=error;}
+    fetchSummary.generatedAt=new Date().toISOString();
+  })();
+  const [_,automaticMatchups,nbaSchedule]=await Promise.all([
+    rosterTask,
     getAutomaticMatchupData(sport),
     sport==="nba"?getNbaGameweekSchedule():Promise.resolve(emptySchedule),
   ]);

@@ -1,7 +1,7 @@
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
-const {v455FootballStatsDays,v455SelectPendingGames}=require('../.test-build/learning-v455-backfill');
+const {v455FootballStatsDays,v455SelectPendingGames}=require('../.test-build/lib/learning-v455-backfill');
 const date=new Date('2026-11-06T15:00:00Z');
 assert.deepEqual(v455FootballStatsDays('europe',date),['2026-11-06','2026-11-05','2026-11-04','2026-11-03','2026-11-02']);
 assert.deepEqual(v455FootballStatsDays('league-a',date),['2026-11-06','2026-11-05']);

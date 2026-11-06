@@ -45,7 +45,7 @@ assert.match(builder,/OpponentLogo/);
 const api=fs.readFileSync('app/api/collection/route.ts','utf8');
 assert.match(api,/pictureUrl\(derivative:/);
 assert.match(api,/pictureCapability=false/);
-assert.match(api,/return graphQl\(token,QUERY,\{after\}\)/,'unsupported picture fields must not break syncing');
+assert.match(api,/return graphQl\(token,QUERY,vars\)/,'unsupported picture fields must not break syncing');
 const logo=fs.readFileSync('app/api/team-logos/route.ts','utf8');
 assert.match(logo,/pictureUrl/);
 assert.match(logo,/catch/);

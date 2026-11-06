@@ -8,7 +8,9 @@ const route = fs.readFileSync(path.join(__dirname, '../app/api/collection/route.
 const query = route.match(/const QUERY=`([\s\S]*?)`;/)?.[1];
 assert.ok(query, 'GraphQL-Synchronisierungsabfrage muss vorhanden sein');
 assert.match(query, /currentUser\s*\{\s*slug\s*\}/);
-assert.match(query, /cardsWhere\s*\(\s*first:\s*50,\s*after:\s*\$after,\s*ownedByMe:\s*true\s*\)/);
+assert.match(query, /cardsWhere\s*\(\s*first:\s*\$first,\s*after:\s*\$after,\s*ownedByMe:\s*true\s*\)/);
+assert.match(query, /\$first:\s*Int!/,'The page size is passed as a typed GraphQL variable');
+assert.match(route, /const FALLBACK_PAGE_SIZE=50/,'The original 50-card page remains supported');
 assert.doesNotMatch(query, /\banyCards\s*\(/, 'anyCards ist kein Feld von CurrentUser');
 assert.match(query, /pageInfo\s*\{\s*hasNextPage\s+endCursor\s*\}/);
 assert.match(route, /const data=result\.cardsWhere/);

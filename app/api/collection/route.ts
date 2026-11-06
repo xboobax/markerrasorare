@@ -3,12 +3,12 @@ import {sessionForRequest,setSessionCookie,graphQl,SorareApiError} from "@/lib/s
 import {parseSorareCardBonus} from "@/lib/my-collection";
 import {safeImageUrl} from "@/lib/sorare";
 export const dynamic="force-dynamic";
-const QUERY=`query MarkerrasOwnedCollection($after: String) {
+const QUERY=`query MarkerrasOwnedCollection($after: String, $first: Int!) {
   currentUser { slug }
   cardSet { currentSet(sport: FOOTBALL) { slug name } }
   # "cardsWhere" is a paginated root field. CurrentUser has NO "anyCards" field.
   # "ownedByMe" is scoped to the authenticated Sorare OAuth user.
-  cardsWhere(first: 50, after: $after, ownedByMe: true) {
+  cardsWhere(first: $first, after: $after, ownedByMe: true) {
     nodes { assetId slug sport rarityTyped seasonYear serialNumber grade
       cardSet { slug name }
       bonuses { key title bonusBasisPoints }
@@ -23,10 +23,22 @@ const QUERY=`query MarkerrasOwnedCollection($after: String) {
 // Cache the capability per server instance; an unavailable image is not invented.
 const WITH_PICTURE=QUERY.replace('nodes { assetId slug sport', 'nodes { pictureUrl(derivative: "tinified") assetId slug sport');
 let pictureCapability:null|boolean=null;
-async function collectionPage(token:string,after:string|null){
-  if(pictureCapability===false)return graphQl(token,QUERY,{after});
+/** The larger first page halves round-trips for normal collections. A Sorare
+ * schema/complexity limit falls back to the proven 50-card page, without ever
+ * treating a provider failure as a successful (empty) collection. */
+const DEFAULT_PAGE_SIZE=100;
+const FALLBACK_PAGE_SIZE=50;
+const invalidPageSize=(error:unknown):boolean=>{
+  if(!(error instanceof SorareApiError))return false;
+  if(error.status===429||error.status>=500)return false;
+  return /(?:first|page size|page limit|pagination|maximum|at most|too many|complexity|limit exceeded)/i.test(error.message)
+    && /(?:first|cardsWhere|complexity|page size|pagination|limit exceeded)/i.test(error.message);
+};
+async function collectionPage(token:string,after:string|null,first:number){
+  const vars={after,first};
+  if(pictureCapability===false)return graphQl(token,QUERY,vars);
   try{
-    const data=await graphQl(token,WITH_PICTURE,{after});
+    const data=await graphQl(token,WITH_PICTURE,vars);
     pictureCapability=true;
     return data;
   }catch(error){
@@ -37,16 +49,27 @@ async function collectionPage(token:string,after:string|null){
     if(!/(cannot query field|unknown argument|unknown field|field .* not defined|doesn.t exist)/i.test(message) ||
        !/pictureUrl|derivative/i.test(message))throw error;
     pictureCapability=false;
-    return graphQl(token,QUERY,{after});
+    return graphQl(token,QUERY,vars);
   }
 }
 export async function GET(request:NextRequest){
   const user=await sessionForRequest(request);
   if(!user)return NextResponse.json({error:"Bitte zuerst mit Sorare verbinden."},{status:401,headers:{"Cache-Control":"no-store"}});
   const after=request.nextUrl.searchParams.get("after");
+  const limitParam=request.nextUrl.searchParams.get("limit");
+  if(limitParam!==null&&limitParam!=="50"&&limitParam!=="100")
+    return NextResponse.json({error:"Ungültige Seitengröße."},{status:400});
+  let pageSize=limitParam==="50"?FALLBACK_PAGE_SIZE:DEFAULT_PAGE_SIZE;
   if(after&&after.length>1024)return NextResponse.json({error:"Ungültiger Cursor."},{status:400});
   try{
-    const result=await collectionPage(user.session.accessToken,after||null);
+    let result:Record<string,unknown>;
+    try {result=await collectionPage(user.session.accessToken,after||null,pageSize);}
+    catch(e){
+      if(pageSize!==DEFAULT_PAGE_SIZE||!invalidPageSize(e))throw e;
+      // Only a provider-declared paging/complexity limit justifies downgrade.
+      pageSize=FALLBACK_PAGE_SIZE;
+      result=await collectionPage(user.session.accessToken,after||null,pageSize);
+    }
     const current=result.currentUser as {slug?:string}|null;
     const data=result.cardsWhere as {nodes?:unknown[];pageInfo?:{hasNextPage?:boolean;endCursor?:string};totalCount?:number}|null;
     // Never treat a failed / partial provider response as an empty, successfully synced collection.
@@ -71,7 +94,7 @@ export async function GET(request:NextRequest){
         bonusPercent:parsed.bonusPercent,bonusDetails:parsed.bonusDetails,
         pictureUrl:safeImageUrl(c.pictureUrl)};
     }).filter(c=>c.assetId&&c.playerSlug&&(c.sport==="NBA"||c.sport==="FOOTBALL"));
-    const res=NextResponse.json({userSlug:current.slug,cards,activeFootballSet:currentFootballSet,pageInfo:data.pageInfo,totalCount:data.totalCount??cards.length,fetchedAt:new Date().toISOString()},{headers:{"Cache-Control":"private, no-store"}});
+    const res=NextResponse.json({userSlug:current.slug,cards,activeFootballSet:currentFootballSet,pageInfo:data.pageInfo,totalCount:data.totalCount??cards.length,pageSize,fetchedAt:new Date().toISOString()},{headers:{"Cache-Control":"private, no-store"}});
     if(user.changed)setSessionCookie(res,user.session);
     return res;
   }catch(e){

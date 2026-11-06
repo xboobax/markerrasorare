@@ -1,7 +1,9 @@
-import {loadWorkspaceData} from "@/features/core/workspace-server";
-import ArcadeDashboard from "@/app/components/arcade-dashboard";
 import DreamTitle from "@/features/core/dream-title";
-export default async function CollectionPage({searchParams}:{searchParams:{sport?:string}}){
-  const data=await loadWorkspaceData(searchParams,true);
-  return <><DreamTitle eyebrow="SORARE / MY GALLERY" title="Meine Sammlung" description="Verbinde deine Galerie und synchronisiere Kartenboni. Für Fußball werden nur Karten des offiziell aktuellen Sets als aktiv gezählt."/><ArcadeDashboard {...data} embedded initialTab="collection"/></>;
+import CollectionWorkspace from "@/features/collection/collection-workspace";
+/** The collection page does not need to load and score hundreds of Sorare
+ * players or the full builder optimizer before the card sync can start. */
+export default function CollectionPage({searchParams}:{searchParams:{sport?:string}}){
+  const sport=searchParams.sport==="nba"?"nba":"football";
+  return <><DreamTitle eyebrow="SORARE / MY GALLERY" title="Meine Sammlung" description="Sorare-Karten und Kartenboni synchronisieren. Nur das offizielle aktuelle Football Set zählt als aktiv."/>
+    <CollectionWorkspace sport={sport}/></>;
 }
