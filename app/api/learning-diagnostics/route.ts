@@ -29,7 +29,7 @@ export async function GET(){
       (SELECT count(*)::integer FROM learning_v45_player_performances WHERE sport='nba') AS performances_nba,
       (SELECT count(*)::integer FROM learning_v45_player_performances WHERE sport='football') AS performances_football,
       (SELECT count(*)::integer FROM learning_v44_jobs) AS jobs_total,
-      (SELECT max(at) FROM learning_v44_jobs) AS latest_job_at`);
+      (SELECT max(at) FROM learning_v44_jobs) AS latest_job_at`,[]);
     const r:any=rows[0];
     // Compare both SQL read paths in one request, without exposing credentials or player records.
     // An exception here must NOT prevent returning the baseline database counts.
@@ -59,12 +59,12 @@ export async function GET(){
         COUNT(*) FILTER (WHERE official_score IS NULL AND fixture_day <= CURRENT_DATE - INTERVAL '90 days')::integer AS outside_90_days,
         MIN(fixture_day)::text AS first_fixture_day,
         MAX(fixture_day)::text AS last_fixture_day
-        FROM learning_v44_snapshots GROUP BY sport ORDER BY sport`);
+        FROM learning_v44_snapshots GROUP BY sport ORDER BY sport`,[]);
       const days=await sql.query(`SELECT sport,fixture_day::text AS fixture_day,
         COUNT(*)::integer AS snapshots,
         COUNT(*) FILTER (WHERE official_source='sorare' AND official_score IS NOT NULL)::integer AS confirmed
-        FROM learning_v44_snapshots GROUP BY sport,fixture_day ORDER BY fixture_day DESC,sport LIMIT 16`);
-      const today=await sql.query(`SELECT CURRENT_DATE::text AS today`);
+        FROM learning_v44_snapshots GROUP BY sport,fixture_day ORDER BY fixture_day DESC,sport LIMIT 16`,[]);
+      const today=await sql.query(`SELECT CURRENT_DATE::text AS today`,[]);
       learningReadiness={available:true,databaseToday:String(today[0]?.today??''),
         bySport:state.map((x:any)=>({sport:String(x.sport),total:Number(x.total),confirmed:Number(x.confirmed),
           readyForReconciliation:Number(x.ready_for_reconciliation),fixtureToday:Number(x.fixture_today),
