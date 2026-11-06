@@ -1,0 +1,159 @@
+name: Football-Stats Saisonimport (ohne Python am PC)
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Welchen Import ausfuehren?'
+        type: choice
+        required: true
+        default: espn_preview
+        options:
+          - espn_preview
+          - espn_import
+          - soccerdata_preview
+          - soccerdata_import
+      from_date:
+        description: 'Beginn (YYYY-MM-DD)'
+        type: string
+        required: true
+        default: '2026-07-01'
+      until_date:
+        description: 'Ende (YYYY-MM-DD; leer = heute UTC)'
+        type: string
+        required: false
+        default: ''
+      batches:
+        description: 'ESPN-Batches (Kommata getrennt)'
+        type: string
+        required: true
+        default: 'league-a,league-b,europe,national-0,national-1,national-2,national-3'
+      source:
+        description: 'SoccerData-Quelle'
+        type: choice
+        required: true
+        default: understat
+        options:
+          - understat
+          - fbref
+          - soccerdata_espn
+          - whoscored
+          - sofascore
+          - matchhistory
+          - clubelo
+          - sofifa
+      dataset:
+        description: 'SoccerData-Datentyp (z.B. player_match, player_season, shot_event)'
+        type: string
+        required: true
+        default: player_match
+      league:
+        description: 'SoccerData-Liga (z.B. GER-Bundesliga)'
+        type: string
+        required: true
+        default: GER-Bundesliga
+      source_rights_confirmed:
+        description: 'Ich habe die automatisierten Zugriffs- und Nutzungsrechte dieser Quelle geprueft und bestaetigt'
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: football-stats-v4516-import
+  cancel-in-progress: false
+
+jobs:
+  import:
+    name: 'Football-Statistiken importieren'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Projektcode laden
+        uses: actions/checkout@v4
+
+      - name: Python auf GitHub bereitstellen (nicht auf deinem PC)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Importfortschritt vom letzten Lauf wiederherstellen
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .football-backfill-v4516-progress.json
+            .soccerdata-v4516-progress.json
+          key: football-stats-v4516-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            football-stats-v4516-
+
+      - name: Datenquellen-Berechtigung pruefen
+        if: ${{ startsWith(inputs.mode, 'soccerdata_') }}
+        env:
+          SOURCE_RIGHTS_CONFIRMED: ${{ inputs.source_rights_confirmed }}
+        run: |
+          if [ "$SOURCE_RIGHTS_CONFIRMED" != 'true' ]; then
+            echo 'SoccerData abgebrochen: Bitte erst die automatisierten Zugriffs- und Nutzungsrechte der gewaehlten Quellseite klaeren.' >&2
+            exit 1
+          fi
+
+      - name: SoccerData nur bei expliziter Freigabe installieren
+        if: ${{ startsWith(inputs.mode, 'soccerdata_') && inputs.source_rights_confirmed }}
+        run: python -m pip install 'soccerdata==2026.43.0'
+
+      - name: Import ausfuehren
+        env:
+          RUN_MODE: ${{ inputs.mode }}
+          START_DATE: ${{ inputs.from_date }}
+          END_DATE: ${{ inputs.until_date }}
+          ESPN_BATCHES: ${{ inputs.batches }}
+          SOCCERDATA_SOURCE: ${{ inputs.source }}
+          SOCCERDATA_DATASET: ${{ inputs.dataset }}
+          SOCCERDATA_LEAGUE: ${{ inputs.league }}
+          SOURCE_RIGHTS_CONFIRMED: ${{ inputs.source_rights_confirmed }}
+          FOOTBALL_STATS_BASE_URL: ${{ secrets.FOOTBALL_STATS_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$END_DATE" ]; then END_DATE="$(date -u +%F)"; fi
+          case "$RUN_MODE" in
+            espn_preview)
+              python scripts/backfill_football_season.py --from "$START_DATE" --until "$END_DATE" --batches "$ESPN_BATCHES"
+              ;;
+            espn_import)
+              if [ -z "$FOOTBALL_STATS_BASE_URL" ] || [ -z "$CRON_SECRET" ]; then
+                echo 'Fehler: GitHub Secrets FOOTBALL_STATS_BASE_URL und CRON_SECRET fehlen.' >&2
+                exit 1
+              fi
+              python scripts/backfill_football_season.py --from "$START_DATE" --until "$END_DATE" --batches "$ESPN_BATCHES" --send
+              ;;
+            soccerdata_preview|soccerdata_import)
+              if [ "$SOURCE_RIGHTS_CONFIRMED" != 'true' ]; then
+                echo 'SoccerData: Quellenberechtigung nicht bestaetigt.' >&2
+                exit 1
+              fi
+              export FOOTBALL_STATS_URL="${FOOTBALL_STATS_BASE_URL%/}/api/cron/v4516/soccerdata"
+              if [ "$RUN_MODE" = 'soccerdata_import' ]; then
+                if [ -z "$FOOTBALL_STATS_BASE_URL" ] || [ -z "$CRON_SECRET" ]; then
+                  echo 'Fehler: GitHub Secrets FOOTBALL_STATS_BASE_URL und CRON_SECRET fehlen.' >&2
+                  exit 1
+                fi
+                python scripts/import_soccerdata_all.py --source "$SOCCERDATA_SOURCE" --dataset "$SOCCERDATA_DATASET" --league "$SOCCERDATA_LEAGUE" --season '2026/2027' --from "$START_DATE" --until "$END_DATE" --max-games 10 --permission-confirmed --send
+              else
+                python scripts/import_soccerdata_all.py --source "$SOCCERDATA_SOURCE" --dataset "$SOCCERDATA_DATASET" --league "$SOCCERDATA_LEAGUE" --season '2026/2027' --from "$START_DATE" --until "$END_DATE" --max-games 3 --permission-confirmed
+              fi
+              ;;
+            *) echo 'Unbekannter Modus' >&2; exit 1;;
+          esac
+
+      - name: Importfortschritt fuer spaeter sichern
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            .football-backfill-v4516-progress.json
+            .soccerdata-v4516-progress.json
+          key: football-stats-v4516-${{ github.run_id }}-${{ github.run_attempt }}
