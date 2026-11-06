@@ -397,9 +397,34 @@ def main():
                 buffer=[]
             if seen>=args.max_rows:break
         if buffer and args.send:saved+=send_batch(buffer,url,secret)
-    except (urllib.error.HTTPError,urllib.error.URLError) as exc:
-        print(f'Import stopped on HTTP error (no restriction bypass): {exc}',file=sys.stderr)
-        return 1
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        # An upstream response was empty, HTML, or otherwise not JSON. A provider
+        # refusal/schema change cannot be solved by silently fabricating data.
+        print(
+            f'SOURCE_UNAVAILABLE source={args.source} league={args.league} dataset={args.dataset} '
+            'reason=NON_JSON_RESPONSE: SoccerData could not read the provider reply as JSON. '
+            'No stats were invented; inspect provider availability and authorized access. '
+            'Do not retry repeatedly or bypass blocks.',
+            file=sys.stderr, flush=True,
+        )
+        return 3
+    except KeyError as exc:
+        # Provider returned a structure incompatible with the installed reader.
+        print(
+            f'SOURCE_UNAVAILABLE source={args.source} league={args.league} dataset={args.dataset} '
+            f'reason=UNEXPECTED_SCHEMA missing_key={str(exc)[:60]!r}. '
+            'Check the SoccerData version/provider schema; no fallback values used.',
+            file=sys.stderr, flush=True,
+        )
+        return 3
+    except (urllib.error.HTTPError, urllib.error.URLError, ConnectionError, TimeoutError) as exc:
+        print(
+            f'SOURCE_UNAVAILABLE source={args.source} league={args.league} dataset={args.dataset} '
+            f'reason=TRANSPORT_ERROR type={type(exc).__name__}. '
+            'Check the provider access policy; no restriction bypass attempted.',
+            file=sys.stderr, flush=True,
+        )
+        return 3
     finally:
         if output:output.close()
     print(f'Finished source={args.source} dataset={args.dataset}, records={seen}, saved={saved}, '

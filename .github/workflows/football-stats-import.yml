@@ -15,6 +15,7 @@ on:
           - soccerdata_import
           - soccerdata_suite_preview
           - soccerdata_suite_import
+          - soccerdata_source_check
           - reconcile_preview
           - reconcile_import
       from_date:
@@ -151,6 +152,10 @@ jobs:
               python scripts/backfill_football_season.py --from "$START_DATE" --until "$END_DATE" --batches "$ESPN_BATCHES" --send
               # After ESPN history is saved, match archived official Sorare scores.
               python scripts/reconcile_football_stats.py --send
+              ;;
+            soccerdata_source_check)
+              # Exactly one authorized catalogue request; no upload and no secret use.
+              python scripts/check_soccerdata_understat.py --league "$SOCCERDATA_LEAGUE" --season '2026/2027' --permission-confirmed
               ;;
             soccerdata_suite_preview|soccerdata_suite_import)
               # Opt-in, bounded; matches + season totals + individual shot events for all 4 core leagues.

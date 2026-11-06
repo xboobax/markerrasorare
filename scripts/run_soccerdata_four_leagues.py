@@ -56,7 +56,15 @@ def main():
         print(f'SOCCERDATA {league} / {dataset}: {"UPLOAD" if args.send else "DRY RUN"}', flush=True)
         result=subprocess.run(cmd, check=False)
         if result.returncode:
-            print(f'STOPPED {league} / {dataset}: exit code {result.returncode}; subsequent imports not started',file=sys.stderr)
+            if result.returncode == 3:
+                print(
+                    'SOURCE_UNAVAILABLE: Understat could not provide valid data from this GitHub runner. '
+                    'Remaining league/dataset requests were NOT started to avoid repeated requests. '
+                    'No upload is claimed. See the source-check job for details.',
+                    file=sys.stderr, flush=True,
+                )
+            else:
+                print(f'STOPPED {league} / {dataset}: exit code {result.returncode}; subsequent imports not started', file=sys.stderr, flush=True)
             return result.returncode
         success += 1
     print(f'COMPLETED: {success} source/dataset jobs; mode={"UPLOAD" if args.send else "DRY RUN"}',flush=True)
