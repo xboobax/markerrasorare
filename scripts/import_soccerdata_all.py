@@ -174,12 +174,38 @@ def extract_stats(row: dict):
     return dict(list(stats.items())[:170]), dict(list(metadata.items())[:110])
 
 
-def stable_id(source: str, kind: str, row: dict, competition: str, season: str):
-    index = (field(row, 'game_id','match_id','game','match'),
-             field(row, 'player_id','player','name'),field(row,'team'),field(row,'date'))
-    content = json.dumps([source,kind,competition,season,*map(cleaned,index),
-                          sorted((cleaned(k), cleaned(plain(v))) for k,v in row.items())],
-                         ensure_ascii=False,sort_keys=True)
+def stable_id(source: str, kind: str, row: dict, competition: str, season: str,
+              game: dict | None = None):
+    """Identity is based on stable provider keys, NOT changing goals/xG values.
+
+    For observations with no dependable identifiers, fall back to a full-row hash.
+    This avoids falsely merging two anonymous events into one observation.
+    """
+    game = game or {}
+    game_id = field(row, 'game_id', 'match_id', 'game') or field(game, 'game_id', 'match_id', 'game')
+    player_id = field(row, 'player_id', 'athlete_id', 'person_id')
+    player_name = field(row, 'player', 'player_name', 'name')
+    team = field(row, 'team', 'squad', 'club')
+    event_id = field(row, 'shot_id', 'event_id', 'action_id', 'id')
+    core = [source, kind, competition, season]
+    specific = None
+    if kind in ('player_match', 'lineup') and game_id and (player_id or (player_name and team)):
+        specific = ['game', cleaned(game_id), 'player', cleaned(player_id or player_name), 'team', cleaned(team)]
+    elif kind == 'player_season' and (player_id or (player_name and team)):
+        specific = ['season-player', cleaned(player_id or player_name), cleaned(team)]
+    elif kind in ('shot_event', 'match_event') and game_id and event_id:
+        specific = ['event', cleaned(game_id), cleaned(event_id)]
+    elif kind == 'team_match' and game_id and team:
+        specific = ['team-match', cleaned(game_id), cleaned(team)]
+    elif kind == 'team_season' and team:
+        specific = ['team-season', cleaned(team)]
+    elif kind in ('team_rating', 'schedule') and game_id:
+        specific = ['game', cleaned(game_id), cleaned(team)]
+    elif kind == 'player_rating' and (player_id or player_name):
+        specific = ['player-rating', cleaned(player_id or player_name), cleaned(team), cleaned(field(row, 'date'))]
+    if specific is None:
+        specific = ['row', sorted((cleaned(k), cleaned(plain(v))) for k, v in row.items())]
+    content = json.dumps([*core, *specific], ensure_ascii=False, sort_keys=True)
     return hashlib.sha256(content.encode('utf-8')).hexdigest()[:44]
 
 
@@ -210,7 +236,7 @@ def normalize_record(source: str, kind: str, row: dict, league: str, season: str
         meta['kickoffTimezoneVerified']=bool(parsed and parsed[1])
     if parsed and not parsed[1]: meta['kickoffTimezoneAssumedUTC']=True
     meta={k:v for k,v in meta.items() if v is not None}
-    rec={'source':source,'kind':kind,'externalId':stable_id(source,kind,row,league,season),
+    rec={'source':source,'kind':kind,'externalId':stable_id(source,kind,row,league,season,game),
          'playerId':player_id,'playerName':player or None,'team':team or None,
          'opponent':opponent or None,'competition':league,'season':season,
          'matchId':cleaned(game_id) or None,'fixtureStart':parsed[0] if parsed else None,

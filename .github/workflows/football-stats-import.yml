@@ -13,6 +13,8 @@ on:
           - espn_import
           - soccerdata_preview
           - soccerdata_import
+          - soccerdata_suite_preview
+          - soccerdata_suite_import
           - reconcile_preview
           - reconcile_import
       from_date:
@@ -54,6 +56,11 @@ on:
         type: string
         required: true
         default: GER-Bundesliga
+      soccerdata_max_games:
+        description: 'SoccerData: maximal so viele FINAL-Spiele pro Liga und Datenart je Lauf (1–10)'
+        type: string
+        required: true
+        default: '3'
       source_rights_confirmed:
         description: 'Ich habe die automatisierten Zugriffs- und Nutzungsrechte dieser Quelle geprueft und bestaetigt'
         type: boolean
@@ -114,6 +121,7 @@ jobs:
           SOCCERDATA_SOURCE: ${{ inputs.source }}
           SOCCERDATA_DATASET: ${{ inputs.dataset }}
           SOCCERDATA_LEAGUE: ${{ inputs.league }}
+          SOCCERDATA_MAX_GAMES: ${{ inputs.soccerdata_max_games }}
           SOURCE_RIGHTS_CONFIRMED: ${{ inputs.source_rights_confirmed }}
           FOOTBALL_STATS_BASE_URL: ${{ secrets.FOOTBALL_STATS_BASE_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
@@ -144,6 +152,15 @@ jobs:
               # After ESPN history is saved, match archived official Sorare scores.
               python scripts/reconcile_football_stats.py --send
               ;;
+            soccerdata_suite_preview|soccerdata_suite_import)
+              # Opt-in, bounded; matches + season totals + individual shot events for all 4 core leagues.
+              export FOOTBALL_STATS_URL="${FOOTBALL_STATS_BASE_URL%/}/api/cron/v4516/soccerdata"
+              if [ "$RUN_MODE" = 'soccerdata_suite_import' ]; then
+                python scripts/run_soccerdata_four_leagues.py --from "$START_DATE" --until "$END_DATE" --max-games "$SOCCERDATA_MAX_GAMES" --permission-confirmed --send
+              else
+                python scripts/run_soccerdata_four_leagues.py --from "$START_DATE" --until "$END_DATE" --max-games "$SOCCERDATA_MAX_GAMES" --permission-confirmed
+              fi
+              ;;
             soccerdata_preview|soccerdata_import)
               if [ "$SOURCE_RIGHTS_CONFIRMED" != 'true' ]; then
                 echo 'SoccerData: Quellenberechtigung nicht bestaetigt.' >&2
@@ -155,16 +172,16 @@ jobs:
                   echo 'Fehler: GitHub Secrets FOOTBALL_STATS_BASE_URL und CRON_SECRET fehlen.' >&2
                   exit 1
                 fi
-                python scripts/import_soccerdata_all.py --source "$SOCCERDATA_SOURCE" --dataset "$SOCCERDATA_DATASET" --league "$SOCCERDATA_LEAGUE" --season '2026/2027' --from "$START_DATE" --until "$END_DATE" --max-games 10 --permission-confirmed --send
+                python scripts/import_soccerdata_all.py --source "$SOCCERDATA_SOURCE" --dataset "$SOCCERDATA_DATASET" --league "$SOCCERDATA_LEAGUE" --season '2026/2027' --from "$START_DATE" --until "$END_DATE" --max-games "$SOCCERDATA_MAX_GAMES" --permission-confirmed --send
               else
-                python scripts/import_soccerdata_all.py --source "$SOCCERDATA_SOURCE" --dataset "$SOCCERDATA_DATASET" --league "$SOCCERDATA_LEAGUE" --season '2026/2027' --from "$START_DATE" --until "$END_DATE" --max-games 3 --permission-confirmed
+                python scripts/import_soccerdata_all.py --source "$SOCCERDATA_SOURCE" --dataset "$SOCCERDATA_DATASET" --league "$SOCCERDATA_LEAGUE" --season '2026/2027' --from "$START_DATE" --until "$END_DATE" --max-games "$SOCCERDATA_MAX_GAMES" --permission-confirmed
               fi
               ;;
             *) echo 'Unbekannter Modus' >&2; exit 1;;
           esac
 
       - name: Importfortschritt fuer spaeter sichern
-        if: always()
+        if: ${{ always() && hashFiles('.football-backfill-v4516-progress.json', '.soccerdata-v4516-progress.json') != '' }}
         uses: actions/cache/save@v4
         with:
           path: |
