@@ -1,5 +1,5 @@
 /**
- * Neon Builder Pro V3.2: NBA Stars Optimizer 2.1.
+ * Neon Builder Pro V4.5.13: NBA Stars Optimizer 3.0.
  *
  * Bounded, multi-objective 0/1 star-budget dynamic programming. We search whole
  * five-player combinations rather than greedily choosing points per star.
@@ -48,11 +48,11 @@ export type NbaStarsBoard={
   note:string;
 };
 const finite=(n:unknown):n is number=>typeof n==="number"&&Number.isFinite(n);
-const cap=Math.round(ARCADE.nba.maxStars*2);
+const defaultCap=Math.round(ARCADE.nba.maxStars*2);
 const lineKey=(l:OptimizedLineup)=>l.picks.map(p=>p.player.id).sort().join("|");
 const clamp=(n:number,a:number,b:number)=>Math.max(a,Math.min(b,n));
 
-export function assessNbaStarsLineup(line:OptimizedLineup):NbaStarsAssessment{
+export function assessNbaStarsLineup(line:OptimizedLineup,starsLimit:number=ARCADE.nba.maxStars):NbaStarsAssessment{
   const picks=line.picks;
   const atRisk=picks.filter(p=>p.player.playProb<.65||p.player.injuries>0).length;
   const lowData=picks.filter(p=>p.player.confidence==="gering"||p.player.forecastSources.length===0).length;
@@ -69,7 +69,7 @@ export function assessNbaStarsLineup(line:OptimizedLineup):NbaStarsAssessment{
     delta+=finite(scout.matchupAdjustmentPct)?scout.matchupAdjustmentPct:0;
   }
   return {pointsPerStar:line.starsUsed>0?line.projectedScore/line.starsUsed:0,
-    unusedStars:Math.max(0,ARCADE.nba.maxStars-line.starsUsed),riskIndex,atRisk,lowData,
+    unusedStars:Math.max(0,starsLimit-line.starsUsed),riskIndex,atRisk,lowData,
     matchupKnown,matchupFavorable,matchupDifficult,
     matchupPercentAverage:matchupKnown?delta/matchupKnown:null};
 }
@@ -132,7 +132,8 @@ function toLineup(picks:Candidate[],target?:number|null):OptimizedLineup{
 /** Search legal 5-card combinations by mode. Keeps several best states per star
  * bucket (so later conflict checks and alternatives remain possible).
  */
-function search(cards:CardInput[],opts:OptimizeOptions,mode:NbaStarsMode,diversityFrom?:{reference:ReadonlySet<string>;minimum:NbaLineupDiversity}):{lines:OptimizedLineup[];eligibleCount:number;limited:boolean}{
+function search(cards:CardInput[],opts:OptimizeOptions,mode:NbaStarsMode,diversityFrom?:{reference:ReadonlySet<string>;minimum:NbaLineupDiversity},starsLimit:number=ARCADE.nba.maxStars):{lines:OptimizedLineup[];eligibleCount:number;limited:boolean}{
+  const cap=Math.round(Math.min(ARCADE.nba.maxStars,Math.max(1,starsLimit))*2);
   const pool=buildCandidates(cards,opts,mode);
   if(!pool)return {lines:[],eligibleCount:0,limited:false};
   const {pins}=pool;
@@ -193,11 +194,11 @@ function search(cards:CardInput[],opts:OptimizeOptions,mode:NbaStarsMode,diversi
  * Constraints and a >=90% points safeguard always win over diversity.
  * When diversity is impossible the UI receives an explicit, measurable warning.
  */
-export function buildNbaStarsOptimizer(cards:CardInput[],opts:OptimizeOptions,minChangesInput:NbaLineupDiversity=2):NbaStarsBoard{
+export function buildNbaStarsOptimizer(cards:CardInput[],opts:OptimizeOptions,minChangesInput:NbaLineupDiversity=2,starsLimit:number=ARCADE.nba.maxStars):NbaStarsBoard{
   const minimum=normalizeNbaDiversity(minChangesInput);
   const modes:NbaStarsMode[]=["max","value","safe","upside"];
   const options={...opts,sport:"nba" as const,limit:Math.max(12,opts.limit??5)};
-  const searches=modes.map(mode=>search(cards,options,mode));
+  const searches=modes.map(mode=>search(cards,options,mode,undefined,starsLimit));
   const common=new Map<string,OptimizedLineup>();
   for(const result of searches)for(const line of result.lines)common.set(lineKey(line),line);
   const objective=(line:OptimizedLineup,mode:NbaStarsMode):number=>{
@@ -224,7 +225,7 @@ export function buildNbaStarsOptimizer(cards:CardInput[],opts:OptimizeOptions,mi
   // A separate overlap-constrained search prevents the usual pool pruning from
   // hiding valid 2- or 3-player swaps behind nearly identical top candidates.
   for(const mode of modes.filter(m=>m!=="max")){
-    const distinct=search(cards,options,mode,{reference,minimum});
+    const distinct=search(cards,options,mode,{reference,minimum},starsLimit);
     const merged=new Map(common);
     for(const line of distinct.lines)merged.set(lineKey(line),line);
     const feasible=[...merged.values()].filter(l=>l.projectedScore>=valueFloor-1e-7);
@@ -235,7 +236,7 @@ export function buildNbaStarsOptimizer(cards:CardInput[],opts:OptimizeOptions,mi
     const previous=variants.map(v=>v.lineup);
     const distance=previous.length?Math.min(...previous.map(old=>lineupChanges(old,line))):0;
     const loss=best.projectedScore-line.projectedScore;
-    variants.push({mode,lineup:line,assessment:assessNbaStarsLineup(line),
+    variants.push({mode,lineup:line,assessment:assessNbaStarsLineup(line,starsLimit),
       changesFromMax:lineupChanges(best,line),minChangesToOtherVariants:distance,
       meetsDiversity:meets,projectedLoss:loss,
       projectedLossPercent:best.projectedScore>0?loss/best.projectedScore*100:0});

@@ -62,7 +62,7 @@ const excluded=buildNbaStarsOptimizer(cards,{...opts,excludedPlayerIds:['nba4']}
 assert.ok(excluded.variants.every(v=>v.lineup.picks.every(p=>p.player.id!=='nba4')));
 // New controls and mapping MUST be wired into the selection path rather than visual-only.
 const ui=fs.readFileSync('app/components/arcade-dashboard.tsx','utf8');
-for(const term of ['NBA Stars Optimizer 2.1','nba32-diversity','setNbaDiversity','nbaDiversity','lineupChanges','projectedLoss','minChangesToOtherVariants','buildNbaStarsOptimizer(eligibleCards,v30Options(v30ActiveSettings),nbaDiversity)','neon:nba-diversity-v32'])
+for(const term of ['NBA Stars Optimizer 3.0','nba32-diversity','setNbaDiversity','nbaDiversity','lineupChanges','projectedLoss','minChangesToOtherVariants','buildNbaStarsOptimizer(matchdayNbaCards,v30Options(v30ActiveSettings),nbaDiversity,nbaStarsLimit)','neon:nba-diversity-v32'])
   assert.ok(ui.includes(term),`missing: ${term}`);
 const css=fs.readFileSync('app/globals.css','utf8');
 for(const term of ['.nba32-diversity','.nba32-warning','.nba32-current','.nba32-unmet'])assert.ok(css.includes(term));

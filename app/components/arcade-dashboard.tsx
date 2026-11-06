@@ -21,6 +21,7 @@ import {buildNbaStarsOptimizer,assessNbaStarsLineup,lineupChanges,NBA_STARS_MODE
 import type {FetchSummary} from "@/lib/data-health";
 import type {ScheduleData} from "@/lib/gameweek-center";
 import {canonicalNbaTeam} from "@/lib/nba-fixture-mapping";
+import {eligibleNbaStarsIds,starsWindowLabel,verifyStarsTransfer,type StarsMatchdayWindow,type StarsBudget} from "@/lib/nba-stars-matchday";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import {presetStorageKey,readOptimizerPresets,saveOptimizerPreset,deleteOptimizerPreset,type OptimizationPreset} from "@/lib/qol-presets";
 import {compareOptimizedLineups} from "@/lib/lineup-compare-v35";
@@ -223,6 +224,13 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const [builderMode, setBuilderMode] = useState<"automatic" | "manual">("manual");
   const [strategy, setStrategy] = useState<Strategy>("balanced");
   const [nbaStarsMode,setNbaStarsMode]=useState<NbaStarsMode>("max");
+  const [nbaWindow,setNbaWindow]=useState<StarsMatchdayWindow>("24h");
+  const [nbaStarsLimit,setNbaStarsLimit]=useState<StarsBudget>(16);
+  const [nbaClock,setNbaClock]=useState<Date|null>(null);
+  const [requestedStarsLineup,setRequestedStarsLineup]=useState<{ids:string[];seq:number;window:StarsMatchdayWindow;budget:StarsBudget}|null>(null);
+  const [starsNotice,setStarsNotice]=useState("");
+  useEffect(()=>{setNbaClock(new Date());const timer=window.setInterval(()=>setNbaClock(new Date()),300000);return ()=>clearInterval(timer);},[]);
+  useEffect(()=>{setNbaVariantKey(null);setActiveResult(0);setStarsNotice("");},[nbaWindow,nbaStarsLimit]);
   const [nbaVariantKey,setNbaVariantKey]=useState<string|null>(null);
   const [nbaDiversity,setNbaDiversity]=useState<NbaLineupDiversity>(2);
   const [nbaDiversityLoaded,setNbaDiversityLoaded]=useState(false);
@@ -590,6 +598,8 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
     bonusPercent: effectiveCardStore[p.id]?.bonusPercent ?? 0,
   })), [players, effectiveCardStore, ownedOnly, verifiedOwnedReady]);
 
+  const eligibleNbaIds=useMemo(()=>sport==="nba"&&nbaClock?eligibleNbaStarsIds(players,nbaSchedule,nbaWindow,nbaClock):new Set<string>(),[sport,players,nbaSchedule,nbaWindow,nbaClock]);
+  const matchdayNbaCards=useMemo(()=>sport==="nba"?eligibleCards.filter(c=>eligibleNbaIds.has(c.player.id)&&!isConfirmedOut(injuryById[c.player.id])).map(c=>({...c,player:c.player.hasGame===false?{...c.player,hasGame:true}:c.player})):eligibleCards,[sport,eligibleCards,eligibleNbaIds,injuryById]);
   const dailyMissionOwnedIds=useMemo(()=>{
     // With no verified current Football Set, never substitute old browser flags
     // for confirmed ownership in the Daily Mission Picker.
@@ -644,8 +654,8 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   // V3.0 team scope, locked picks, injury exclusions, bonuses, projections,
   // minimum scores and max-reuse rules continue to apply unchanged.
   const nbaStarBoard=useMemo(()=>activeTab==="builder"&&sport==="nba"&&builderMode==="automatic"&&!v30ActiveSettings.excludedLeagues.includes(league)?
-    buildNbaStarsOptimizer(eligibleCards,v30Options(v30ActiveSettings),nbaDiversity):null,
-    [activeTab,sport,builderMode,eligibleCards,ownedOnly,lockedIds,excludedIds,v30ActiveSettings,league,validTarget,totalTarget,nbaDiversity]);
+    buildNbaStarsOptimizer(matchdayNbaCards,v30Options(v30ActiveSettings),nbaDiversity,nbaStarsLimit):null,
+    [activeTab,sport,builderMode,matchdayNbaCards,ownedOnly,lockedIds,excludedIds,v30ActiveSettings,league,validTarget,totalTarget,nbaDiversity,nbaStarsLimit]);
   const nbaProfileLines=(board:NonNullable<typeof nbaStarBoard>,settings:BuilderV30Settings)=>{
     const effectiveMode=settings.preset==="safe"?"safe":settings.preset==="ceiling"?"upside":nbaStarsMode;
     const candidates=board.pools[effectiveMode];
@@ -664,9 +674,9 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const lineups = useMemo(() => {
     // Never search lineups when only the manual editor or another workspace is shown.
     if(activeTab!=="builder"||builderMode!=="automatic")return [];
-    const poolFor=(settings:BuilderV30Settings)=>settings.excludedLeagues.includes(league)?[]:eligibleCards;
+    const poolFor=(settings:BuilderV30Settings)=>settings.excludedLeagues.includes(league)?[]:sport==="nba"?matchdayNbaCards:eligibleCards;
     const makeCandidates=(settings:BuilderV30Settings)=>sport==="nba"?
-      nbaProfileLines(buildNbaStarsOptimizer(poolFor(settings),v30Options(settings),nbaDiversity),settings):
+      nbaProfileLines(buildNbaStarsOptimizer(poolFor(settings),v30Options(settings),nbaDiversity,nbaStarsLimit),settings):
       optimizeArcadeLineups(poolFor(settings),v30Options(settings));
     if(v30State.scope==="all"){
       const settings=v30State.global;
@@ -687,7 +697,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
       picked.push(chosen);for(const pick of chosen.picks)usage.set(pick.player.id,(usage.get(pick.player.id)??0)+1);
     }
     return picked;
-  }, [activeTab,eligibleCards,sport,ownedOnly,strategy,validTarget,totalTarget,lockedIds,excludedIds,v30State,league,nbaStarsMode,nbaVariantKey,nbaStarBoard,builderMode,nbaDiversity,portfolioDiversity]);
+  }, [activeTab,eligibleCards,matchdayNbaCards,sport,ownedOnly,strategy,validTarget,totalTarget,lockedIds,excludedIds,v30State,league,nbaStarsMode,nbaVariantKey,nbaStarBoard,builderMode,nbaDiversity,nbaStarsLimit,portfolioDiversity]);
   // The older Intelligence Lab builds independent candidates without V3 rules.
   // Hide it when any advanced constraints are active rather than bypassing them.
   const intelligence=useMemo(()=>activeTab==="builder"&&builderMode==="automatic"&&sport==="football"&&!v30AnyChanged ? buildArcadeIntelligence(eligibleCards,{
@@ -703,7 +713,18 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const autoCaptainKey=chosenBase?.picks.map(p=>p.player.id).join("|")??"";
   const chosenAuto=automaticCaptainLineup(chosenBase,sport,injuryById,validTarget?totalTarget:null,autoCaptainChoice?.key===autoCaptainKey?autoCaptainChoice.playerId:null);
   const chosen=chosenAuto.lineup;
-  const nbaChosenAssessment=sport==="nba"&&chosen?assessNbaStarsLineup(chosen):null;
+  const nbaChosenAssessment=sport==="nba"&&chosen?assessNbaStarsLineup(chosen,nbaStarsLimit):null;
+  const transferStarsLineup=()=>{
+    if(sport!=="nba"||!chosen||!nbaClock)return;
+    const freshIds=eligibleNbaStarsIds(players,nbaSchedule,nbaWindow,new Date());
+    const ids=chosen.picks.map(p=>p.player.id);
+    const allowed=new Set(ids.filter(id=>freshIds.has(id)&&!isConfirmedOut(injuryById[id])&&(!ownedOnly||(verifiedOwnedReady&&effectiveCardStore[id]?.owned===true))));
+    const error=verifyStarsTransfer(ids,new Map<string,number|null|undefined>(ids.map(id=>[id,effectiveCardStore[id]?.stars])),allowed,nbaStarsLimit);
+    if(error){setStarsNotice(error);return;}
+    setRequestedStarsLineup(old=>({ids,seq:(old?.seq??0)+1,window:nbaWindow,budget:nbaStarsLimit}));
+    setStarsNotice("Übertragung in den manuellen NBA Builder. Keine automatische Sorare-Einreichung.");
+    setBuilderMode("manual");
+  };
   const nbaMaxLine=nbaStarBoard?.variants.find(v=>v.mode==="max")?.lineup;
   const nbaChosenChanges=nbaMaxLine&&chosen?lineupChanges(nbaMaxLine,chosen):null;
   const nbaChosenLoss=nbaStarBoard&&chosen?nbaStarBoard.referenceScore-chosen.projectedScore:null;
@@ -957,7 +978,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
             {builderMode === "manual" ? <BuilderWorkspace sport={sport} league={league} availability={builderAvailability} availabilityById={injuryById} players={players} cardStore={effectiveCardStore} ownedOnly={ownedOnly} verifiedOwnedReady={verifiedOwnedReady} verifiedCollection={verifiedCollection} v30State={v30State} onV30Change={setV30State} leagues={leagues}
               updateCard={updateCard} targetScore={validTarget ? totalTarget : null}
               onOpenProfile={setSelectedPlayerId}
-              onSavePredictions={saveLineupForecasts} requestedPlayer={manualRequest}
+              onSavePredictions={saveLineupForecasts} requestedPlayer={manualRequest} requestedStarsLineup={requestedStarsLineup} onStarsLineupHandled={seq=>setRequestedStarsLineup(prev=>prev?.seq===seq?null:prev)}
               favorites={watchlist} onToggleFavorite={toggleFavorite}
               nbaSchedule={nbaSchedule} matchupRatings={effectiveRatings} matchupSource={automaticMatchups.source}/> : <>
             <div className="v35-presets" aria-label="Optimierungs-Presets"><div className="v35-presets-head"><strong>✦ Meine Optimierungs-Presets</strong><span>Nur in diesem Browser gespeichert</span></div>
@@ -975,8 +996,17 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
             {intelligenceView&&<ArcadeIntelligenceLab sport={sport} board={intelligenceView} target={target}
               onTargetChange={value=>{setTarget(value);setIntelligencePickKey(null);}}
               selectedKey={activeIntelligence?.key??null} onSelect={key=>{setIntelligencePickKey(key);setActiveResult(0);}}/>}
-            {sport==="nba"&&<section className="nba31-panel" aria-label="NBA Stars Optimizer 2.1">
-              <div className="nba31-heading"><div><span className="section-kicker">V3.2 · NBA STARS OPTIMIZER 2.1</span><h3>Smart Star Budget &amp; Diversity</h3><p>Ganze Fünferteams unter 16 ★ optimieren · vier klare Strategien · Unterschiede transparent.</p></div><span className="nba31-tag">5 Karten · ≤ 16 ★</span></div>
+            {sport==="nba"&&<section className="nba31-panel" aria-label="NBA Stars Optimizer 3.0">
+              <div className="nba31-heading"><div><span className="section-kicker">V4.5.13 · NBA STARS OPTIMIZER 3.0</span><h3>Smart Matchday &amp; Diversity</h3><p>Nur bestätigte NBA-Partien · direkter Lineup-Transfer · vier Strategien.</p></div><span className="nba31-tag">5 Karten · ≤ {nbaStarsLimit} ★</span></div>
+              <div className="nba313-controls" aria-label="NBA Matchday und Sternebudget">
+                <div><strong>Spielzeitraum</strong><div className="nba313-controls-buttons" role="group" aria-label="Bestätigte Spieltermine">
+                  {(["today","24h","tomorrow","7d"] as StarsMatchdayWindow[]).map(windowKey=><button type="button" key={windowKey} aria-pressed={nbaWindow===windowKey} className={nbaWindow===windowKey?"active":""} onClick={()=>setNbaWindow(windowKey)}>{starsWindowLabel(windowKey)}</button>)}
+                </div></div>
+                <div><strong>Sternebudget</strong><div className="nba313-controls-buttons" role="group" aria-label="NBA Sternebudget">
+                  {([16,11] as StarsBudget[]).map(budget=><button type="button" key={budget} aria-pressed={nbaStarsLimit===budget} className={nbaStarsLimit===budget?"active":""} onClick={()=>setNbaStarsLimit(budget)}>{budget===16?"Champion · 16 ★":"Contender · 11 ★"}</button>)}
+                </div></div>
+              </div>
+              <p className="nba313-scope" role="status">{nbaSchedule.status!=="available"?"⚠ NBA-Spielplan momentan nicht verfügbar: keine ungeprüften Spieler als Ersatz.":`${eligibleNbaIds.size} Spieler aus bestätigten NBA-Partien für „${starsWindowLabel(nbaWindow)}“ erkannt.`} {nbaWindow==="24h"?"Ohne bestätigte UTC-Anstoßzeit keine Aufnahme.":nbaWindow==="7d"?"Das 7-Tage-Fenster ist nicht automatisch die offizielle Sorare-Gameweek.":"Uhrzeiten werden in deutscher Zeit zugeordnet."} Bestätigte OUT-Spieler sind ausgeschlossen.</p>
               <div className="nba31-modes" role="group" aria-label="NBA-Optimierungsprofil">
                 {NBA_STARS_MODES.map(mode=><button type="button" key={mode.id} aria-pressed={nbaStarsMode===mode.id} className={nbaStarsMode===mode.id?"active":""} title={mode.detail}
                   onClick={()=>{const variant=nbaStarBoard?.variants.find(v=>v.mode===mode.id);selectNbaOptimizerMode(mode.id,variant?.lineup.picks.map(p=>p.player.id).sort().join("|")??null);}}
@@ -1017,10 +1047,15 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
               </div>}
               {nbaChosenAssessment&&chosen&&<div className="nba31-metrics" role="status">
                 <div><small>Star Efficiency</small><strong>{fmt(nbaChosenAssessment.pointsPerStar)}</strong><span>Prognosepunkte / Stern</span></div>
-                <div><small>Budget übrig</small><strong>{fmt(nbaChosenAssessment.unusedStars)} ★</strong><span>Keine Pflicht, alle 16 ★ zu nutzen</span></div>
+                <div><small>Budget übrig</small><strong>{fmt(nbaChosenAssessment.unusedStars)} ★</strong><span>Keine Pflicht, alle {nbaStarsLimit} ★ zu nutzen</span></div>
                 <div><small>Risikoindex*</small><strong>{nbaChosenAssessment.riskIndex}/100</strong><span>{nbaChosenAssessment.atRisk} Einsatzrisiken · {nbaChosenAssessment.lowData} schwache Daten</span></div>
                 <div><small>Matchup bekannt</small><strong>{nbaChosenAssessment.matchupKnown}/5</strong><span>{nbaChosenAssessment.matchupFavorable} günstig · {nbaChosenAssessment.matchupDifficult} schwierig</span></div>
               </div>}
+              <div className="nba313-actions">
+                <button type="button" disabled={!chosen||chosen.picks.length!==5} onClick={transferStarsLineup}>↪ Aktuelles 5er-Lineup in manuellen Builder übernehmen</button>
+                <small>Übernimmt alle fünf Spieler, prüft Spielplan, Budget und OUT-Status erneut. Bestehende Teams werden nicht ungefragt überschrieben. Keine direkte Sorare-Einreichung.</small>
+                {starsNotice&&<p role="status">{starsNotice}</p>}
+              </div>
               <p className="nba31-note">{nbaStarBoard?.note??"Kein NBA-Ergebnis für die aktuelle Auswahl."} {nbaChosenAssessment?.matchupPercentAverage!==null&&nbaChosenAssessment?.matchupPercentAverage!==undefined?`Ø Matchup-Anpassung der bewerteten Spieler: ${fmt(nbaChosenAssessment.matchupPercentAverage)} % (bereits enthalten).`:"Ohne Gegnerdaten wird kein fiktiver Matchup-Bonus vergeben."} * Risiko ist eine nicht kalibrierte Heuristik aus Einsatzchance, Formstreuung und Datenqualität. {v30State.scope==="team"?"Im Pro-Team-Modus gelten die individuellen V3.0-Einstellungen je Team.":""}</p>
             </section>}
             <div className="lock-info"><span>🔒 {lockedIds.length} Spieler fixiert · 🚫 {excludedIds.length} ausgeschlossen</span><button type="button" onClick={() => setCardStore(store => Object.fromEntries(Object.entries(store).map(([id,v])=>[id,{...v,locked:false,excluded:false}]))) }>Auswahl zurücksetzen</button></div>
@@ -1051,7 +1086,7 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
               <div><span>PROGNOSE GESAMT</span><strong>{chosen ? fmt(chosen.projectedScore) : "—"}<small> Pkt.</small></strong></div>
               <div className="target-input"><label htmlFor="target">Score-Ziel (frei einstellbar)</label><input id="target" type="number" min="1" step="1" inputMode="numeric" value={target} placeholder="z. B. 360" onChange={e=>setTarget(e.target.value)} /></div>
             </div>
-            {!chosen&&<p className="v30-status">Kein passendes Lineup: Prüfe Bundesliga-/Liga-Ausschlüsse, Mindestpunkte, Team-Stack, Extra-Position, Q80-Datenabdeckung oder NBA-Sternelimit. Es werden keine fehlenden Daten ergänzt.</p>}
+            {!chosen&&<p className="v30-status">Kein passendes Lineup: Prüfe bestätigte Spieltermine, OUT-Status, Kartensammlung, NBA-Sternebudget, Mindestpunkte und weitere Team-Regeln. Es werden keine fehlenden Daten ergänzt.</p>}
             {chosen && <div className="lineup-range"><span>Floor (heuristisch): <strong>{fmt(chosen.floorScore)}</strong></span><span>Ceiling (heuristisch): <strong>{fmt(chosen.ceilingScore)}</strong></span></div>}
             {chosen && validTarget && chosen.targetProbability !== null && <div className="target-chance" role="status"><div><span>GESCHÄTZTE ZIELCHANCE</span><strong>{Math.round(chosen.targetProbability * 100)} %</strong></div><small>Modellschätzung mit Formstreuung, DNP-Risiko und angenommener Team-Korrelation. Nicht kalibriert, keine garantierte Gewinnchance.</small></div>}
             {chosen && validTarget && (

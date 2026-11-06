@@ -287,3 +287,9 @@ Neu: Lineup Doctor (regelvalidierte Wechselideen), Hidden Gems Finder (NBA Punkt
 ## V4.5.6 — Football Live Match Center Pro
 - Taktische horizontale Aufstellungen mit bestätigten ESPN-/Opta-Slots, Sorare-PS über sicheren OAuth-Spielabgleich, ESPN-Spielminuten/Fallback mit Kennzeichnung sowie Spielerfotos und Banklisten.
 - Kein Datenbank- oder Cron-Umbau. Details: `UPDATE_V4_5_6_FOOTBALL_LIVE_MATCH_CENTER_DE.md`.
+
+### V4.5.13 – NBA Stars Optimizer 3.0
+- Bestehende 2.1-Ansicht durch Smart Matchday & Diversity 3.0 ersetzt.
+- Strikte bestätigte NBA-Terminfilter (Heute / 24h / Morgen / 7 Tage), Ausfallfilter und 16/11 Sterne-DP.
+- Sichere vollständige Fünferteam-Übernahme in den manuellen NBA Builder mit erneuter Regelprüfung und Schutz bestehender Teams.
+- Bestehende Prognose-/Learning-Pipelines sowie NBA- und Fußball-Live-Center unverändert.

@@ -2,6 +2,7 @@
 
 import {memo,useDeferredValue,useEffect,useMemo,useRef,useState,type DragEvent} from "react";
 import {ARCADE} from "@/config/divination";
+import {eligibleNbaStarsIds,verifyStarsTransfer,type StarsMatchdayWindow,type StarsBudget} from "@/lib/nba-stars-matchday";
 import {sorarePlayerUrl} from "@/lib/sorare-profile";
 import {isValidNbaStars,slotAccepts,type CardInput,type Strategy} from "@/lib/arcade";
 import {evaluateManualLineup} from "@/lib/manual-lineup";
@@ -28,7 +29,7 @@ import {conditionalCardScore,sumConditionalScores} from "@/lib/prediction-presen
 type CardSettings={owned?:boolean;stars?:number|null;bonusPercent?:number;bonusSource?:"sorare";starSource?:"sorare";locked?:boolean;excluded?:boolean};
 type Props={sport:Sport;league:string;availability:ReturnType<typeof useAvailability>;availabilityById:Record<string,AvailabilityReport>;players:Forecast[];cardStore:Record<string,CardSettings>;ownedOnly:boolean;verifiedOwnedReady:boolean;verifiedCollection:OwnedCollection|null;updateCard:(id:string,patch:CardSettings)=>void;
   targetScore:number|null;onOpenProfile:(id:string)=>void;onSavePredictions:(picks:Forecast[])=>void;
-  requestedPlayer?:{id:string;seq:number}|null;favorites:string[];onToggleFavorite:(id:string)=>void;
+  requestedPlayer?:{id:string;seq:number}|null;requestedStarsLineup?:{ids:string[];seq:number;window:StarsMatchdayWindow;budget:StarsBudget}|null;onStarsLineupHandled?:(seq:number)=>void;favorites:string[];onToggleFavorite:(id:string)=>void;
   nbaSchedule:ScheduleData;matchupRatings:OpponentRatings;matchupSource:string|null;v30State:BuilderV30State;onV30Change:(next:BuilderV30State)=>void;leagues:string[];
 };
 const fmt=(n:number)=>Number.isFinite(n)?n.toLocaleString("de-DE",{minimumFractionDigits:1,maximumFractionDigits:1}):"—";
@@ -86,7 +87,7 @@ function AvailabilityBadge({report,small=false}:{report?:AvailabilityReport;smal
 function MiniStat({label,value,tone}:{label:string;value:string;tone?:"good"|"warn"|"star"}){
   return <div className="v23-mini-stat"><small>{label}</small><strong className={tone?`tone-${tone}`:""}>{value}</strong></div>;
 }
-function BuilderWorkspace({sport,league,availability,availabilityById,players,cardStore,ownedOnly,verifiedOwnedReady,verifiedCollection,updateCard,targetScore,onOpenProfile,onSavePredictions,requestedPlayer,favorites,onToggleFavorite,nbaSchedule,matchupRatings,matchupSource,v30State,onV30Change,leagues}:Props){
+function BuilderWorkspace({sport,league,availability,availabilityById,players,cardStore,ownedOnly,verifiedOwnedReady,verifiedCollection,updateCard,targetScore,onOpenProfile,onSavePredictions,requestedPlayer,requestedStarsLineup,onStarsLineupHandled,favorites,onToggleFavorite,nbaSchedule,matchupRatings,matchupSource,v30State,onV30Change,leagues}:Props){
   const [teams,setTeams]=useState<WorkspaceTeam[]>(initialTeams);
   const [opponentLogos,setOpponentLogos]=useState<Record<string,string>>({});
   useEffect(()=>{
@@ -119,6 +120,7 @@ function BuilderWorkspace({sport,league,availability,availabilityById,players,ca
   const [position,setPosition]=useState("all");
   const [msg,setMsg]=useState("");
   const [lastRequest,setLastRequest]=useState<number|null>(null);
+  const lastStarsImport=useRef<number|null>(null);
   const [undoTeams,setUndoTeams]=useState<WorkspaceTeam[]|null>(null);
   const [strategy,setStrategy]=useState<Strategy>("balanced");
   const [now,setNow]=useState<Date|null>(null);
@@ -254,6 +256,29 @@ function BuilderWorkspace({sport,league,availability,availabilityById,players,ca
     // An explicit external add always uses a free slot, never an already selected slot.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[requestedPlayer,loadedSport,sport]);
+  useEffect(()=>{
+    if(sport!=="nba"||loadedSport!==sport||!requestedStarsLineup||lastStarsImport.current===requestedStarsLineup.seq)return;
+    lastStarsImport.current=requestedStarsLineup.seq;
+    onStarsLineupHandled?.(requestedStarsLineup.seq);
+    const ids=requestedStarsLineup.ids;
+    const allowedFixture=eligibleNbaStarsIds(players,nbaSchedule,requestedStarsLineup.window,new Date());
+    const allowed=new Set(ids.filter(id=>allowedFixture.has(id)&&!isConfirmedOut(availabilityById[id])&&
+      (ownedOnly===false||(verifiedOwnedReady&&cardStore[id]?.owned===true))));
+    const validation=verifyStarsTransfer(ids,new Map<string,number|null|undefined>(ids.map(id=>[id,cardStore[id]?.stars])),allowed,requestedStarsLineup.budget);
+    if(validation){setMsg(`Stars Optimizer: ${validation} Das bestehende Team wurde nicht verändert.`);return;}
+    // Always use an empty team before asking to replace an existing lineup.
+    const target=teams.find(t=>t.selection.every(id=>!id));
+    const destination=target??teams.find(t=>t.id===activeTeamId)??teams[0];
+    if(!destination){setMsg("Kein freies Team vorhanden.");return;}
+    if(destination.selection.some(Boolean)&&!window.confirm(`Team ${destination.id.replace("team-", "")} durch die fünf gewählten NBA-Spieler ersetzen?`)){
+      setMsg("Lineup-Übernahme abgebrochen; gespeicherte Teams bleiben unverändert.");return;
+    }
+    changeTeam(destination.id,t=>({...t,selection:[...ids] as WorkspaceTeam["selection"],locks:[],captainId:null,assetIds:{},assetBonuses:{},collapsed:false}));
+    setActiveTeamId(destination.id);setActiveSlot(null);
+    setMsg(`Stars Optimizer 3.0: Fünferteam unter ${requestedStarsLineup.budget} ★ in ${destination.id} übernommen. Bitte vor Sorare-Einreichung erneut prüfen.`);
+    // One-shot transfer: team changes must not trigger a second import.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[requestedStarsLineup,loadedSport,sport]);
   const clearTeam=(id:string)=>{
     const team=teams.find(t=>t.id===id);
     if(!team)return;
