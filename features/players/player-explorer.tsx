@@ -6,6 +6,7 @@ import {collectionKey,safeCollection,ownedSlugs} from "@/lib/my-collection";
 import {sorarePlayerUrl} from "@/lib/sorare-profile";
 import {enrichForecast} from "@/lib/matchups";
 import {alignOpponentNames} from "@/lib/auto-matchups";
+import FootballStatsPanel from '@/app/components/football-stats-panel';
 import {buildPredictionV3} from "@/lib/prediction-engine-v3";
 
 type Sort="weighted"|"q80"|"l10"|"floor"|"ceiling"|"playProb";
@@ -86,6 +87,7 @@ export default function PlayerExplorer({players:sourcePlayers,sport,ratings,erro
       <div className="dream-profile-top"><span className="dream-eyebrow">PLAYER INSIGHTS</span><button type="button" onClick={()=>setSelectedId(null)} aria-label="Schließen">✕</button></div>
       <div className="dream-profile-identity">{selected.imageUrl?<img src={selected.imageUrl} alt=""/>:<span className="dream-avatar">{selected.name.slice(0,2)}</span>}<div><h2>{selected.name}</h2><p>{selected.team} · {selected.position}</p></div></div>
       <div className="dream-profile-metrics">{[{name:"PP Raw*",value:amount(selected.modelV3.ppRaw)},{name:"Q80 Raw*",value:amount(selected.modelV3.q80Raw)},{name:"L10",value:amount(selected.last10Avg)},{name:"Q20 Raw*",value:amount(selected.modelV3.q20Raw)},{name:"Risiko-PP*",value:amount(selected.modelV3.riskAdjustedPP)},{name:"Einsatzmodell*",value:`${amount(selected.playProb*100,0)} %`}].map(m=><div key={m.name}><small>{m.name}</small><strong>{m.value}</strong></div>)}</div>
+      {sport==='football'&&<FootballStatsPanel key={selected.id} slug={selected.id} name={selected.name} team={selected.team}/>}
       <h3>Historische Scores</h3><div className="dream-profile-scores">{selected.recentScores?.length?selected.recentScores.slice(0,10).map((v,i)=><div key={i}><span>{amount(v,0)}</span><i style={{height:`${Math.max(6,Math.min(100,v))}%`}}/></div>):<p>Keine Einzelscores verfügbar.</p>}</div>
       <p className="dream-data-footnote">PP/Q80 gelten bei Einsatz und ohne Kartenbonus. Q80 ist unkalibriert; das Einsatzmodell ist keine bestätigte Startaufstellung. NBA-Multi-GW-Best-of wird noch nicht separat modelliert.</p>
       {sorarePlayerUrl(sport,selected.id)?<a className="dream-button-gold" target="_blank" rel="noopener noreferrer" href={sorarePlayerUrl(sport,selected.id)!}>Offizielles Sorare-Profil öffnen ↗</a>:<p>Kein verifizierbarer Spieler-Slug für einen direkten Sorare-Link vorhanden.</p>}

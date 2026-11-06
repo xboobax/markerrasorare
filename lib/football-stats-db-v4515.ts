@@ -1,13 +1,13 @@
 /** V4.5.15 isolated stat storage; never reads or modifies forecast tables. */
 import {neon} from '@neondatabase/serverless';
-import type {FootballMatchStats,FootballOfficialScore,FootballProfileRow} from './football-stats-v4515';
+import type {FootballStatsProvider,FootballMatchStats,FootballOfficialScore,FootballProfileRow} from './football-stats-v4515';
 import {normalizeStatsRows,normalizedName,verifiedProfileMatches} from './football-stats-v4515';
 import {sorareNameKey} from './football-live-sorare';
 const db=()=>{const d=process.env.DATABASE_URL;if(!d)throw new Error('DATABASE_URL fehlt');return neon(d);};
 const sql=(text:string,params:unknown[]=[])=>db().query(text,params as any[],{fetchOptions:{cache:'no-store'}});
 export const footballStatsDbReady=()=>Boolean(process.env.DATABASE_URL);
 /** One SQL request for up to 250 player rows; retries are idempotent. */
-export async function saveFootballMatchStats(source:'espn'|'understat',raw:FootballMatchStats[]):Promise<number>{
+export async function saveFootballMatchStats(source:FootballStatsProvider,raw:FootballMatchStats[]):Promise<number>{
   const rows=normalizeStatsRows(raw,source);
   if(!rows.length)return 0;
   const input=rows.map(r=>({source:r.source,source_game_id:r.sourceGameId,source_player_id:r.sourcePlayerId,
@@ -69,12 +69,14 @@ export async function linkFootballByOfficialGame(scores:FootballOfficialScore[])
   // Bounded by cron size. No name-based cross-match without a matching game and team.
   for(const score of scores.filter(s=>Boolean(s.team)).slice(0,16)){
     if(!score.team||normalizedName(score.playerName).length<5)continue;
-    const candidates=await sql(`SELECT source,source_game_id,source_player_id,player_name,team
+    const candidates=await sql(`SELECT source,source_game_id,source_player_id,player_name,team,opponent
       FROM football_stats_v4515_player_matches
       WHERE fixture_start BETWEEN $1::timestamptz-INTERVAL '3 hours' AND $1::timestamptz+INTERVAL '3 hours'
       AND lower(player_name)=lower($2) LIMIT 12`,[score.date,score.playerName]);
     const approved=candidates.filter((c:any)=>normalizedName(String(c.player_name))===normalizedName(score.playerName)&&
-      sorareNameKey(String(c.team))===sorareNameKey(score.team!));
+      sorareNameKey(String(c.team))===sorareNameKey(score.team!)&&
+      [score.home,score.away].some(x=>sorareNameKey(x)===sorareNameKey(String(c.opponent)))&&
+      sorareNameKey(String(c.opponent))!==sorareNameKey(String(c.team)));
     const perProvider=new Map<string,any[]>();
     for(const row of approved){const key=String(row.source);perProvider.set(key,[...(perProvider.get(key)??[]),row]);}
     for(const matches of perProvider.values()){

@@ -14,9 +14,10 @@ export async function GET(req:Request){
     }
     if(job==='backfill'){
       const batch=url.searchParams.get('batch')??'',from=url.searchParams.get('from')??'';
-      const days=Number(url.searchParams.get('days')??'1');
+      const days=Number(url.searchParams.get('days')??'1'),offset=Number(url.searchParams.get('offset')??'0'),
+        maxGames=Number(url.searchParams.get('maxGames')??'8');
       if(!validFootballStatBatch(batch))return Response.json({error:'Ungültiger Wettbewerb-Batch'},{status:400});
-      return Response.json(await v4515FootballHistoricBackfill(batch,from,days),{headers:{'Cache-Control':'no-store'}});
+      return Response.json(await v4515FootballHistoricBackfill(batch,from,days,new Date(),offset,maxGames),{headers:{'Cache-Control':'no-store'}});
     }
     return Response.json({error:'Ungültiger Job: sorare|backfill'},{status:400});
   }catch(e){return Response.json({error:e instanceof Error?e.message:'Import fehlgeschlagen'},{status:503});}

@@ -2,12 +2,12 @@
 import type {V45Performance} from './learning-v45-performance';
 import type {FootballLiveGame,FootballLiveGameDetail} from './football-live-core';
 import {sorareNameKey} from './football-live-sorare';
-export type FootballStatsProvider='espn'|'understat';
+export type FootballStatsProvider='espn'|'understat'|'fbref'|'sofascore'|'whoscored'|'soccerdata_espn'|'matchhistory'|'clubelo'|'sofifa';
 export type FootballMatchStats={source:FootballStatsProvider;sourceGameId:string;sourcePlayerId:string;
   playerName:string;team:string;opponent:string;competition:string;fixtureStart:string;
   position:string|null;started:boolean|null;minutes:number|null;season:string|null;
   stats:Record<string,number>;reportedFields:string[]};
-export type FootballProfileRow={source:'espn'|'understat';sourceGameId:string;sourcePlayerId:string;
+export type FootballProfileRow={source:FootballStatsProvider;sourceGameId:string;sourcePlayerId:string;
   date:string;competition:string;team:string;opponent:string;season:string|null;
   minutes:number|null;started:boolean|null;stats:Record<string,number>;reportedFields:string[]};
 export type FootballOfficialScore={scoreId:string;slug:string;playerName:string;gameId:string;
@@ -22,7 +22,7 @@ export const EXTRA_STATS_FIELDS=['shots','shotsOnTarget','passes','accuratePasse
   'goals','assists','saves','goalsConceded','xg','xa','npxg','xgChain','xgBuildup',
   'bigChancesCreated','bigChancesMissed'] as const;
 export function validStatsRow(row:FootballMatchStats):boolean{
-  const allowedSource=row.source==='espn'||row.source==='understat';
+  const allowedSource=['espn','understat','fbref','sofascore','whoscored','soccerdata_espn','matchhistory','clubelo','sofifa'].includes(row.source);
   const id=/^[a-zA-Z0-9:_-]{1,100}$/;
   const date=Date.parse(row.fixtureStart);
   if(!allowedSource||!id.test(row.sourceGameId)||!id.test(row.sourcePlayerId)||

@@ -1,8 +1,9 @@
 'use client';
 import {useEffect,useMemo,useState} from 'react';
 import type {FootballOfficialScore,FootballProfileRow} from '@/lib/football-stats-v4515';
+import type {SoccerDataProfileExtra} from '@/lib/football-soccerdata-db-v4516';
 import {sumStat,linkStatsToOfficialMatches} from '@/lib/football-stats-v4515';
-type Data={matches:FootballProfileRow[];officialScores:FootballOfficialScore[];
+type Data={matches:FootballProfileRow[];officialScores:FootballOfficialScore[];soccerdataExtras?:SoccerDataProfileExtra[];
   sorareStatus:'available'|'unavailable';archiveStatus:'ready'|'migration_or_connection_missing';
   linkedProviders:string[];sourceWarnings:string[];scoringNote:string};
 const LABELS:Record<string,string>={
@@ -39,42 +40,67 @@ export default function FootballStatsPanel({slug,name,team}:{slug:string;name:st
       .finally(()=>{if(!c.signal.aborted)setLoading(false);});return()=>c.abort();
   },[opened,slug,name,team]);
   const seasons=useMemo(()=>[...new Set([...(data?.matches??[]).map(r=>euroSeason(r.date)),
-    ...(data?.officialScores??[]).map(r=>euroSeason(r.date))])].filter(Boolean).sort().reverse(),[data]);
+    ...(data?.officialScores??[]).map(r=>euroSeason(r.date)),
+    ...(data?.soccerdataExtras??[]).map(r=>r.fixtureStart?euroSeason(r.fixtureStart):
+      r.season?String(r.season).replace(/^(\d{4})\/(\d{4})$/,(_,a,b)=>`${a}/${b.slice(-2)}`):'')])].filter(Boolean).sort().reverse(),[data]);
   const official=useMemo(()=>data?.officialScores.filter(r=>season==='all'||euroSeason(r.date)===season)??[],[data,season]);
   const matches=useMemo(()=>data?.matches.filter(r=>(season==='all'||euroSeason(r.date)===season)&&
     (provider==='all'||provider===r.source))??[],[data,season,provider]);
+  const allProviders=useMemo(()=>[...new Set([...(data?.matches??[]).map(r=>r.source),
+    ...(data?.soccerdataExtras??[]).map(r=>r.source)])].sort(),[data]);
+  const extras=useMemo(()=>(data?.soccerdataExtras??[]).filter(r=>
+    (provider==='all'||provider===r.source)&&
+    (season==='all'||(r.fixtureStart?euroSeason(r.fixtureStart):
+      r.season?.replace(/^(\d{4})\/(\d{4})$/,(_,a,b)=>`${a}/${b.slice(-2)}`))===season)),
+    [data,season,provider]);
+  const mergedMatches=useMemo(()=>{
+    // Some SoccerData readers report a complete FINAL match but no stable provider
+    // player ID. Show those OBSERVATIONS without fabricating a provider identity.
+    const extraGames:FootballProfileRow[]=extras.filter(r=>r.kind==='player_match'&&
+      r.meta.isFinal===true&&!!r.matchId&&!!r.fixtureStart&&!!r.team&&!!r.opponent).map(r=>({
+        source:r.source,sourceGameId:r.matchId!,sourcePlayerId:r.playerId??`unverified:${r.externalId}`,
+        date:r.fixtureStart!,competition:r.competition??'Unbekannt',team:r.team!,opponent:r.opponent!,
+        season:r.season,minutes:typeof r.meta.minutes==='number'?r.meta.minutes:null,
+        started:typeof r.meta.started==='boolean'?r.meta.started:null,
+        stats:r.stats,reportedFields:Object.keys(r.stats)}));
+    const keys=new Set(matches.map(r=>`${r.source}:${r.sourceGameId}:${r.date.slice(0,10)}`));
+    return [...matches,...extraGames.filter(r=>!keys.has(`${r.source}:${r.sourceGameId}:${r.date.slice(0,10)}`))]
+      .sort((a,b)=>b.date.localeCompare(a.date));
+  },[matches,extras]);
   const best=useMemo(()=>{
-    // Never sum ESPN and Understat copies of the same match into one statistic.
-    // Understat is the dedicated expected-goals source; ESPN remains separate.
-    const under=matches.filter(r=>r.source==='understat');
-    const espn=matches.filter(r=>r.source==='espn');
-    const useUnder=under.length?under:espn;
-    const minutes=useUnder.reduce((a,r)=>a+(r.minutes??0),0);
-    const metric=(rows:FootballProfileRow[],key:string)=>{
-      const observed=rows.filter(r=>typeof r.stats[key]==='number');
-      const total=sumStat(observed,key);
-      // Per-90 denominator must cover only matches reporting this stat.
-      const measuredMinutes=observed.reduce((n,r)=>n+(r.minutes??0),0);
-      return total===null?null:per90?(measuredMinutes>0?Math.round(total/measuredMinutes*9000)/100:null):total;
+    // Select ONE source per metric, never sum duplicate provider copies of the same match.
+    const order=['understat','fbref','espn','sofascore','whoscored','soccerdata_espn'];
+    const sources=[...new Set(mergedMatches.map(r=>r.source))];
+    const ranked=sources.sort((a,b)=>order.indexOf(a)-order.indexOf(b));
+    const select=(field:string)=>ranked.map(source=>mergedMatches.filter(r=>r.source===source&&
+      typeof r.stats[field]==='number')).sort((a,b)=>b.length-a.length)[0]??[];
+    const metric=(field:string)=>{
+      const rows=select(field),total=sumStat(rows,field);
+      const totalMinutes=rows.reduce((sum,r)=>sum+(r.minutes??0),0);
+      return total===null?null:per90?(totalMinutes>0?Math.round(total/totalMinutes*9000)/100:null):total;
     };
-    return {minutes,goals:metric(useUnder,'goals'),assists:metric(useUnder,'assists'),
-      xg:metric(under,'xg'),xa:metric(under,'xa'),shots:metric(useUnder,'shots'),
-      sample:useUnder.length,xgMatches:under.filter(r=>typeof r.stats.xg==='number').length};
-  },[matches,per90]);
-  const joinedMatches=useMemo(()=>linkStatsToOfficialMatches(matches,official),[matches,official]);
+    // Baseline provider chosen by match count, not by an advanced-stat-only source.
+    const baseline=[...sources].sort((a,b)=>mergedMatches.filter(r=>r.source===b).length-
+      mergedMatches.filter(r=>r.source===a).length||order.indexOf(a)-order.indexOf(b))[0];
+    const base=mergedMatches.filter(r=>r.source===baseline);
+    return {minutes:base.length?base.reduce((n,r)=>n+(r.minutes??0),0):null,
+      goals:metric('goals'),assists:metric('assists'),xg:metric('xg'),xa:metric('xa'),
+      shots:metric('shots'),sample:base.length};
+  },[mergedMatches,per90]);
+  const joinedMatches=useMemo(()=>linkStatsToOfficialMatches(mergedMatches,official),[mergedMatches,official]);
   const l5=official.slice(0,5),l15=official.slice(0,15);
   const average=(rows:FootballOfficialScore[])=>rows.length?rows.reduce((sum,r)=>sum+r.score,0)/rows.length:null;
   return <details className="v4515-stats-center" onToggle={e=>setOpened(e.currentTarget.open)}>
-    <summary><strong>⚽ REAL STATS · SORARE SCORING</strong><span>V4.5.15 · offizielle Werte + Advanced Stats</span></summary>
+    <summary><strong>⚽ REAL STATS · SORARE SCORING</strong><span>SoccerData · ESPN · offizielle FINAL-Werte</span></summary>
     {!opened?null:loading?<p className="profile-muted">Echte Matchstats und Sorare-Scores werden geladen …</p>:
     error?<p className="v4515-stats-warning">Statistikdaten konnten momentan nicht geladen werden.</p>:
     data?<>
       <div className="v4515-stats-toolbar">
         <label>Saison <select aria-label="Statistik-Saison" value={season} onChange={e=>setSeason(e.target.value)}><option value="all">Alle</option>{seasons.map(y=><option key={y} value={y}>{y}</option>)}</select></label>
-        <label>Quelle <select aria-label="Statistikquelle" value={provider} onChange={e=>setProvider(e.target.value)}><option value="all">Alle</option><option value="espn">ESPN</option><option value="understat">Understat</option></select></label>
+        <label>Quelle <select aria-label="Statistikquelle" value={provider} onChange={e=>setProvider(e.target.value)}><option value="all">Alle</option>{allProviders.map(s=><option key={s} value={s}>{s.toUpperCase()}</option>)}</select></label>
         <label className="v4515-per90"><input type="checkbox" checked={per90} onChange={e=>setPer90(e.target.checked)}/> Pro 90 Minuten</label>
       </div>
-      <div className="v4515-source-notes"><span>● Sorare: FINAL Player Score, kein Kartenbonus</span><span>● ESPN: reale Matchstats</span><span>● Understat: xG / xA (sofern importiert)</span></div>
+      <div className="v4515-source-notes"><span>● Sorare: offizieller FINAL Score, kein Kartenbonus</span><span>● ESPN: Matchstats</span><span>● SoccerData: getrennte Originalquellen, abhängig vom Import</span></div>
       <h4>Offizielle Sorare-Scores</h4>
       <div className="v4515-stat-grid">
         {[['L5 Score Ø',average(l5)],['L15 Score Ø',average(l15)],['Letzter FINAL Score',official[0]?.score??null],
@@ -83,10 +109,10 @@ export default function FootballStatsPanel({slug,name,team}:{slug:string;name:st
       </div>
       <h4>Spielerleistungen {per90?'· pro 90 Minuten':'· Summe'}</h4>
       <div className="v4515-stat-grid">
-        {[['Minuten',best.sample?best.minutes:null],['Tore',best.goals],['Assists',best.assists],['xG',best.xg],['xA',best.xa],
+        {[['Minuten',best.minutes],['Tore',best.goals],['Assists',best.assists],['xG',best.xg],['xA',best.xa],
           ['Schüsse',best.shots],['Spiele mit Stats',best.sample]].map(([label,value])=><div className="v4515-stat" key={String(label)}><small>{label}</small><strong>{fmt(value as number|null,2)}</strong></div>)}
       </div>
-      <p className="profile-muted">Punkte- und Spielstatistikquellen werden separat ausgewertet. Für xG/xA werden ausschließlich tatsächlich importierte Understat-Werte genutzt; fehlende Werte sind keine Null.</p>
+      <p className="profile-muted">Spielstatistiken bleiben nach Quelle getrennt; xG/xA stammen nur aus tatsächlich importierten Daten. Doppelte Quellen werden nicht zusammengezählt, fehlende Werte nie als Null behandelt.</p>
       {data.sourceWarnings.length>0&&<p className="v4515-stats-warning">{data.sourceWarnings.join(' · ')}</p>}
       <details className="v4515-stats-history"><summary>Sorare FINAL-Historie ({official.length})</summary>
         {official.length?official.map(r=><details key={r.scoreId} className="v4515-stat-match">
@@ -99,11 +125,18 @@ export default function FootballStatsPanel({slug,name,team}:{slug:string;name:st
           {r.breakdown.length>0&&<details><summary>Offizielle Sorare-Punkte je Ereignis</summary><div className="v4515-all-stats">{r.breakdown.map((b,i)=><div key={`${b.stat}-${i}`}><span>{pretty(b.stat)} ({fmt(b.value,2)})</span><b>{fmt(b.points,2)} Punkte</b></div>)}</div></details>}
         </details>):<p className="profile-muted">Noch keine finalen Sorare-Scores für die gewählte Saison.</p>}
       </details>
-      <details className="v4515-stats-history"><summary>ESPN- und Understat-Einzelspiele ({matches.length})</summary>
-        {matches.length?matches.map(r=><details key={`${r.source}:${r.sourceGameId}:${r.sourcePlayerId}`} className="v4515-stat-match">
+      <details className="v4515-stats-history"><summary>Einzelspiele · alle Statistikquellen ({mergedMatches.length})</summary>
+        {mergedMatches.length?mergedMatches.map(r=><details key={`${r.source}:${r.sourceGameId}:${r.sourcePlayerId}`} className="v4515-stat-match">
           <summary><span>{date(r.date)} · {r.competition} · {r.opponent}</span><strong>{r.source.toUpperCase()} · {r.minutes===null?'Min. —':`${fmt(r.minutes)} Min.`}</strong></summary>
           <div className="v4515-all-stats">{Object.entries(r.stats).map(([key,value])=><div key={key}><span>{pretty(key)}</span><b>{fmt(Number(value),2)}</b></div>)}</div>
         </details>):<p className="profile-muted">Noch keine eindeutig zugeordneten Einzelspielstatistiken im Neon-Archiv.</p>}
+      </details>
+      <details className="v4515-stats-history"><summary>SoccerData · weitere Saisonwerte, Events, Ratings ({extras.length})</summary>
+        {extras.length?extras.map(r=><details key={`${r.source}:${r.kind}:${r.externalId}`} className="v4515-stat-match">
+          <summary><span>{r.source.toUpperCase()} · {r.kind.replace(/_/g,' ')} · {r.season??''} {r.fixtureStart?date(r.fixtureStart):''}</span><strong>{Object.keys(r.stats).length} Werte</strong></summary>
+          <div className="v4515-all-stats">{Object.entries(r.stats).map(([key,value])=><div key={key}><span>{pretty(key)}</span><b>{fmt(value,2)}</b></div>)}</div>
+          {Object.keys(r.meta).length>0&&<details><summary>Weitere Quell-Metadaten</summary><div className="v4515-all-stats">{Object.entries(r.meta).map(([key,value])=><div key={key}><span>{pretty(key)}</span><b>{String(value??'—')}</b></div>)}</div></details>}
+        </details>):<p className="profile-muted">Noch keine zusätzlichen SoccerData-Werte importiert oder diesem Spieler eindeutig zuordenbar.</p>}
       </details>
       <p className="profile-muted">Quellenstatus: Sorare {data.sorareStatus==='available'?'verbunden':'nicht erreichbar'} · Neon {data.archiveStatus==='ready'?'bereit':'Migration erforderlich'} · Spieler-Verknüpfung: {data.linkedProviders.join(', ')||'nur eindeutiger Name + Verein'}. Keine Auswirkung auf PP, Q80 oder Optimizer.</p>
     </>:null}

@@ -1,3 +1,10 @@
+## V4.5.16 – SoccerData All Stats + fortsetzbarer Saisonimport
+
+- Additive Neon-Migration und geschützter, quellenspezifischer Import für dokumentierte SoccerData-Quellen.
+- Spielerprofile (inklusive /players) zeigen neue importierte saisonale und Match-Daten.
+- ESPN-Historienimport mit Pagination und lokalem Checkpointskript, ohne Prognoseänderungen.
+- Siehe UPDATE_V4_5_16_SOCCERDATA_ALL_STATS_DE.md für Setup/Rechte/Einschränkungen.
+
 ## V4.5.14.1 – Next.js Typecheck Hotfix (6. November 2026)
 
 - Football-Optimizer-`useEffect` in `app/components/arcade-dashboard.tsx` hinter die `players`-Memo-Deklaration verschoben; behebt den Vercel-/Next.js-Fehler `Block-scoped variable 'players' used before its declaration`.

@@ -38,11 +38,12 @@ export async function v4515SorareScoreSync(shard:number,now=new Date()){
   await v44SaveJob({scope,at:now.toISOString(),ok:failures.length===0,count:saved,message});
   return {shard,players:batch.length,scores:saved,linked,linkWarning,failures:failures.length,nextOffset:(offset+batch.length)%candidates.length,message};
 }
-export async function v4515FootballHistoricBackfill(batch:FootballStatBatch,startDay:string,days=2,now=new Date()){
+export async function v4515FootballHistoricBackfill(batch:FootballStatBatch,startDay:string,days=2,now=new Date(),offset=0,maxGames=8){
   if(!validFootballStatBatch(batch)||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(startDay)||
     !Number.isFinite(Date.parse(startDay+'T12:00:00Z'))||
-    startDay>dayISO(now)||Date.parse(startDay+'T00:00:00Z')<now.getTime()-180*86400000||
-    !Number.isInteger(days)||days<1||days>3)throw Error('Ungültiger Nachimport-Bereich (max. 3 Tage, 180 Tage rückwirkend)');
+    startDay>dayISO(now)||Date.parse(startDay+'T00:00:00Z')<now.getTime()-540*86400000||
+    !Number.isInteger(days)||days<1||days>3||!Number.isInteger(offset)||offset<0||offset>1000||
+    !Number.isInteger(maxGames)||maxGames<1||maxGames>8)throw Error('Ungültiger Nachimport-Bereich (max. 3 Tage und 8 Spiele/Seite, 540 Tage rückwirkend)');
   const leagues=FOOTBALL_STAT_BATCHES[batch] as readonly import('./football-competitions').FootballLeagueKey[];
   const schedule=leagues.flatMap(league=>Array.from({length:days},(_,i)=>({league,day:dateShift(startDay,i)})));
   const results=[] as Array<PromiseSettledResult<Awaited<ReturnType<typeof footballLiveScoreboard>>>>;
@@ -50,7 +51,7 @@ export async function v4515FootballHistoricBackfill(batch:FootballStatBatch,star
   const found=new Map<string,FootballLiveGame>();
   results.forEach(r=>{if(r.status==='fulfilled')for(const game of r.value.games){
     if(game.status==='final')found.set(`${game.leagueKey}:${game.id}`,game);}});
-  const games=[...found.values()].sort((a,b)=>a.date.localeCompare(b.date)).slice(0,8);
+  const games=[...found.values()].sort((a,b)=>a.date.localeCompare(b.date)||a.id.localeCompare(b.id)).slice(offset,offset+maxGames);
   let saved=0,observations=0,empty=0,detailsFailed=0;
   for(let i=0;i<games.length;i+=2){
     const detailRows=await Promise.allSettled(games.slice(i,i+2).map(async game=>{
@@ -71,6 +72,8 @@ export async function v4515FootballHistoricBackfill(batch:FootballStatBatch,star
   const scope=`v4515:backfill:${batch}`;
   const message=`${startDay} + ${days} Tage: ${games.length} FINAL geprüft, ${observations} Spieler, ${saved} archiviert, ${empty} ohne Stats, ${failures} Fehler.`;
   await v44SaveJob({scope,at:now.toISOString(),ok:failures===0,count:saved,message});
-  return {batch,from:startDay,days,games:games.length,observations,saved,withoutStats:empty,failures,
-    truncated:found.size>games.length,message};
+  return {batch,from:startDay,days,offset,maxGames,totalFinalGames:found.size,
+    nextOffset:offset+games.length<found.size?offset+games.length:null,
+    games:games.length,observations,saved,withoutStats:empty,failures,
+    truncated:offset+games.length<found.size,message};
 }
