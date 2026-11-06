@@ -1,3 +1,9 @@
+## V4.5.14.1 – Next.js Typecheck Hotfix (6. November 2026)
+
+- Football-Optimizer-`useEffect` in `app/components/arcade-dashboard.tsx` hinter die `players`-Memo-Deklaration verschoben; behebt den Vercel-/Next.js-Fehler `Block-scoped variable 'players' used before its declaration`.
+- Keine Änderung an Matchday-Logik, Team-Übernahme, Prognosen, Datenbank oder Cronjobs.
+- Vollständiger Next.js-Produktionsbuild muss in der Zielumgebung bestätigt werden.
+
 ### V4.5.14 – Football Smart Optimizer 3.0
 - Ersetzt den alten Fußball-Auto-Optimizer im bestehenden Menüpunkt.
 - Matchday Ready: Heute, exakt 24h, morgen, 7 Tage; Sorare-Fixture und verifizierte ESPN-Kickoffs.

@@ -242,35 +242,6 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
   const footballTransferSeq=useRef(0);
   useEffect(()=>{setActiveResult(0);setFootballNotice("");},[footballWindow,footballDiversity,footballMode]);
   useEffect(()=>{setNbaClock(new Date());const timer=window.setInterval(()=>setNbaClock(new Date()),300000);return ()=>clearInterval(timer);},[]);
-  // The 24-hour view requires independently confirmed kickoffs, not a guessed midnight timestamp.
-  // No background match search is performed when the football optimizer is not visible.
-  useEffect(()=>{
-    if(sport!=="football"||activeTab!=="builder"||builderMode!=="automatic"||footballWindow!=="24h"||!nbaClock)return;
-    const controller=new AbortController();setFootballKickoffStatus("loading");setFootballKickoffs([]);
-    const days=[offsetBerlinDay(nbaClock),offsetBerlinDay(nbaClock,1)];
-    // Avoid 17 unnecessary international feed requests when no player has an
-    // international fixture candidate during this 24-hour period.
-    const needsNational=players.some(p=>{
-      const f=playerFootballFixture(p);
-      if(!f||!days.includes(f.day))return false;
-      const club=canonicalFootballTeam(p.team);
-      return club!==canonicalFootballTeam(f.home)&&club!==canonicalFootballTeam(f.away);
-    });
-    const queries=days.flatMap(day=>(needsNational?["clubs","international"]:["clubs"]).map(group=>`/api/football-live/scoreboard?date=${day}&league=${group}`));
-    Promise.allSettled(queries.map(async url=>{
-      const response=await fetch(url,{signal:controller.signal});if(!response.ok)throw new Error("Fixture-Feed nicht verfügbar");
-      const body=await response.json();if(!Array.isArray(body?.games))throw new Error("Fixture-Feed unvollständig");
-      return body;
-    })).then(results=>{
-      if(controller.signal.aborted)return;
-      const success=results.filter(v=>v.status==="fulfilled").map(v=>(v as PromiseFulfilledResult<{games:import("@/lib/football-live-core").FootballLiveGame[]}>).value);
-      setFootballKickoffs(footballKickoffsFromScoreboards(success));
-      setFootballKickoffStatus(success.length===queries.length?"ready":"partial");
-    }).catch(()=>{if(!controller.signal.aborted){setFootballKickoffs([]);setFootballKickoffStatus("partial");}});
-    return ()=>controller.abort();
-  },[sport,activeTab,builderMode,footballWindow,nbaClock,players]);
-
-
   useEffect(()=>{setNbaVariantKey(null);setActiveResult(0);setStarsNotice("");},[nbaWindow,nbaStarsLimit]);
   const [nbaVariantKey,setNbaVariantKey]=useState<string|null>(null);
   const [nbaDiversity,setNbaDiversity]=useState<NbaLineupDiversity>(2);
@@ -599,6 +570,35 @@ export default function ArcadeDashboard({sport, league, leagues, team, clubs, pl
     predictionCache.current=next;
     return result;
   }, [basePlayers, sport, effectiveRatings, cardStore,modelMode,calibrationKey,v44Model]);
+
+  // The 24-hour view requires independently confirmed kickoffs, not a guessed midnight timestamp.
+  // No background match search is performed when the football optimizer is not visible.
+  useEffect(()=>{
+    if(sport!=="football"||activeTab!=="builder"||builderMode!=="automatic"||footballWindow!=="24h"||!nbaClock)return;
+    const controller=new AbortController();setFootballKickoffStatus("loading");setFootballKickoffs([]);
+    const days=[offsetBerlinDay(nbaClock),offsetBerlinDay(nbaClock,1)];
+    // Avoid 17 unnecessary international feed requests when no player has an
+    // international fixture candidate during this 24-hour period.
+    const needsNational=players.some(p=>{
+      const f=playerFootballFixture(p);
+      if(!f||!days.includes(f.day))return false;
+      const club=canonicalFootballTeam(p.team);
+      return club!==canonicalFootballTeam(f.home)&&club!==canonicalFootballTeam(f.away);
+    });
+    const queries=days.flatMap(day=>(needsNational?["clubs","international"]:["clubs"]).map(group=>`/api/football-live/scoreboard?date=${day}&league=${group}`));
+    Promise.allSettled(queries.map(async url=>{
+      const response=await fetch(url,{signal:controller.signal});if(!response.ok)throw new Error("Fixture-Feed nicht verfügbar");
+      const body=await response.json();if(!Array.isArray(body?.games))throw new Error("Fixture-Feed unvollständig");
+      return body;
+    })).then(results=>{
+      if(controller.signal.aborted)return;
+      const success=results.filter(v=>v.status==="fulfilled").map(v=>(v as PromiseFulfilledResult<{games:import("@/lib/football-live-core").FootballLiveGame[]}>).value);
+      setFootballKickoffs(footballKickoffsFromScoreboards(success));
+      setFootballKickoffStatus(success.length===queries.length?"ready":"partial");
+    }).catch(()=>{if(!controller.signal.aborted){setFootballKickoffs([]);setFootballKickoffStatus("partial");}});
+    return ()=>controller.abort();
+  },[sport,activeTab,builderMode,footballWindow,nbaClock,players]);
+
   // Automatic snapshots are only taken for known fixture dates strictly in the
   // future; today's fixture lacks a trusted kickoff time and is not auto-saved.
   useEffect(()=>{
