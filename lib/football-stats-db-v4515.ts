@@ -130,12 +130,14 @@ export async function readFootballProfile(slug:string,name:string,team:string,li
 export async function footballStatsDiagnostic(){
   const data=await sql(`SELECT source,count(*)::integer AS rows,count(DISTINCT source_game_id)::integer AS games,
     count(DISTINCT source_player_id)::integer AS players,
+    count(*) FILTER(WHERE minutes IS NOT NULL)::integer AS with_minutes,
     count(*) FILTER(WHERE stats ? 'xg')::integer AS with_xg,
     count(*) FILTER(WHERE stats ? 'xa')::integer AS with_xa,
     count(*) FILTER(WHERE sorare_slug IS NOT NULL)::integer AS linked,
     max(fixture_start) AS newest_match,max(ingested_at) AS last_import
     FROM football_stats_v4515_player_matches GROUP BY source ORDER BY source`);
   const official=await sql(`SELECT count(*)::integer AS rows,count(DISTINCT sorare_slug)::integer AS players,
+    count(*) FILTER(WHERE official_stats ? 'minsPlayed')::integer AS with_minutes,
     count(*) FILTER(WHERE all_around_score IS NOT NULL)::integer AS with_aa,
     count(*) FILTER(WHERE decisive_score IS NOT NULL)::integer AS with_decisive,
     max(fixture_start) AS newest_match,max(ingested_at) AS last_import

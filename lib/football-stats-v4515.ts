@@ -89,6 +89,18 @@ export function verifiedProfileMatches<T extends {source:string;playerName:strin
     const ids=idsBySource.get(source)??new Set<string>();ids.add(r.sourcePlayerId);idsBySource.set(source,ids);}
   return candidates.filter(r=>isLinked(r)||(idsBySource.get(r.source)?.size===1));
 }
+/** An entirely missing field is unknown, never an observed zero. */
+export function sumKnownMinutes(rows:readonly {minutes:number|null}[]):number|null{
+  const minutes=rows.map(r=>r.minutes).filter((v):v is number=>
+    typeof v==='number'&&Number.isFinite(v)&&v>=0&&v<=150);
+  return minutes.length?Math.round(minutes.reduce((sum,v)=>sum+v,0)*100)/100:null;
+}
+/** Official Sorare minutes stay a separate provider sample from ESPN statistics. */
+export function sumOfficialMinutes(rows:readonly {stats:Record<string,number>}[]):number|null{
+  const minutes=rows.map(r=>r.stats.minsPlayed).filter((v):v is number=>
+    typeof v==='number'&&Number.isFinite(v)&&v>=0&&v<=150);
+  return minutes.length?Math.round(minutes.reduce((sum,v)=>sum+v,0)*100)/100:null;
+}
 export function sumStat(rows:readonly {stats:Record<string,number>}[],field:string):number|null{
   const known=rows.map(r=>r.stats[field]).filter(n=>typeof n==='number'&&Number.isFinite(n));
   return known.length?Math.round(known.reduce((a,b)=>a+b,0)*100)/100:null;

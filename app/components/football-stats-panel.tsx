@@ -2,7 +2,7 @@
 import {useEffect,useMemo,useState} from 'react';
 import type {FootballOfficialScore,FootballProfileRow} from '@/lib/football-stats-v4515';
 import type {SoccerDataProfileExtra} from '@/lib/football-soccerdata-db-v4516';
-import {sumStat,linkStatsToOfficialMatches} from '@/lib/football-stats-v4515';
+import {sumStat,sumKnownMinutes,sumOfficialMinutes,linkStatsToOfficialMatches} from '@/lib/football-stats-v4515';
 type Data={matches:FootballProfileRow[];officialScores:FootballOfficialScore[];soccerdataExtras?:SoccerDataProfileExtra[];
   sorareStatus:'available'|'unavailable';archiveStatus:'ready'|'migration_or_connection_missing';
   linkedProviders:string[];sourceWarnings:string[];scoringNote:string};
@@ -83,11 +83,17 @@ export default function FootballStatsPanel({slug,name,team}:{slug:string;name:st
     const baseline=[...sources].sort((a,b)=>mergedMatches.filter(r=>r.source===b).length-
       mergedMatches.filter(r=>r.source===a).length||order.indexOf(a)-order.indexOf(b))[0];
     const base=mergedMatches.filter(r=>r.source===baseline);
-    return {minutes:base.length?base.reduce((n,r)=>n+(r.minutes??0),0):null,
+    // Missing minutes are unknown; select one source with the most real minute samples.
+    const minutesSource=ranked.map(source=>mergedMatches.filter(r=>r.source===source&&
+      r.minutes!==null&&Number.isFinite(r.minutes))).sort((a,b)=>b.length-a.length)[0]??[];
+    return {minutes:sumKnownMinutes(minutesSource),minutesSource:minutesSource[0]?.source??null,
       goals:metric('goals'),assists:metric('assists'),xg:metric('xg'),xa:metric('xa'),
       shots:metric('shots'),sample:base.length};
   },[mergedMatches,per90]);
   const joinedMatches=useMemo(()=>linkStatsToOfficialMatches(mergedMatches,official),[mergedMatches,official]);
+  const officialMinutes=sumOfficialMinutes(official);
+  const officialMinutesGames=official.filter(r=>typeof r.stats.minsPlayed==='number'&&
+    Number.isFinite(r.stats.minsPlayed)&&r.stats.minsPlayed>=0&&r.stats.minsPlayed<=150).length;
   const l5=official.slice(0,5),l15=official.slice(0,15);
   const average=(rows:FootballOfficialScore[])=>rows.length?rows.reduce((sum,r)=>sum+r.score,0)/rows.length:null;
   return <details className="v4515-stats-center" onToggle={e=>setOpened(e.currentTarget.open)}>
@@ -109,10 +115,10 @@ export default function FootballStatsPanel({slug,name,team}:{slug:string;name:st
       </div>
       <h4>Spielerleistungen {per90?'· pro 90 Minuten':'· Summe'}</h4>
       <div className="v4515-stat-grid">
-        {[['Minuten',best.minutes],['Tore',best.goals],['Assists',best.assists],['xG',best.xg],['xA',best.xa],
+        {[['Minuten · Matchstats',best.minutes],['Minuten · Sorare',officialMinutes],['Tore',best.goals],['Assists',best.assists],['xG',best.xg],['xA',best.xa],
           ['Schüsse',best.shots],['Spiele mit Stats',best.sample]].map(([label,value])=><div className="v4515-stat" key={String(label)}><small>{label}</small><strong>{fmt(value as number|null,2)}</strong></div>)}
       </div>
-      <p className="profile-muted">Spielstatistiken bleiben nach Quelle getrennt; xG/xA stammen nur aus tatsächlich importierten Daten. Doppelte Quellen werden nicht zusammengezählt, fehlende Werte nie als Null behandelt.</p>
+      <p className="profile-muted">Minuten · Matchstats: {best.minutesSource?.toUpperCase()??'keine Quelle'}; Minuten · Sorare: {officialMinutesGames} Spiele mit bekannten Minuten. Die Summen umfassen möglicherweise unterschiedliche Partien und werden nicht addiert. Pro-90-Werte erfordern Minuten derselben Matchstats-Quelle. xG/xA stammen nur aus tatsächlich importierten Daten; fehlende Werte bleiben —.</p>
       {data.sourceWarnings.length>0&&<p className="v4515-stats-warning">{data.sourceWarnings.join(' · ')}</p>}
       <details className="v4515-stats-history"><summary>Sorare FINAL-Historie ({official.length})</summary>
         {official.length?official.map(r=><details key={r.scoreId} className="v4515-stat-match">

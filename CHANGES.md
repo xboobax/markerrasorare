@@ -1,3 +1,12 @@
+## V4.5.16.1.2 – Football Minutes Null/Source Hotfix
+
+- Fehlende ESPN-Minuten in Spielerprofilen sind nicht 0: Anzeige bleibt `—`, solange keine echte Zeitangabe aus derselben Quelle vorliegt.
+- Offiziell gemeldete Sorare-Minuten (`minsPlayed`) als getrennte Summe anzeigen, nur wenn sie im bereits archivierten Score vorhanden sind.
+- ESPN-Parser erkennt weitere ausdrücklich gelieferte Minutenfelder; keine erfundenen Einsatzminuten für Starter oder DNP.
+- Diagnosestatus enthält `with_minutes` pro Matchstats-Quelle und für offizielle Sorare-Scores.
+- Keine SQL-Migration, keine Änderungen an PP/Q80, Optimizern, gespeicherten Daten oder Import-Schedules.
+- Bereits archivierte ESPN-Spiele werden nicht automatisch angereichert. Ein erneuter Import hilft nur, wenn die ESPN-Quelldaten wirklich Minuten liefern.
+
 ## V4.5.16 – SoccerData All Stats + fortsetzbarer Saisonimport
 
 - Additive Neon-Migration und geschützter, quellenspezifischer Import für dokumentierte SoccerData-Quellen.
